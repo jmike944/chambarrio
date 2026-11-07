@@ -7,8 +7,11 @@ import { setWorkerUrl, type Map as MapLibreMap } from "maplibre-gl";
 
 // Turbopack can't resolve MapLibre's bundled worker URL; serve it from /public instead.
 setWorkerUrl("/maplibre-gl-worker.mjs");
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Store01Icon } from "@hugeicons/core-free-icons";
 import { useTheme } from "@/components/theme";
 import { CATEGORY_BLOCK, CategoryArt } from "@/components/chamba/job-icons";
+import type { CategoryId } from "@/lib/data/types";
 import { bandColor, bandFor, circlePolygon, formatKm, type LatLng } from "@/lib/geo";
 import type { JobWithDistance } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -75,6 +78,11 @@ function tintBasemap(map: MapLibreMap, theme: "light" | "dark") {
   }
 }
 
+const CONNECTOR_PAINT = {
+  light: { color: "#160f33", opacity: 0.7 },
+  dark: { color: "#f2efff", opacity: 0.75 },
+};
+
 const RADIUS_PAINT = {
   light: { line: "#4318e0", fill: 0.08 },
   dark: { line: "#9d86ff", fill: 0.13 },
@@ -103,21 +111,44 @@ function cameraPadding() {
 
 const ZOOM_FOR_RADIUS: Record<number, number> = { 2: 13.6, 5: 12.3, 10: 11.3, 15: 10.7 };
 
-export type PlacedJob = JobWithDistance & { pos: LatLng };
+/** One marker = one branch (sucursal) with every open vacancy there. */
+export type BranchPin = {
+  /** Branch id. */
+  id: string;
+  name: string;
+  companyId: string;
+  companyName: string;
+  /** Company has more than one location. */
+  multi: boolean;
+  colonia: string;
+  pos: LatLng;
+  km: number;
+  /** Vacancies at this branch; may be empty for a sibling branch that isn't hiring. */
+  jobs: JobWithDistance[];
+  /** Category shown on the pin (the branch's first vacancy). */
+  category: CategoryId | null;
+};
+
+const vacantes = (n: number) => `${n} ${n === 1 ? "vacante" : "vacantes"}`;
 
 export function JobMap({
   home,
   radiusKm,
-  jobs,
+  pins,
   selectedId,
+  siblings,
   onSelect,
   focus,
 }: {
   home: LatLng;
   radiusKm: number;
-  jobs: PlacedJob[];
+  /** Branches with at least one vacancy, nearest first. */
+  pins: BranchPin[];
+  /** Selected branch id. */
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  /** The selected company's OTHER branches (secondary markers + dashed connectors). */
+  siblings: BranchPin[];
+  onSelect: (branchId: string) => void;
   /** Changes to this object fly the camera to it. */
   focus: { lat: number; lng: number; zoom?: number } | null;
 }) {
@@ -127,6 +158,33 @@ export function JobMap({
   const mapRef = useRef<MapRef>(null);
   const circle = useMemo(() => circlePolygon(home, radiusKm), [home, radiusKm]);
   const radiusPaint = RADIUS_PAINT[theme];
+  const connectorPaint = CONNECTOR_PAINT[theme];
+  const selectedPin = pins.find((p) => p.id === selectedId) ?? null;
+  const siblingIds = useMemo(() => new Set(siblings.map((b) => b.id)), [siblings]);
+  // Branches of the selected company that have no vacancy marker of their own.
+  const ghostSiblings = useMemo(() => {
+    const pinned = new Set(pins.map((p) => p.id));
+    return siblings.filter((b) => !pinned.has(b.id));
+  }, [pins, siblings]);
+  const connectors = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: selectedPin
+        ? siblings.map((b) => ({
+            type: "Feature" as const,
+            properties: {},
+            geometry: {
+              type: "LineString" as const,
+              coordinates: [
+                [selectedPin.pos.lng, selectedPin.pos.lat],
+                [b.pos.lng, b.pos.lat],
+              ],
+            },
+          }))
+        : [],
+    }),
+    [selectedPin, siblings],
+  );
 
   useEffect(() => {
     themeRef.current = theme;
@@ -181,21 +239,49 @@ export function JobMap({
         />
       </Source>
 
-      {jobs.map((j) => {
-        const inside = j.km <= radiusKm;
-        const selected = j.id === selectedId;
-        const label = `${j.title}, a ${formatKm(j.km)}`;
+      {/* "This company is also here": dashed links from the selected branch to its siblings */}
+      <Source id="branch-links" type="geojson" data={connectors}>
+        <Layer
+          id="branch-links-line"
+          type="line"
+          paint={{
+            "line-color": connectorPaint.color,
+            "line-width": 2.5,
+            "line-opacity": connectorPaint.opacity,
+            "line-dasharray": [1.2, 1.6],
+          }}
+          layout={{ "line-cap": "round", "line-join": "round" }}
+        />
+      </Source>
+
+      {pins.map((p) => {
+        const inside = p.km <= radiusKm;
+        const selected = p.id === selectedId;
+        const sibling = siblingIds.has(p.id);
+        const where = p.multi ? `${p.companyName} · ${p.name}` : p.companyName;
+        const label =
+          p.jobs.length === 1
+            ? `${p.jobs[0].title} en ${where}, a ${formatKm(p.km)}`
+            : `${where}: ${vacantes(p.jobs.length)}, a ${formatKm(p.km)}`;
+
+        if (sibling && !inside) {
+          return (
+            <Marker key={p.id} longitude={p.pos.lng} latitude={p.pos.lat} anchor="center" style={{ zIndex: 2 }}>
+              <SiblingMarker pin={p} label={`Otra sucursal. ${label}`} onSelect={() => onSelect(p.id)} />
+            </Marker>
+          );
+        }
 
         if (!inside && !selected) {
           return (
-            <Marker key={j.id} longitude={j.pos.lng} latitude={j.pos.lat} anchor="center" style={{ zIndex: 1 }}>
+            <Marker key={p.id} longitude={p.pos.lng} latitude={p.pos.lat} anchor="center" style={{ zIndex: 1 }}>
               <button
                 type="button"
                 aria-label={label}
                 aria-pressed={false}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelect(j.id);
+                  onSelect(p.id);
                 }}
                 className="grid size-7 place-items-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring"
               >
@@ -206,23 +292,24 @@ export function JobMap({
         }
 
         const i = Math.min(insideRank++, 14);
+        const count = p.jobs.length;
         return (
           <Marker
-            key={j.id}
-            longitude={j.pos.lng}
-            latitude={j.pos.lat}
+            key={p.id}
+            longitude={p.pos.lng}
+            latitude={p.pos.lat}
             anchor="bottom"
             style={{ zIndex: selected ? 3 : 2 }}
           >
             <button
               type="button"
-              aria-label={label}
+              aria-label={sibling ? `Otra sucursal. ${label}` : label}
               aria-pressed={selected}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect(j.id);
+                onSelect(p.id);
               }}
-              className="group/pin block cursor-pointer p-1 outline-none"
+              className="group/pin relative block cursor-pointer p-1 outline-none"
             >
               {/* entrance drop (own element so the hover wiggle never re-triggers it) */}
               <span className="block origin-bottom animate-pop-in" style={{ "--i": i } as React.CSSProperties}>
@@ -236,24 +323,45 @@ export function JobMap({
                     className={cn(
                       "relative grid size-11 place-items-center rounded-[0.9rem] border-[2.5px] border-[#160f33] shadow-[2px_3px_0_#160f33]",
                       "group-focus-visible/pin:ring-4 group-focus-visible/pin:ring-ring",
-                      selected ? "bg-block-mandarina ring-[3px] ring-white" : PIN_BG[CATEGORY_BLOCK[j.category]],
+                      selected
+                        ? "bg-block-mandarina ring-[3px] ring-white"
+                        : p.category
+                          ? PIN_BG[CATEGORY_BLOCK[p.category]]
+                          : "bg-white",
+                      sibling && "outline-[2.5px] outline-offset-[3px] outline-dashed outline-[#160f33] dark:outline-white",
                     )}
                   >
-                    <CategoryArt category={j.category} className="size-[2.1rem]" />
+                    {p.category ? <CategoryArt category={p.category} className="size-[2.1rem]" /> : null}
                     {/* proximity rivet */}
                     <span
                       className="absolute -top-1.5 -right-1.5 size-3.5 rounded-full border-2 border-[#160f33]"
-                      style={{ background: bandColor(bandFor(j.km)) }}
+                      style={{ background: bandColor(bandFor(p.km)) }}
                     />
+                    {/* vacancies at this branch */}
+                    {count > 1 ? (
+                      <span
+                        aria-hidden
+                        className="absolute -top-2.5 -left-2.5 grid h-[1.35rem] min-w-[1.35rem] place-items-center rounded-full border-2 border-white bg-[#160f33] px-1 font-display text-[0.72rem] leading-none font-extrabold text-white tabular-nums"
+                      >
+                        {count}
+                      </span>
+                    ) : null}
                   </span>
                   {/* pin tail */}
                   <span className="-mt-[6px] size-3 rotate-45 rounded-[2px] bg-[#160f33]" />
                 </span>
               </span>
+              {sibling ? <BranchTag className="absolute top-full left-1/2 mt-0.5 -translate-x-1/2">{p.name}</BranchTag> : null}
             </button>
           </Marker>
         );
       })}
+
+      {ghostSiblings.map((b) => (
+        <Marker key={b.id} longitude={b.pos.lng} latitude={b.pos.lat} anchor="center" style={{ zIndex: 2 }}>
+          <SiblingMarker pin={b} label={`Otra sucursal: ${b.companyName} · ${b.name}, sin vacantes por ahora, a ${formatKm(b.km)}`} />
+        </Marker>
+      ))}
 
       <Marker longitude={home.lng} latitude={home.lat} anchor="center" style={{ zIndex: 4 }}>
         <span role="img" aria-label="Tu casa" className="relative grid place-items-center">
@@ -288,5 +396,69 @@ function HomeHouse() {
       <circle cx="26.3" cy="35" r="1.1" fill={INK} />
       <path d="M17 21.5h14" stroke="#ffd84a" strokeWidth="2.6" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** Small dashed name tag under a sibling branch. */
+function BranchTag({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "pointer-events-none max-w-[11.5rem] truncate rounded-md border-2 border-dashed border-[#160f33] bg-white/90 px-1.5 py-px font-display text-[0.7rem] font-extrabold whitespace-nowrap text-[#160f33] shadow-[2px_2px_0_rgb(22_15_51/0.35)]",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Secondary marker for another branch of the selected company that sits outside the radius
+ * (or isn't hiring): faded, dashed outline, store glyph, name tag. Tappable only when it has vacancies.
+ */
+function SiblingMarker({ pin, label, onSelect }: { pin: BranchPin; label: string; onSelect?: () => void }) {
+  const body = (
+    <>
+      <span
+        className={cn(
+          "relative grid size-9 place-items-center rounded-[0.75rem] border-[2.5px] border-dashed border-[#160f33] bg-white/85 text-[#160f33] shadow-[2px_2px_0_rgb(22_15_51/0.35)] transition-[scale] duration-300 ease-[var(--ease-spring)]",
+          onSelect && "group-hover/sib:scale-110 group-focus-visible/sib:ring-4 group-focus-visible/sib:ring-ring",
+        )}
+      >
+        <HugeiconsIcon icon={Store01Icon} className="size-[1.1rem]" strokeWidth={2.2} />
+        {pin.jobs.length > 0 ? (
+          <span className="absolute -top-2 -right-2 grid h-5 min-w-5 place-items-center rounded-full border-2 border-white bg-[#160f33] px-1 font-display text-[0.68rem] leading-none font-extrabold text-white tabular-nums">
+            {pin.jobs.length}
+          </span>
+        ) : null}
+      </span>
+      <BranchTag className="absolute top-full left-1/2 -translate-x-1/2">
+        {pin.name}
+        {pin.jobs.length === 0 ? " · sin vacantes" : null}
+      </BranchTag>
+    </>
+  );
+  if (!onSelect) {
+    return (
+      <span role="img" aria-label={label} className="relative grid size-11 animate-pop-in place-items-center opacity-90">
+        {body}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={false}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      className="group/sib relative grid size-11 animate-pop-in place-items-center opacity-90 outline-none hover:opacity-100"
+    >
+      {body}
+    </button>
   );
 }

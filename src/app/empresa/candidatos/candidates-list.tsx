@@ -16,6 +16,9 @@ import { formatKm, type RadiusKm } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import { CANDIDATES, categoryForPuesto } from "../candidates-data";
 import { InitialsAvatar, RadiusChips } from "../wait-ring";
+import { EmployerGate } from "@/components/empresa/employer-gate";
+import { useIsLive } from "@/lib/store";
+import { LiveCandidates } from "./live-candidates";
 
 /** Rugged workwear edge: ink outline + hard offset shadow (no blur). */
 const RUG =
@@ -29,7 +32,13 @@ const PUESTO_FILTERS: { id: CategoryId | "todos"; label: string }[] = [
   { id: "produccion", label: "Producción" },
 ];
 
+/** Demo: mock people near the demo company. Live: who applied to my vacancies (privacy: no one else). */
 export function CandidatesList() {
+  const live = useIsLive();
+  return <EmployerGate shape="cards">{() => (live ? <LiveCandidates /> : <DemoCandidates />)}</EmployerGate>;
+}
+
+function DemoCandidates() {
   const [radius, setRadius] = useState<RadiusKm>(5);
   const [puesto, setPuesto] = useState<CategoryId | "todos">("todos");
   const inRadius = CANDIDATES.filter((c) => c.km <= radius);

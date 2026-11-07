@@ -9,16 +9,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CompanySize } from "@/lib/data/types";
 import type { CategoryId } from "@/lib/data/types";
-import { useApp, type PlanId } from "@/lib/store";
+import { isLiveAvailable, useApp, usePaymentsEnabled, type PlanId } from "@/lib/store";
+import { Spinner } from "@/components/ui/spinner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
 import { CategoryArt } from "@/components/chamba/job-icons";
 import { useConfetti } from "@/components/chamba/motion";
 import { Scene } from "@/components/chamba/art/scenes";
 import { cn } from "@/lib/utils";
-import { ArtTile, ChoiceCard, FlowLabel, FlowShell, HAZARD, PrimaryButton, Slab, WORK_CONFETTI, gridTone, pastel } from "./flow";
-import { PhoneVerify } from "./phone-verify";
+import { ArtTile, ChoiceCard, FlowLabel, FlowShell, HAZARD, PrimaryButton, Slab, WORK_CONFETTI, focusRing, gridTone, pastel } from "./flow";
+import { PhoneField, PhoneVerify } from "./phone-verify";
+import { AccountStep, DemoVerifyNote, useExistingAccountExit } from "./account-step";
 import { LocationPicker, type Place } from "./location-picker";
 
 const TOTAL = 6;
+
+/** A location being set up during onboarding. The first one is the main site ("Principal"). */
+type DraftBranch = { key: string; name: string; place: Place | null };
+
+const firstBranch = (): DraftBranch => ({ key: "principal", name: "Principal", place: null });
+
+/** Name to save: what they typed, or "Sucursal 2" etc. */
+function branchName(b: DraftBranch, i: number) {
+  return b.name.trim() || (i === 0 ? "Principal" : `Sucursal ${i + 1}`);
+}
 
 const KINDS = [
   "Cafetería",
@@ -111,7 +125,8 @@ export function BusinessFlow() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<string | null>(null);
   const [size, setSize] = useState<CompanySize | null>(null);
-  const [place, setPlace] = useState<Place | null>(null);
+  const [branches, setBranches] = useState<DraftBranch[]>(() => [firstBranch()]);
+  const [active, setActive] = useState(0);
   const [phone, setPhoneLocal] = useState("");
   const [plan, setPlan] = useState<PlanId | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -119,6 +134,19 @@ export function BusinessFlow() {
   const setBusiness = useApp((s) => s.setBusiness);
   const setPhone = useApp((s) => s.setPhone);
   const completeOnboarding = useApp((s) => s.completeOnboarding);
+  const storePhone = useApp((s) => s.phone);
+  const appMode = useApp((s) => s.mode);
+  const signedIn = useApp((s) => s.signedIn);
+  const paymentsOn = usePaymentsEnabled();
+  // Real accounts whenever Supabase is configured and we're not inside the demo.
+  const real = isLiveAvailable && appMode !== "demo";
+  // Paid plans only exist in the demo for now (live: "Próximamente", the server keeps por-vacante).
+  const payments = paymentsOn && !real;
+  const chosenPlan: PlanId | null = payments ? plan : "por-vacante";
+  const liveIn = appMode === "live" && signedIn;
+  const [busy, setBusy] = useState(false);
+  // Signed up with an address whose account already has a business: off to the panel.
+  const armExit = useExistingAccountExit("empresa", (s) => !!s.business?.id);
 
   const finished = useRef(false);
   useLayoutEffect(() => {
@@ -131,24 +159,80 @@ export function BusinessFlow() {
     };
   }, []);
 
+  const place = branches[0]?.place ?? null;
+  const current = branches[active] ?? branches[0];
+  const unplaced = branches.findIndex((b) => !b.place);
+
+  function patchBranch(i: number, patch: Partial<DraftBranch>) {
+    setBranches((bs) => bs.map((b, j) => (j === i ? { ...b, ...patch } : b)));
+  }
+
+  function addBranch() {
+    const n = branches.length;
+    // After removing one, "Sucursal N" may already be taken: use the next free number.
+    let k = n + 1;
+    while (branches.some((b, i) => branchName(b, i) === `Sucursal ${k}`)) k++;
+    setBranches((bs) => [...bs, { key: `b${Date.now().toString(36)}`, name: `Sucursal ${k}`, place: null }]);
+    setActive(n);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  }
+
+  function removeBranch(i: number) {
+    if (i === 0) return;
+    setBranches((bs) => bs.filter((_, j) => j !== i));
+    setActive((a) => (a === i ? i - 1 : a > i ? a - 1 : a));
+    // The focused "Quitar" button is gone: land on the previous chip (or the name field if the chips hide).
+    requestAnimationFrame(() => {
+      const chip = document.querySelectorAll<HTMLElement>("[data-branch-chip]")[i - 1];
+      (chip ?? document.getElementById("branch-name"))?.focus();
+    });
+  }
+
+  function continueFromPlaces() {
+    if (unplaced !== -1) {
+      setActive(unplaced);
+      toast(`Falta elegir dónde está ${branchName(branches[unplaced], unplaced)}.`);
+      return;
+    }
+    next();
+  }
+
   const next = () => setStep((s) => s + 1);
   const back = () => (step === 0 ? router.push("/bienvenida") : setStep((s) => s - 1));
 
-  function finish(e: React.MouseEvent<HTMLButtonElement>) {
-    if (!kind || !size || !place || !plan || !accepted) return;
-    fire({ origin: e.currentTarget, colors: WORK_CONFETTI, count: 44 });
-    finished.current = true;
-    setBusiness({
+  async function finish(e: React.MouseEvent<HTMLButtonElement>) {
+    if (!kind || !size || !place || !chosenPlan || !accepted || busy) return;
+    const origin = e.currentTarget;
+    const business = {
       name: name.trim(),
       kind,
       size,
-      colonia: place.colonia,
-      location: place.location,
+      locations: branches.flatMap((b, i) =>
+        b.place
+          ? [{ id: i === 0 ? "suc-principal" : `suc-${i + 1}`, name: branchName(b, i), colonia: b.place.colonia, location: b.place.location }]
+          : [],
+      ),
       phone,
-      plan,
-    });
-    setPhone(phone);
-    completeOnboarding("empresa");
+      // Live: the server keeps "por-vacante" until payments exist.
+      plan: chosenPlan,
+    };
+    if (liveIn) {
+      // Real account: create the company + every branch, then mark the profile onboarded.
+      // Errors are already toasted by the store; the draft stays so "Crear" can be tapped again.
+      setBusy(true);
+      if (phone !== storePhone) void setPhone(phone);
+      const r = await setBusiness(business);
+      const c = r.error ? r : await completeOnboarding("empresa");
+      setBusy(false);
+      if (c.error) return;
+    } else {
+      void setBusiness(business);
+      void setPhone(phone);
+      void completeOnboarding("empresa");
+    }
+    fire({ origin, colors: WORK_CONFETTI, count: 44 });
+    finished.current = true;
     toast.success(`${name.trim()} ya puede publicar vacantes.`);
     router.push("/empresa");
   }
@@ -251,7 +335,9 @@ export function BusinessFlow() {
                 onClick={() => {
                   setSize(s.value);
                   if (!plan)
-                    setPlan(s.value === "Grande" ? "industrial" : s.value === "Micro" ? "por-vacante" : "pyme");
+                    setPlan(
+                      !payments || s.value === "Micro" ? "por-vacante" : s.value === "Grande" ? "industrial" : "pyme",
+                    );
                 }}
               />
             ))}
@@ -266,25 +352,172 @@ export function BusinessFlow() {
           total={TOTAL}
           tone="uva"
           art={{ scene: "mapa" }}
-          title="¿Dónde está tu negocio?"
+          title={branches.length > 1 ? "¿Dónde están tus sucursales?" : "¿Dónde está tu negocio?"}
           hint="Así te mostramos candidatos que viven cerca."
           aside="Personal que vive cerca llega a tiempo y se queda más."
           onBack={back}
           footer={
-            <PrimaryButton disabled={!place} onClick={next}>
+            <PrimaryButton disabled={!current?.place} onClick={continueFromPlaces}>
               Continuar
             </PrimaryButton>
           }
         >
+          {branches.length > 1 ? (
+            <div role="group" aria-label="Tus sucursales" className="mb-6 flex flex-wrap gap-2.5">
+              {branches.map((b, i) => {
+                const on = i === active;
+                return (
+                  <span key={b.key} className="relative inline-flex">
+                    <button
+                      type="button"
+                      data-branch-chip
+                      aria-pressed={on}
+                      onClick={() => setActive(i)}
+                      className={cn(
+                        "press inline-flex min-h-12 items-center gap-2 rounded-full border-[2.5px] border-ink py-1.5 pl-1.5 text-left font-bold transition-[scale,background-color,color]",
+                        i === 0 ? "pr-4" : "pr-11",
+                        on ? "bg-primary text-primary-foreground" : "bg-white text-ink hover:bg-block-sol",
+                        focusRing,
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "grid size-8 shrink-0 place-items-center rounded-full font-display text-[0.95rem] font-extrabold tabular-nums",
+                          on ? "bg-limon text-ink" : "bg-ink text-white",
+                        )}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="leading-tight">
+                        <span className="block max-w-[11rem] truncate text-[0.98rem]">{branchName(b, i)}</span>
+                        <span className={cn("block text-[0.78rem] font-semibold", on ? "text-primary-foreground/80" : "text-ink/60")}>
+                          {b.place ? (b.place.source === "gps" ? "Ubicación detectada" : b.place.colonia) : "Falta ubicación"}
+                        </span>
+                      </span>
+                    </button>
+                    {i > 0 ? (
+                      <button
+                        type="button"
+                        aria-label={`Quitar ${branchName(b, i)}`}
+                        onClick={() => removeBranch(i)}
+                        className={cn(
+                          "absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-full",
+                          on ? "text-primary-foreground hover:bg-white/15" : "text-ink hover:bg-ink/10",
+                          focusRing,
+                        )}
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} className="size-4.5" strokeWidth={2.6} />
+                      </button>
+                    ) : null}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <Slab tone="limon" index={0} className="mb-8 pt-4">
+            <Label
+              htmlFor="branch-name"
+              className="mb-3 font-display text-[1.1rem] font-extrabold tracking-[-0.01em]"
+            >
+              {active === 0 ? "Nombre de tu sucursal principal" : "Nombre de esta sucursal"}
+            </Label>
+            <Input
+              id="branch-name"
+              autoComplete="off"
+              maxLength={40}
+              placeholder={active === 0 ? "Principal" : `Sucursal ${active + 1}`}
+              value={current?.name ?? ""}
+              onChange={(e) => patchBranch(active, { name: e.target.value })}
+              className="h-14 rounded-[1.1rem] border-[3px] border-ink bg-white px-5 font-display text-[1.15rem] font-bold text-ink placeholder:text-ink/35 focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/25 md:text-[1.15rem] dark:bg-white"
+            />
+            <p className="mt-2 text-[0.9rem] font-medium text-muted-foreground">Por ejemplo: Matriz, Planta Derramadero, Bodega Centro.</p>
+          </Slab>
+
           <LocationPicker
-            value={place}
-            onPick={setPlace}
-            privacyNote="Los candidatos ven tu colonia y la distancia. Tú decides cuándo compartir la dirección exacta."
+            key={current?.key}
+            value={current?.place ?? null}
+            onPick={(p) => patchBranch(active, { place: p })}
+            privacyNote="Los candidatos ven la colonia de cada sucursal y la distancia. Tú decides cuándo compartir la dirección exacta."
           />
+
+          <button
+            type="button"
+            onClick={addBranch}
+            disabled={!current?.place}
+            className={cn(
+              "press group mt-6 flex min-h-18 w-full items-center gap-4 rounded-[1.6rem] border-[3px] border-dashed border-ink bg-white/60 px-4 py-3 text-left text-ink transition-[scale,background-color,opacity] hover:bg-white disabled:opacity-50 dark:border-white/50 dark:bg-white/10 dark:text-foreground",
+              focusRing,
+            )}
+          >
+            <span className="grid size-11 shrink-0 place-items-center rounded-full border-[2.5px] border-ink bg-limon text-ink transition-[rotate] duration-300 group-hover:rotate-90">
+              <HugeiconsIcon icon={PlusSignIcon} className="size-5.5" strokeWidth={2.6} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-[1.15rem] leading-tight font-extrabold">Agregar otra sucursal</span>
+              <span className="block text-[0.9rem] font-medium opacity-75">
+                Opcional. También puedes hacerlo después en Sucursales.
+              </span>
+            </span>
+          </button>
         </FlowShell>
       );
 
     case 3:
+      if (real && !liveIn) {
+        return (
+          <AccountStep
+            step={3}
+            total={TOTAL}
+            role="empresa"
+            onBack={back}
+            onVerified={({ channel, to }) => {
+              armExit();
+              if (channel === "sms" && !phone) setPhoneLocal(to);
+            }}
+          />
+        );
+      }
+      if (real) {
+        // Signed in: just the contact number (no code needed).
+        const contact = (phone || storePhone.replace(/\D/g, "").replace(/^52(?=\d{10}$)/, "")).slice(0, 10);
+        return (
+          <FlowShell
+            step={3}
+            total={TOTAL}
+            tone="mandarina"
+            art={{ scene: "whatsapp" }}
+            title="WhatsApp de contacto"
+            hint="Aquí te llegan los avisos cuando alguien cerca se postule."
+            aside="Tu cuenta ya está lista. Solo falta cómo contactarte."
+            onBack={back}
+            footer={
+              <PrimaryButton type="submit" form="contact-form" disabled={contact.length !== 10}>
+                Continuar
+              </PrimaryButton>
+            }
+          >
+            <form
+              id="contact-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (contact.length !== 10) return;
+                setPhoneLocal(contact);
+                next();
+              }}
+            >
+              <Slab tone="cielo" index={1} className="pt-4">
+                <PhoneField
+                  id="business-whatsapp"
+                  value={contact}
+                  onChange={setPhoneLocal}
+                  label="Número de WhatsApp (10 dígitos)"
+                />
+              </Slab>
+            </form>
+          </FlowShell>
+        );
+      }
       return (
         <FlowShell
           step={3}
@@ -296,6 +529,7 @@ export function BusinessFlow() {
           aside="Sin contraseñas que recordar. Solo tu número."
           onBack={back}
         >
+          <DemoVerifyNote />
           <PhoneVerify
             inputId="business-whatsapp"
             initialPhone={phone}
@@ -315,25 +549,32 @@ export function BusinessFlow() {
           tone="uva"
           art={{ scene: "ahorro" }}
           title="Elige cómo pagar"
-          hint="Puedes cambiar de plan cuando quieras. Los candidatos nunca pagan."
+          hint={
+            payments
+              ? "Puedes cambiar de plan cuando quieras. Los candidatos nunca pagan."
+              : "Por ahora empiezas con Por vacante: publicar es gratis. Los planes de pago llegan pronto."
+          }
           aside="Pagas por contratar, no por publicar."
           onBack={back}
           footer={
-            <PrimaryButton disabled={!plan} onClick={next}>
+            <PrimaryButton disabled={!chosenPlan} onClick={next}>
               Continuar
             </PrimaryButton>
           }
         >
           <div className="space-y-4">
-            {PLANS.map((p, i) => (
+            {PLANS.map((p, i) => {
+              const soon = !payments && p.id !== "por-vacante";
+              return (
               <ChoiceCard
                 key={p.id}
                 index={i}
                 tone={(["cielo", "sol", "menta"] as const)[i % 3]}
                 title={p.title}
-                badge={p.badge}
-                selected={plan === p.id}
-                onClick={() => setPlan(p.id)}
+                badge={soon ? "Próximamente" : p.badge}
+                selected={soon ? undefined : chosenPlan === p.id}
+                className={soon ? "opacity-70" : undefined}
+                onClick={() => (soon ? toast("Los planes de pago llegan pronto. Por ahora publicar es gratis.") : setPlan(p.id))}
                 description={
                   <>
                     <span className="block font-display text-[1.15rem] font-extrabold text-foreground tabular-nums">
@@ -343,7 +584,8 @@ export function BusinessFlow() {
                   </>
                 }
               />
-            ))}
+              );
+            })}
           </div>
         </FlowShell>
       );
@@ -360,8 +602,9 @@ export function BusinessFlow() {
           aside="Menos distancia. Menos ausentismo. Más permanencia."
           onBack={back}
           footer={
-            <PrimaryButton disabled={!accepted} onClick={finish}>
-              Crear cuenta de empresa
+            <PrimaryButton disabled={!accepted || busy} onClick={finish} aria-busy={busy}>
+              {busy ? <Spinner className="size-5" /> : null}
+              {busy ? "Guardando tu negocio…" : liveIn ? "Registrar mi negocio" : "Crear cuenta de empresa"}
             </PrimaryButton>
           }
         >
@@ -381,8 +624,10 @@ export function BusinessFlow() {
                 {[
                   ["Negocio", `${name.trim()} · ${kind ?? ""}`],
                   ["Tamaño", SIZES.find((s) => s.value === size)?.hint ?? ""],
-                  ["Ubicación", place?.source === "gps" ? "Ubicación detectada" : (place?.colonia ?? "")],
-                  ["Plan", PLANS.find((p) => p.id === plan)?.title ?? ""],
+                  branches.length > 1
+                    ? ["Sucursales", `${branches.length} · ${branches.map((b, i) => (b.place?.source === "gps" ? branchName(b, i) : b.place?.colonia)).join(", ")}`]
+                    : ["Ubicación", place?.source === "gps" ? "Ubicación detectada" : (place?.colonia ?? "")],
+                  ["Plan", PLANS.find((p) => p.id === chosenPlan)?.title ?? ""],
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-baseline justify-between gap-4">
                     <dt className="shrink-0 text-[0.8rem] font-bold tracking-[0.1em] text-ink/60 uppercase">{k}</dt>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AnimatePresence, motion, useAnimate, useReducedMotion } from "motion/react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Add01Icon, MinusSignIcon, SentIcon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { Add01Icon, Location01Icon, MinusSignIcon, SentIcon, Store01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,10 @@ import {
   WORK_CONFETTI,
 } from "@/components/empresa/workwear";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
+import { EmployerGate } from "@/components/empresa/employer-gate";
+import { publishJob } from "@/lib/live/backend";
+import { useEmployerLocations, useIsLive } from "@/lib/store";
+import { BranchMapArt, coloniaText, nearbyEstimate, typicalKm } from "@/app/empresa/sucursales/branch-kit";
 import type { CategoryId, EmploymentType, Experience, PayPeriod, Shift } from "@/lib/data/types";
 import { formatPay } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -126,7 +131,20 @@ function onRadioKeys<T>(e: React.KeyboardEvent, items: T[], current: T, set: (v:
 }
 
 export function NewJobForm() {
+  return <EmployerGate shape="form">{(my) => <NewJobFormBody companyName={my.company.name} />}</EmployerGate>;
+}
+
+/** "Licencia vigente, secundaria\nTurnos rotativos" → ["Licencia vigente", "secundaria", "Turnos rotativos"]. */
+function splitRequirements(text: string): string[] {
+  return text
+    .split(/[\n;,]+/)
+    .map((r) => r.trim())
+    .filter(Boolean);
+}
+
+function NewJobFormBody({ companyName }: { companyName: string }) {
   const router = useRouter();
+  const live = useIsLive();
   const reduced = useReducedMotion();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<CategoryId>("almacen");
@@ -139,6 +157,7 @@ export function NewJobForm() {
   const [benefits, setBenefits] = useState<string[]>(["IMSS desde el primer día", "Aguinaldo"]);
   const [requirements, setRequirements] = useState("");
   const [openings, setOpenings] = useState("1");
+  const [branchId, setBranchId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [published, setPublished] = useState(false);
   const [titleMissing, setTitleMissing] = useState(false);
@@ -148,6 +167,12 @@ export function NewJobForm() {
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const locations = useEmployerLocations();
+  // Default to the main location; fall back to it if the chosen one was removed.
+  const branch = locations.find((l) => l.id === branchId) ?? locations[0];
+  const multi = locations.length > 1;
+  const nearby = branch ? nearbyEstimate(branch.location) : 0;
 
   const payNum = Number(pay) || 0;
   const previewTitle = title.trim() || "Nombre del puesto";
@@ -168,10 +193,16 @@ export function NewJobForm() {
       if (shakeScope.current) shake(shakeScope.current, { x: [0, -10, 10, -6, 6, 0] }, { duration: 0.42 });
       return;
     }
+    if (live) {
+      void publishLive();
+      return;
+    }
     setSubmitting(true);
     setPublished(true);
     confetti({ origin: submitRef.current, colors: WORK_CONFETTI, count: 56, spread: 140 });
-    toast.success("Vacante publicada gratis. Te avisaremos cuando alguien cerca se postule.");
+    toast.success(
+      `Vacante publicada gratis${branch && multi ? ` en ${branch.name}` : ""}. Te avisaremos cuando alguien cerca se postule.`,
+    );
     timer.current = window.setTimeout(
       () => {
         setTitle("");
@@ -182,6 +213,56 @@ export function NewJobForm() {
         setPublished(false);
       },
       reduced ? 900 : 1800,
+    );
+  }
+
+  async function publishLive() {
+    if (!branch) {
+      toast.error("Agrega una sucursal para publicar la vacante.");
+      return;
+    }
+    if (branch.id.startsWith("tmp-")) {
+      toast.error("Estamos guardando esa sucursal. Inténtalo en unos segundos.");
+      return;
+    }
+    if (payNum <= 0) {
+      toast.error("Escribe cuánto pagas para publicar la vacante.");
+      document.getElementById("sueldo")?.focus();
+      return;
+    }
+    setSubmitting(true);
+    const r = await publishJob({
+      branchId: branch.id,
+      title: title.trim(),
+      category,
+      pay: payNum,
+      period,
+      shift,
+      schedule: schedule.trim(),
+      type,
+      experience,
+      benefits,
+      requirements: splitRequirements(requirements),
+      openings: openingsNum,
+    });
+    if (r.error !== undefined) {
+      setSubmitting(false);
+      toast.error(r.error);
+      return;
+    }
+    setPublished(true);
+    confetti({ origin: submitRef.current, colors: WORK_CONFETTI, count: 56, spread: 140 });
+    toast.success(`Vacante publicada gratis${multi ? ` en ${branch.name}` : ""}. Te avisaremos cuando alguien cerca se postule.`);
+    const id = r.data;
+    timer.current = window.setTimeout(
+      () => {
+        setTitle("");
+        setRequirements("");
+        setSubmitting(false);
+        router.push(`/empresa/vacantes/${id}`);
+        setPublished(false);
+      },
+      reduced ? 700 : 1400,
     );
   }
 
@@ -267,8 +348,104 @@ export function NewJobForm() {
             </div>
           </Block>
 
-          {/* 02 · Sueldo y horario */}
-          <Block n={2} tone="cielo" title="Sueldo y horario" hint="Lo primero que ve la gente" index={1}>
+          {/* 02 · Sucursal */}
+          <Block
+            n={2}
+            tone="lila"
+            title="¿En qué sucursal es?"
+            hint="Avisamos a quien vive cerca de ahí"
+            index={1}
+          >
+            {multi && branch ? (
+              <div
+                role="radiogroup"
+                aria-label="Sucursal"
+                className="grid gap-3 sm:grid-cols-2"
+                onKeyDown={(e) =>
+                  onRadioKeys(
+                    e,
+                    locations.map((l) => l.id),
+                    branch.id,
+                    setBranchId,
+                  )
+                }
+              >
+                {locations.map((l, i) => {
+                  const on = l.id === branch.id;
+                  return (
+                    <motion.button
+                      key={l.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      tabIndex={on ? 0 : -1}
+                      onClick={() => setBranchId(l.id)}
+                      whileTap={{ scale: 0.95 }}
+                      transition={springs.bouncy}
+                      className={cn(
+                        "group relative flex min-h-[5.5rem] items-center gap-3 rounded-tile border-2 border-ink p-2.5 pr-3 text-left text-ink outline-none focus-visible:ring-4 focus-visible:ring-ring/60",
+                        on ? cn("bg-white", HARD_SM) : "bg-white/55 hover:bg-white/85 dark:bg-white/70",
+                      )}
+                    >
+                      <BranchMapArt seed={l.id} principal={i === 0} className="w-18 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-display text-[1.08rem] leading-tight font-extrabold tracking-[-0.02em] break-words">
+                          {l.name}
+                        </span>
+                        <span className="mt-0.5 block text-[0.85rem] leading-snug font-medium text-ink/65">
+                          {coloniaText(l)}
+                        </span>
+                      </span>
+                      {on ? (
+                        <motion.span
+                          layoutId="sucursal-check"
+                          transition={springs.snappy}
+                          aria-hidden
+                          className="absolute -top-2.5 -right-2.5 grid size-7 place-items-center rounded-full border-2 border-ink bg-limon text-ink"
+                        >
+                          <HugeiconsIcon icon={Tick02Icon} className="size-4" strokeWidth={3} />
+                        </motion.span>
+                      ) : null}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ) : branch ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={cn(
+                    "inline-flex min-h-12 max-w-full items-center gap-2.5 rounded-full border-2 border-ink bg-white py-1.5 pr-4 pl-1.5 text-ink",
+                    HARD_SM,
+                  )}
+                >
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-limon">
+                    <HugeiconsIcon icon={Tick02Icon} className="size-4.5" strokeWidth={3} />
+                  </span>
+                  <span className="min-w-0 leading-tight">
+                    <span className="block truncate font-display font-extrabold">{branch.name}</span>
+                    <span className="block truncate text-[0.82rem] font-medium text-ink/65">{coloniaText(branch)}</span>
+                  </span>
+                </span>
+                <Link
+                  href="/empresa/sucursales"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-2 text-[0.95rem] font-bold underline decoration-2 underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-ring/60"
+                >
+                  <HugeiconsIcon icon={Add01Icon} className="size-4.5" strokeWidth={2.4} />
+                  Agregar sucursal
+                </Link>
+              </div>
+            ) : (
+              <Link
+                href="/empresa/sucursales"
+                className="inline-flex min-h-11 items-center gap-1.5 font-bold underline decoration-2 underline-offset-4"
+              >
+                Agrega tu primera sucursal
+              </Link>
+            )}
+          </Block>
+
+          {/* 03 · Sueldo y horario */}
+          <Block n={3} tone="cielo" title="Sueldo y horario" hint="Lo primero que ve la gente" index={2}>
             <Field id="sueldo" label="Sueldo (MXN)">
               <div className="relative">
                 <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-display text-xl font-extrabold text-ink">
@@ -417,8 +594,8 @@ export function NewJobForm() {
             </Field>
           </Block>
 
-          {/* 03 · Prestaciones */}
-          <Block n={3} tone="menta" title="Prestaciones" hint="Lo que hace que te elijan a ti" index={2}>
+          {/* 04 · Prestaciones */}
+          <Block n={4} tone="menta" title="Prestaciones" hint="Lo que hace que te elijan a ti" index={3}>
             <fieldset>
               <legend className="sr-only">Prestaciones</legend>
               <div className="flex flex-wrap gap-2">
@@ -447,18 +624,24 @@ export function NewJobForm() {
             </fieldset>
           </Block>
 
-          {/* 04 · Requisitos (dense text → white card) */}
-          <Block n={4} tone="white" title="Requisitos" hint="Opcional, pero ayuda" index={3}>
+          {/* 05 · Requisitos (dense text → white card) */}
+          <Block n={5} tone="white" title="Requisitos" hint="Opcional, pero ayuda" index={4}>
             <Field id="requisitos" label="Requisitos" className="[&>label]:sr-only">
               <Textarea
                 id="requisitos"
                 name="requisitos"
                 rows={4}
                 placeholder="Ej. Licencia de montacargas vigente, secundaria terminada…"
+                aria-describedby={live ? "requisitos-hint" : undefined}
                 value={requirements}
                 onChange={(e) => setRequirements(e.target.value)}
                 className="min-h-28 rounded-tile border-2 border-ink bg-tile/60 px-4 py-3 text-base md:text-base dark:border-white/30"
               />
+              {live ? (
+                <p id="requisitos-hint" className="text-[0.85rem] text-muted-foreground">
+                  Separa cada requisito con una coma o en otra línea.
+                </p>
+              ) : null}
             </Field>
           </Block>
         </div>
@@ -507,10 +690,22 @@ export function NewJobForm() {
               {formatPay({ pay: payNum, period })}
             </p>
             <div className="mt-2 flex items-center justify-between gap-3">
-              <p className="min-w-0 truncate text-[0.95rem] text-muted-foreground">Logística Zapalinamé · {shift}</p>
-              <span className="shrink-0 rounded-full border-2 border-ink bg-white py-1 pr-2.5 pl-1 text-ink">
-                <DistanceRing km={1.8} radiusKm={5} size={26} />
-              </span>
+              <p className="min-w-0 text-[0.95rem] leading-snug text-muted-foreground">
+                <span className="block">
+                  {companyName} · {shift}
+                </span>
+                {branch ? (
+                  <span className="mt-0.5 flex items-start gap-1 font-semibold text-foreground">
+                    <HugeiconsIcon icon={multi ? Store01Icon : Location01Icon} className="size-4 shrink-0" strokeWidth={2.2} />
+                    <span>{multi ? `${branch.name} · ${coloniaText(branch, false)}` : coloniaText(branch)}</span>
+                  </span>
+                ) : null}
+              </p>
+              {branch ? (
+                <span className="shrink-0 rounded-full border-2 border-ink bg-white py-1 pr-2.5 pl-1 text-ink">
+                  <DistanceRing km={Math.round(typicalKm(branch.location) * 10) / 10} radiusKm={5} size={26} />
+                </span>
+              ) : null}
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-2.5 text-[0.95rem]">
               {[
@@ -538,10 +733,18 @@ export function NewJobForm() {
                 ))}
               </ul>
             ) : null}
-            <p className="mt-4 text-sm text-muted-foreground">
-              La avisaremos a quienes viven a menos de 5 km de tu centro y buscan trabajo de{" "}
-              {CATEGORY_BY_ID[category].label.toLowerCase()}.
-            </p>
+            {live ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                La verá la gente que vive cerca de {multi && branch ? branch.name : "tu centro"} y busca trabajo de{" "}
+                {CATEGORY_BY_ID[category].label.toLowerCase()}.
+              </p>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                La avisaremos a unas <strong className="font-bold text-foreground tabular-nums">{nearby} personas</strong> que viven a
+                menos de 5 km de {multi && branch ? branch.name : "tu centro"} y buscan trabajo de{" "}
+                {CATEGORY_BY_ID[category].label.toLowerCase()}.
+              </p>
+            )}
           </section>
 
           {/* The ONE saturated block: publish */}

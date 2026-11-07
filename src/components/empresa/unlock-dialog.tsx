@@ -17,24 +17,27 @@ import {
 import { confetti } from "@/components/chamba/motion";
 import { Padlock } from "@/components/empresa/padlock";
 import { HARD, HARD_SM, INK_BUTTON, OUTLINE, WHITE_BUTTON, WORK_CONFETTI } from "@/components/empresa/workwear";
-import { applicantsFor } from "@/lib/data/applicants";
 import type { Job } from "@/lib/data/types";
 import { formatMXN } from "@/lib/format";
-import { UNLOCK_PRICE, useApp } from "@/lib/store";
+import { UNLOCK_PRICE, useApp, usePaymentsEnabled } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 /** Confirms paying to see a vacancy's applicants. Demo mode: no charge is made. */
 export function UnlockDialog({
   job,
+  count,
   open,
   onOpenChange,
 }: {
   job: Job;
+  /** How many people applied (from useApplicants). */
+  count: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const unlockJob = useApp((s) => s.unlockJob);
-  const count = applicantsFor(job.id).length;
+  // Payments don't exist in live yet; the vacancy screen shows "Próximamente" instead of opening this.
+  const payments = usePaymentsEnabled();
   const reduced = useReducedMotion();
   const [unlocking, setUnlocking] = useState(false);
   const lockRef = useRef<HTMLDivElement>(null);
@@ -45,7 +48,7 @@ export function UnlockDialog({
   function confirm(e: React.MouseEvent) {
     // Keep the dialog open for the lock → unlock beat, then commit and close.
     e.preventDefault();
-    if (unlocking) return;
+    if (unlocking || !payments) return;
     setUnlocking(true);
     confetti({ origin: lockRef.current, colors: WORK_CONFETTI, count: 44 });
     timer.current = window.setTimeout(

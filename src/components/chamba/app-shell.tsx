@@ -14,6 +14,7 @@ import {
   Location06Icon,
   MapsIcon,
   Search01Icon,
+  Store01Icon,
   UserGroupIcon,
   UserIcon,
   UserCheck01Icon,
@@ -23,7 +24,9 @@ import { cn } from "@/lib/utils";
 import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { springs } from "./motion";
 import { ThemeToggle } from "@/components/theme";
-import { useApp, useHydrated } from "@/lib/store";
+import { isLiveAvailable, useApp } from "@/lib/store";
+import { useSessionLoaded, useSessionReady } from "@/lib/live/session";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export type NavItem = { href: string; label: string; icon: IconSvgElement; badge?: "applications" | number; exact?: boolean };
 
@@ -38,6 +41,7 @@ export const CANDIDATE_NAV: NavItem[] = [
 export const EMPLOYER_NAV: NavItem[] = [
   { href: "/empresa", label: "Panel", icon: DashboardSquare01Icon, exact: true },
   { href: "/empresa/vacantes", label: "Vacantes", icon: Briefcase01Icon },
+  { href: "/empresa/sucursales", label: "Sucursales", icon: Store01Icon },
   { href: "/empresa/candidatos", label: "Candidatos", icon: UserGroupIcon, badge: 7 },
   { href: "/empresa/plan", label: "Plan", icon: Invoice01Icon },
 ];
@@ -46,8 +50,10 @@ const MotionLink = motion.create(Link);
 
 function useBadge(badge: NavItem["badge"]) {
   const apps = useApp((s) => s.applications.filter((a) => a.status !== "cerrada").length);
+  const demo = useApp((s) => s.mode === "demo");
   if (badge === "applications") return apps;
-  return badge;
+  // Fixed numbers are demo decoration (e.g. "7 nuevas" candidates); live never shows made-up counts.
+  return demo ? badge : undefined;
 }
 
 function isActive(pathname: string, item: NavItem) {
@@ -205,6 +211,69 @@ function useDevKit() {
   );
 }
 
+const HAZARD_TAPE = "bg-[repeating-linear-gradient(-45deg,var(--ink)_0_8px,var(--block-sol)_8px_16px)]";
+
+/**
+ * Leaves the demo with a full reload, so no demo page stays mounted in the background and the
+ * signed-out guard can't race the navigation.
+ */
+function leaveDemoTo(href: string) {
+  useApp.getState().exitDemo();
+  window.location.href = href;
+}
+
+/** Slim caution-tape band: you're looking at example data. */
+function DemoRibbon() {
+  const role = useApp((s) => s.role);
+  const btn =
+    "press inline-flex h-11 shrink-0 items-center rounded-full px-3.5 font-display text-[0.9rem] font-extrabold outline-none transition-[scale,background-color] focus-visible:ring-3 focus-visible:ring-ink/60 sm:px-4";
+  return (
+    <div role="region" aria-label="Modo demo" className="relative z-50 border-b-[3px] border-ink bg-block-sol text-ink">
+      <div className={cn("h-1.5", HAZARD_TAPE)} aria-hidden />
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-1 pt-[max(0.25rem,env(safe-area-inset-top))] sm:gap-3 sm:px-6">
+        <span className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+          <span className="shrink-0 rounded-md bg-ink px-2 py-1 font-display text-[0.78rem] leading-none font-extrabold tracking-[0.12em] text-limon uppercase">
+            Modo demo
+          </span>
+          <span className="truncate text-[0.74rem] leading-tight font-bold sm:text-[0.9rem] sm:font-semibold">
+            <span className="sm:hidden">Datos de ejemplo</span>
+            <span className="hidden sm:inline">Datos de ejemplo de Saltillo · nada se guarda</span>
+          </span>
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {isLiveAvailable ? (
+            <button
+              type="button"
+              onClick={() => leaveDemoTo(role === "empresa" ? "/bienvenida/empresa" : "/bienvenida")}
+              className={cn(btn, "bg-ink text-white hover:bg-ink/85")}
+            >
+              Crear mi cuenta
+            </button>
+          ) : null}
+          <button type="button" onClick={() => leaveDemoTo("/")} className={cn(btn, "hover:bg-ink/10")}>
+            Salir
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Neutral placeholder while we find out who's here (no seeded or mock content). */
+function ShellSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Cargando" className="space-y-5 pt-6">
+      <Skeleton className="h-10 w-2/3 rounded-full" />
+      <Skeleton className="h-44 w-full rounded-panel" />
+      <div className="grid grid-cols-2 gap-4">
+        <Skeleton className="h-28 rounded-panel" />
+        <Skeleton className="h-28 rounded-panel" />
+      </div>
+      <Skeleton className="h-24 w-full rounded-panel" />
+    </div>
+  );
+}
+
 export function AppShell({
   nav,
   mode,
@@ -216,93 +285,119 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const hydrated = useHydrated();
+  // Wait for the store AND (live-capable builds) Supabase's initial session before deciding,
+  // so someone arriving from the email link isn't bounced to /entrar for a frame.
+  const ready = useSessionReady();
+  const sessionLoaded = useSessionLoaded();
   const signedIn = useApp((s) => s.signedIn);
+  const appMode = useApp((s) => s.mode);
+  const onboarded = useApp((s) => s.onboarded);
+  const role = useApp((s) => s.role);
   const setRole = useApp((s) => s.setRole);
-  const signedOut = hydrated && !signedIn;
+  const signedOut = ready && !signedIn;
+  // A real account that never finished onboarding (signed up from /entrar or the email link).
+  const unfinished = ready && signedIn && appMode === "live" && sessionLoaded && !onboarded;
   const kit = useDevKit();
 
   useEffect(() => {
     if (signedOut) router.replace("/entrar");
-  }, [signedOut, router]);
+    else if (unfinished) router.replace(role === "empresa" ? "/bienvenida/empresa" : "/bienvenida");
+  }, [signedOut, unfinished, role, router]);
 
   // Signed out: render nothing while redirecting so account data never flashes.
-  if (signedOut) return <div className="min-h-dvh" aria-busy="true" />;
+  if (signedOut || unfinished) return <div className="min-h-dvh" aria-busy="true" />;
 
   const candidate = mode === "candidato";
+  const demo = ready && appMode === "demo";
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
-      {/* Desktop rail */}
-      <aside className="sticky top-0 hidden h-dvh flex-col gap-8 px-5 py-7 lg:flex">
-        <Link href="/" aria-label="Chambarrio, inicio" className="group self-start rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
-        </Link>
-        <nav aria-label="Principal" className="flex flex-col gap-1">
-          {nav.map((item) => (
-            <SideItem key={item.href} item={item} active={isActive(pathname, item)} />
-          ))}
-        </nav>
-        <div className="mt-auto space-y-3">
+    <>
+      {demo ? <DemoRibbon /> : null}
+      <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
+        {/* Desktop rail */}
+        <aside className="sticky top-0 hidden h-dvh flex-col gap-8 px-5 py-7 lg:flex">
           <Link
-            href={candidate ? "/empresa" : "/inicio"}
-            onClick={() => setRole(candidate ? "empresa" : "candidato")}
-            className={cn(
-              "group press lift relative block overflow-hidden rounded-[1.5rem] p-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              candidate ? "bg-limon text-ink" : "bg-primary text-primary-foreground shadow-pop",
-            )}
+            href="/"
+            aria-label="Chambarrio, inicio"
+            className="group self-start rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            <span
-              aria-hidden
+            <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
+          </Link>
+          <nav aria-label="Principal" className="flex flex-col gap-1">
+            {nav.map((item) => (
+              <SideItem key={item.href} item={item} active={isActive(pathname, item)} />
+            ))}
+          </nav>
+          <div className="mt-auto space-y-3">
+            <Link
+              href={candidate ? "/empresa" : "/inicio"}
+              onClick={() => setRole(candidate ? "empresa" : "candidato")}
               className={cn(
-                "absolute -top-6 -right-6 size-20 rounded-full transition-[scale] duration-500 group-hover:scale-125",
-                candidate ? "bg-ink/[0.06]" : "bg-white/10",
-              )}
-            />
-            <span
-              className={cn(
-                "relative grid size-10 place-items-center rounded-full transition-[rotate] duration-300 group-hover:-rotate-12",
-                candidate ? "bg-ink text-limon" : "bg-limon text-ink",
+                "group press lift relative block overflow-hidden rounded-[1.5rem] p-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                candidate ? "bg-limon text-ink" : "bg-primary text-primary-foreground shadow-pop",
               )}
             >
-              <HugeiconsIcon icon={candidate ? Building06Icon : UserIcon} className="size-5" strokeWidth={1.8} />
-            </span>
-            <span className="relative mt-3 block font-display text-[1.15rem] leading-tight font-extrabold tracking-[-0.02em]">
-              {candidate ? "¿Tienes un negocio?" : "¿Buscas trabajo?"}
-            </span>
-            <span className={cn("relative mt-1 flex items-center gap-1 text-sm", candidate ? "text-ink/75" : "text-primary-foreground/80")}>
-              {candidate ? "Cambia a modo empresa" : "Cambia a modo candidato"}
-              <HugeiconsIcon
-                icon={ArrowRight02Icon}
-                className="size-4 transition-[translate] duration-300 group-hover:translate-x-1"
-                strokeWidth={2}
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute -top-6 -right-6 size-20 rounded-full transition-[scale] duration-500 group-hover:scale-125",
+                  candidate ? "bg-ink/[0.06]" : "bg-white/10",
+                )}
               />
-            </span>
-          </Link>
-          <div className="flex items-center justify-between rounded-full border border-border bg-card py-1 pr-1 pl-4 shadow-card">
-            <span className="text-sm text-muted-foreground">Tema</span>
-            <ThemeToggle className="size-10 border-0 bg-tile shadow-none" />
+              <span
+                className={cn(
+                  "relative grid size-10 place-items-center rounded-full transition-[rotate] duration-300 group-hover:-rotate-12",
+                  candidate ? "bg-ink text-limon" : "bg-limon text-ink",
+                )}
+              >
+                <HugeiconsIcon icon={candidate ? Building06Icon : UserIcon} className="size-5" strokeWidth={1.8} />
+              </span>
+              <span className="relative mt-3 block font-display text-[1.15rem] leading-tight font-extrabold tracking-[-0.02em]">
+                {candidate ? "¿Tienes un negocio?" : "¿Buscas trabajo?"}
+              </span>
+              <span
+                className={cn(
+                  "relative mt-1 flex items-center gap-1 text-sm",
+                  candidate ? "text-ink/75" : "text-primary-foreground/80",
+                )}
+              >
+                {candidate ? "Cambia a modo empresa" : "Cambia a modo candidato"}
+                <HugeiconsIcon
+                  icon={ArrowRight02Icon}
+                  className="size-4 transition-[translate] duration-300 group-hover:translate-x-1"
+                  strokeWidth={2}
+                />
+              </span>
+            </Link>
+            <div className="flex items-center justify-between rounded-full border border-border bg-card py-1 pr-1 pl-4 shadow-card">
+              <span className="text-sm text-muted-foreground">Tema</span>
+              <ThemeToggle className="size-10 border-0 bg-tile shadow-none" />
+            </div>
           </div>
+        </aside>
+
+        <div className="min-w-0">
+          <main className="mx-auto w-full max-w-xl px-4 pt-safe pb-36 sm:px-6 lg:max-w-6xl lg:px-10 lg:pb-16">
+            {ready ? (
+              <RouteTransition>{kit && KitShowcase ? <KitShowcase /> : children}</RouteTransition>
+            ) : (
+              <ShellSkeleton />
+            )}
+          </main>
         </div>
-      </aside>
 
-      <div className="min-w-0">
-        <main className="mx-auto w-full max-w-xl px-4 pt-safe pb-36 sm:px-6 lg:max-w-6xl lg:px-10 lg:pb-16">
-          <RouteTransition>{kit && KitShowcase ? <KitShowcase /> : children}</RouteTransition>
-        </main>
+        {/* Mobile floating pill nav */}
+        <nav
+          aria-label="Principal"
+          className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
+        >
+          <ul className="mx-auto flex max-w-md items-center gap-0.5 rounded-full border border-border bg-card p-1.5 shadow-nav">
+            {nav.map((item) => (
+              <BottomItem key={item.href} item={item} active={isActive(pathname, item)} />
+            ))}
+          </ul>
+        </nav>
       </div>
-
-      {/* Mobile floating pill nav */}
-      <nav
-        aria-label="Principal"
-        className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
-      >
-        <ul className="mx-auto flex max-w-md items-center gap-0.5 rounded-full border border-border bg-card p-1.5 shadow-nav">
-          {nav.map((item) => (
-            <BottomItem key={item.href} item={item} active={isActive(pathname, item)} />
-          ))}
-        </ul>
-      </nav>
-    </div>
+    </>
   );
 }

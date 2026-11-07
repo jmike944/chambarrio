@@ -8,18 +8,14 @@ import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle, Marquee } from "@/components/chamba/art/doodles";
 import { HARD, HARD_SM, OUTLINE } from "@/components/empresa/workwear";
 import { Button } from "@/components/ui/button";
-import { JOBS } from "@/lib/data/jobs";
 import { cn } from "@/lib/utils";
 import { VacancyList } from "./vacancy-list";
 
 export const metadata: Metadata = { title: "Tus vacantes" };
 
-const COMPANY_ID = "logistica-zapaliname";
-
 const TICKER = ["Publicar es gratis", "Gente a 5 km de tu centro", "Contacto directo por WhatsApp", "Sin contratos forzosos"];
 
 export default function EmpresaVacantesPage() {
-  const jobs = JOBS.filter((j) => j.companyId === COMPANY_ID);
   return (
     <>
       <PageHeader title="Vacantes" />
@@ -73,9 +69,12 @@ export default function EmpresaVacantesPage() {
         </div>
 
         <div className="min-w-0 lg:col-span-7">
-          <VacancyList jobs={jobs} />
+          <VacancyList />
         </div>
       </div>
     </>
   );
 }
+
+// Shell renders children client-side only, so skip dev instant-navigation validation.
+export const instant = false;

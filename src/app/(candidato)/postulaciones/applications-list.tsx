@@ -18,16 +18,18 @@ import { CATEGORY_BLOCK, CategoryArt, CategoryIcon } from "@/components/chamba/j
 import { Mascot, type MascotMood } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle } from "@/components/chamba/art/doodles";
-import { JobRow } from "@/components/chamba/job-row";
+import { JobRow, companyLabel } from "@/components/chamba/job-row";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
-import { COMPANY_BY_ID, JOB_BY_ID } from "@/lib/data/jobs";
-import type { Application, ApplicationStatus, Job } from "@/lib/data/types";
+import { useCatalog, useJob } from "@/lib/data/catalog";
+import { useSessionLoaded } from "@/lib/live/session";
+import type { Application, ApplicationStatus, CategoryId, Job } from "@/lib/data/types";
 import { distanceKm, formatKm } from "@/lib/geo";
 import { formatMinutesAgo, formatPay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { HARD, HARD_SM, HazardTape, Rivets, STENCIL } from "./rugged";
+import { CatalogErrorPanel, InkSkeleton, LoadingNote, RowSkeletons } from "../vacantes/_seeker/states";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
@@ -55,6 +57,16 @@ const HERO: Record<ApplicationStatus, { eyebrow: string; title: string; mood: Ma
   cerrada: { eyebrow: "Sigue buscando", title: "Esta ya se ocupó", mood: "piensa", sticker: <><strong>+</strong>cerca</> },
 };
 
+/** Live: there's no interview scheduling yet, so no made-up day/time. */
+const LIVE_HINT: Partial<Record<ApplicationStatus, string>> = {
+  entrevista: "La empresa te contacta por WhatsApp para acordar el día y la hora.",
+  cerrada: "Esta postulación ya no sigue. Hay más chamba cerca de ti.",
+};
+const LIVE_STICKER: Partial<Record<ApplicationStatus, React.ReactNode>> = {
+  entrevista: <><strong>¡Ya!</strong>Entrevista</>,
+};
+const hintFor = (status: ApplicationStatus, live: boolean) => (live ? LIVE_HINT[status] : undefined) ?? STATUS[status].hint;
+
 const RANK: Record<ApplicationStatus, number> = { contratada: 4, entrevista: 3, vista: 2, enviada: 1, cerrada: 0 };
 
 /** Stat tiles — three bold pastels (no pink). */
@@ -64,11 +76,11 @@ const STAT_TONES = ["sol", "cielo", "menta"] as const satisfies readonly BlockTo
  * Category tint per card, nudged so neighbours never repeat a tone: the first card avoids the
  * stat tile right above it, the last card avoids the lila "Guardadas" panel below it.
  */
-function pickTones(jobs: Job[]): BlockTone[] {
+function pickTones(categories: (CategoryId | undefined)[]): BlockTone[] {
   const out: BlockTone[] = [];
-  jobs.forEach((job, i) => {
-    const avoid = new Set<BlockTone>([out[i - 1], ...(i === 0 ? STAT_TONES : []), i === jobs.length - 1 ? "lila" : undefined].filter(Boolean) as BlockTone[]);
-    let tone: BlockTone = CATEGORY_BLOCK[job.category];
+  categories.forEach((category, i) => {
+    const avoid = new Set<BlockTone>([out[i - 1], ...(i === 0 ? STAT_TONES : []), i === categories.length - 1 ? "lila" : undefined].filter(Boolean) as BlockTone[]);
+    let tone: BlockTone = category ? CATEGORY_BLOCK[category] : "cielo";
     let k = i;
     while (avoid.has(tone)) tone = rotateTone(++k);
     out.push(tone);
@@ -77,26 +89,28 @@ function pickTones(jobs: Job[]): BlockTone[] {
 }
 
 export function ApplicationsList() {
-  const applications = useApp((s) => s.applications);
+  const allApplications = useApp((s) => s.applications);
   const saved = useApp((s) => s.saved);
-  const home = useApp((s) => s.home);
-  const radiusKm = useApp((s) => s.radiusKm);
+  const catalog = useCatalog();
+  const live = catalog.source === "live";
+  const sessionLoaded = useSessionLoaded();
 
-  const withJobs = applications
-    .map((a) => ({ a, job: JOB_BY_ID[a.jobId] }))
-    .filter((x): x is { a: Application; job: Job } => !!x.job);
-  const hero = withJobs.reduce<(typeof withJobs)[number] | null>(
-    (best, x) => (!best || RANK[x.a.status] > RANK[best.a.status] ? x : best),
-    null,
-  );
-  const rest = withJobs.filter((x) => x !== hero);
-  const tones = pickTones(rest.map((x) => x.job));
-  const seen = applications.filter((a) => RANK[a.status] >= 2).length;
+  // Demo: only applications whose vacancy exists (as always). Live: every application; a vacancy
+  // that closed (or isn't visible anymore) shows as "Vacante cerrada" instead of disappearing.
+  const applications = live ? allApplications : allApplications.filter((a) => catalog.jobById[a.jobId]);
+  const hero = applications.reduce<Application | null>((best, a) => (!best || RANK[a.status] > RANK[best.status] ? a : best), null);
+  const rest = applications.filter((a) => a !== hero);
+  const tones = pickTones(rest.map((a) => catalog.jobById[a.jobId]?.category));
+  const seen = allApplications.filter((a) => RANK[a.status] >= 2).length;
+
+  // Live: the user's applications arrive with loadSession(); the vacancies with the catalog.
+  if (live && (catalog.status === "loading" || !sessionLoaded)) return <ApplicationsSkeleton />;
+  if (live && catalog.status === "error") return <CatalogErrorPanel error={catalog.error} title="No pudimos cargar tus postulaciones" className="mx-auto max-w-xl" />;
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
       <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-7">
-        {hero ? <ApplicationHero app={hero.a} job={hero.job} km={distanceKm(home, hero.job.location)} /> : <EmptyHero />}
+        {hero ? <HeroSlot app={hero} live={live} /> : <EmptyHero />}
 
         <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
           <MiniStat tone={STAT_TONES[0]} icon={SentIcon} label="Enviadas" value={applications.length} index={1} />
@@ -113,13 +127,13 @@ export function ApplicationsList() {
               </span>
             </h2>
             <ul className="pt-3">
-              {rest.map(({ a, job }, i) => (
+              {rest.map((a, i) => (
                 <li
                   key={a.jobId}
                   className={cn("relative animate-rise", i > 0 && "-mt-3")}
                   style={{ "--i": Math.min(i + 3, 8), zIndex: i + 1 } as CSSVars}
                 >
-                  <ApplicationCard app={a} job={job} tone={tones[i]} km={distanceKm(home, job.location)} />
+                  <CardSlot app={a} tone={tones[i]} live={live} />
                 </li>
               ))}
             </ul>
@@ -139,15 +153,9 @@ export function ApplicationsList() {
             </div>
           ) : (
             <ul className="divide-y divide-border">
-              {saved.map((id) => {
-                const job = JOB_BY_ID[id];
-                if (!job) return null;
-                return (
-                  <li key={id}>
-                    <JobRow job={job} km={distanceKm(home, job.location)} radiusKm={radiusKm} />
-                  </li>
-                );
-              })}
+              {saved.map((id) => (
+                <SavedRow key={id} id={id} live={live} />
+              ))}
             </ul>
           )}
         </Panel>
@@ -181,6 +189,167 @@ export function ApplicationsList() {
   );
 }
 
+/* ------------------------------------------------------------------ catalog slots */
+
+/** Hero for the most advanced application; resolves its vacancy (live fetches it if it's far away). */
+function HeroSlot({ app, live }: { app: Application; live: boolean }) {
+  const home = useApp((s) => s.home);
+  const { status, job } = useJob(app.jobId);
+  if (job) return <ApplicationHero app={app} job={job} km={distanceKm(home, job.location)} live={live} />;
+  // "error" here is only a failed single-vacancy fetch (page-level errors are handled above): don't call it closed.
+  if (status !== "ready") return <HeroSkeleton />;
+  return <ClosedHero app={app} />;
+}
+
+function CardSlot({ app, tone, live }: { app: Application; tone: BlockTone; live: boolean }) {
+  const home = useApp((s) => s.home);
+  const { status, job } = useJob(app.jobId);
+  if (job) return <ApplicationCard app={app} job={job} tone={tone} km={distanceKm(home, job.location)} live={live} />;
+  if (status !== "ready") return <CardSkeleton tone={tone} />;
+  return <ClosedCard app={app} tone={tone} />;
+}
+
+function SavedRow({ id, live }: { id: string; live: boolean }) {
+  const home = useApp((s) => s.home);
+  const radiusKm = useApp((s) => s.radiusKm);
+  const toggleSaved = useApp((s) => s.toggleSaved);
+  const { status, job } = useJob(id);
+  if (job) {
+    return (
+      <li>
+        <JobRow job={job} km={distanceKm(home, job.location)} radiusKm={radiusKm} />
+      </li>
+    );
+  }
+  if (!live) return null;
+  if (status !== "ready") {
+    return (
+      <li>
+        <RowSkeletons count={1} />
+      </li>
+    );
+  }
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <span className="grid size-12 shrink-0 place-items-center rounded-2xl border-2 border-dashed border-ink/35 bg-hatch" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">Esta vacante ya cerró</span>
+        <span className="block text-sm text-muted-foreground">Ya no recibe postulaciones.</span>
+      </span>
+      <Button
+        variant="white"
+        size="lg"
+        className="shrink-0 border-2 border-ink px-4 text-ink"
+        onClick={async () => {
+          const r = await toggleSaved(id);
+          if (!r.error) toast("Quitada de tus guardadas");
+        }}
+      >
+        Quitar
+      </Button>
+    </li>
+  );
+}
+
+/** Live: the vacancy closed (or was paused) after the user applied. */
+function ClosedCard({ app, tone }: { app: Application; tone: BlockTone }) {
+  return (
+    <div className={cn("relative block rounded-panel p-5", BLOCK_CLASS[tone], HARD)}>
+      <div className="flex items-start gap-3">
+        <span aria-hidden className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl border-2 border-dashed border-ink/40 bg-white/50" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[1.1rem] leading-snug font-semibold">Vacante cerrada</p>
+          <p className="text-[0.93rem] text-muted-foreground">La empresa ya no recibe postulaciones para esta vacante.</p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Badge variant="status" size="md" className="border-transparent bg-white text-ink" style={{ "--dot": STATUS.cerrada.color } as CSSVars}>
+          {STATUS.cerrada.label}
+        </Badge>
+        <span className="text-[0.88rem] text-muted-foreground">
+          Te postulaste {app.minutesAgo === 0 ? "justo ahora" : formatMinutesAgo(app.minutesAgo).toLowerCase()}
+        </span>
+      </div>
+      <Button asChild variant="white" size="lg" className="mt-4 w-full border-2 border-ink text-ink">
+        <Link href="/vacantes">Ver más vacantes cerca</Link>
+      </Button>
+    </div>
+  );
+}
+
+function ClosedHero({ app }: { app: Application }) {
+  const copy = HERO.cerrada;
+  return (
+    <HeroCard eyebrow={copy.eyebrow} title="Esta vacante ya cerró" className="animate-rise border-[2.5px] border-ink">
+      <div className="mt-2 flex items-center gap-4">
+        <p className="min-w-0 flex-1 text-[1rem] leading-snug text-primary-foreground/85">
+          Te postulaste {app.minutesAgo === 0 ? "justo ahora" : formatMinutesAgo(app.minutesAgo).toLowerCase()}, pero la empresa ya no
+          recibe postulaciones. Hay más chamba a unos pasos de tu casa.
+        </p>
+        <Mascot mood="piensa" prop="casco" size={96} className="shrink-0" />
+      </div>
+      <Button variant="lime" size="xl" className="mt-5 w-full" asChild>
+        <Link href="/vacantes">Ver vacantes cerca</Link>
+      </Button>
+    </HeroCard>
+  );
+}
+
+function HeroSkeleton() {
+  return (
+    <HeroCard eyebrow="Tus postulaciones" title="Cargando tus postulaciones…" className="animate-rise">
+      <LoadingNote>Cargando tus postulaciones…</LoadingNote>
+      <InkSkeleton className="mt-4 h-16 w-full rounded-tile bg-white/15!" />
+      <InkSkeleton className="mt-4 h-4 w-2/3 bg-white/20!" />
+      <InkSkeleton className="mt-5 h-20 w-full bg-white/15!" />
+      <InkSkeleton className="mt-5 h-14 w-full rounded-full bg-white/20!" />
+    </HeroCard>
+  );
+}
+
+function CardSkeleton({ tone }: { tone: BlockTone }) {
+  return (
+    <div aria-hidden className={cn("relative h-[15.5rem] rounded-panel p-5", BLOCK_CLASS[tone], HARD)}>
+      <div className="flex items-start gap-3">
+        <InkSkeleton className="size-10 shrink-0 rounded-xl" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <InkSkeleton className="h-5 w-3/5" />
+          <InkSkeleton className="h-4 w-2/5" />
+        </div>
+      </div>
+      <InkSkeleton className="mt-4 h-7 w-28 rounded-full" />
+      <InkSkeleton className="mt-4 h-10 w-full" />
+      <InkSkeleton className="mt-3 h-12 w-full rounded-tile" />
+    </div>
+  );
+}
+
+/** Live, before the session and catalog land: same two-column layout, placeholders only. */
+function ApplicationsSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
+      <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-7">
+        <HeroSkeleton />
+        <div aria-hidden className="grid grid-cols-3 gap-2.5 sm:gap-3">
+          {STAT_TONES.map((t) => (
+            <div key={t} className={cn("h-[7.6rem] rounded-tile p-3.5 sm:p-4", BLOCK_CLASS[t], HARD_SM)}>
+              <InkSkeleton className="size-8 rounded-lg" />
+              <InkSkeleton className="mt-2 h-9 w-10" />
+              <InkSkeleton className="mt-1.5 h-3.5 w-14" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-5">
+        <Panel tone="lila" className={cn("overflow-hidden", HARD)}>
+          <PanelHeader icon={Bookmark01Icon} title="Guardadas" />
+          <RowSkeletons count={2} />
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ stat tile */
 
 function MiniStat({ tone, icon, label, value, index }: { tone: BlockTone; icon: typeof SentIcon; label: string; value: number; index: number }) {
@@ -202,12 +371,11 @@ function MiniStat({ tone, icon, label, value, index }: { tone: BlockTone; icon: 
 
 /* ------------------------------------------------------------------ hero */
 
-function ApplicationHero({ app, job, km }: { app: Application; job: Job; km: number }) {
+function ApplicationHero({ app, job, km, live }: { app: Application; job: Job; km: number; live: boolean }) {
   const fire = useConfetti();
   const [confirmed, setConfirmed] = useState(false);
   const copy = HERO[app.status];
   const stepIdx = STEPS.findIndex((s) => s.id === app.status);
-  const company = COMPANY_BY_ID[job.companyId];
 
   return (
     <HeroCard
@@ -216,7 +384,7 @@ function ApplicationHero({ app, job, km }: { app: Application; job: Job; km: num
       className={cn("animate-rise overflow-visible border-[2.5px] border-ink shadow-[6px_6px_0_0_var(--ink)]! dark:shadow-[6px_6px_0_0_rgb(255_255_255/0.16)]!")}
       sticker={
         <Sticker variant="lime" dot rotate={12}>
-          {copy.sticker}
+          {(live ? LIVE_STICKER[app.status] : undefined) ?? copy.sticker}
         </Sticker>
       }
     >
@@ -234,14 +402,14 @@ function ApplicationHero({ app, job, km }: { app: Application; job: Job; km: num
         <CategoryIcon category={job.category} size="md" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[1.08rem] leading-snug font-semibold">{job.title}</span>
-          <span className="block truncate text-[0.93rem] text-primary-foreground/80">
-            {company.name} · {formatKm(km)}
+          <span className="line-clamp-2 text-[0.93rem] leading-snug text-primary-foreground/80">
+            {companyLabel(job)} · {formatKm(km)}
           </span>
         </span>
         <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0 transition-transform group-hover:translate-x-1" strokeWidth={2} />
       </Link>
 
-      <p className="mt-3 text-[0.98rem] leading-snug text-primary-foreground/85">{STATUS[app.status].hint}</p>
+      <p className="mt-3 text-[0.98rem] leading-snug text-primary-foreground/85">{hintFor(app.status, live)}</p>
 
       <div className="relative mt-4 flex items-end gap-3">
         <div className="min-w-0 flex-1">
@@ -261,7 +429,7 @@ function ApplicationHero({ app, job, km }: { app: Application; job: Job; km: num
         <Mascot mood={copy.mood} prop={app.status === "contratada" ? "trofeo" : "casco"} size={96} className="-mr-2 -mb-1 shrink-0 sm:-mr-3" />
       </div>
 
-      {app.status === "entrevista" ? (
+      {app.status === "entrevista" && !live ? (
         <Button
           variant="lime"
           size="xl"
@@ -303,7 +471,7 @@ function EmptyHero() {
 
 /* ------------------------------------------------------------------ list card */
 
-function ApplicationCard({ app, job, tone, km }: { app: Application; job: Job; tone: BlockTone; km: number }) {
+function ApplicationCard({ app, job, tone, km, live }: { app: Application; job: Job; tone: BlockTone; km: number; live: boolean }) {
   const st = STATUS[app.status];
   const stepIdx = STEPS.findIndex((s) => s.id === app.status);
   return (
@@ -324,7 +492,7 @@ function ApplicationCard({ app, job, tone, km }: { app: Application; job: Job; t
         <div className="min-w-0 flex-1">
           <p className="truncate text-[1.1rem] leading-snug font-semibold">{job.title}</p>
           <p className="truncate text-[0.93rem] text-muted-foreground">
-            <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span> · {COMPANY_BY_ID[job.companyId].name}
+            <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span> · {companyLabel(job)}
           </p>
         </div>
       </div>
@@ -344,7 +512,7 @@ function ApplicationCard({ app, job, tone, km }: { app: Application; job: Job; t
       </div>
 
       <StageStepper stepIdx={stepIdx} className="mt-4" />
-      <p className="mt-3 rounded-tile border-2 border-dashed border-ink/25 bg-tile px-3.5 py-2.5 text-[0.9rem] leading-snug">{st.hint}</p>
+      <p className="mt-3 rounded-tile border-2 border-dashed border-ink/25 bg-tile px-3.5 py-2.5 text-[0.9rem] leading-snug">{hintFor(app.status, live)}</p>
     </Link>
   );
 }

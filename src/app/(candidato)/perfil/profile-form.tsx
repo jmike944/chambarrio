@@ -33,6 +33,7 @@ import { bandColor, bandFor, RADIUS_STOPS } from "@/lib/geo";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { HARD, HARD_SM, HazardTape, Rivets, STENCIL } from "../postulaciones/rugged";
+import { AccountBlock } from "./account-block";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
@@ -73,6 +74,17 @@ function Block({
   );
 }
 
+/** "+52 844…" / "8441234567" → the 10 local digits. */
+function digits10(raw: string) {
+  return raw.replace(/\D/g, "").replace(/^52(?=\d{10}$)/, "").slice(0, 10);
+}
+function formatPhone10(raw: string) {
+  const d = digits10(raw);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
+  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+}
+
 const FIELD = "h-12 border-2 border-ink/25 bg-white/80 text-base text-ink dark:bg-white/80 focus-visible:border-ink";
 
 export function ProfileForm() {
@@ -86,6 +98,9 @@ export function ProfileForm() {
   const setExperience = useApp((s) => s.setExperience);
   const radiusKm = useApp((s) => s.radiusKm);
   const setRadius = useApp((s) => s.setRadius);
+  const phone = useApp((s) => s.phone);
+  const setPhone = useApp((s) => s.setPhone);
+  const [phoneDraft, setPhoneDraft] = useState<string | null>(null);
   const [approx, setApprox] = useState(true);
   const [notify, setNotify] = useState(true);
   const [whatsapp, setWhatsapp] = useState(true);
@@ -235,7 +250,27 @@ export function ProfileForm() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone" className="text-[0.95rem] font-semibold">WhatsApp</Label>
-              <Input id="phone" type="tel" inputMode="tel" autoComplete="tel" defaultValue="844 123 4567" className={FIELD} />
+              <Input
+                id="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                placeholder="844 123 4567"
+                value={phoneDraft ?? formatPhone10(phone)}
+                onChange={(e) => setPhoneDraft(formatPhone10(e.target.value))}
+                onBlur={() => {
+                  if (phoneDraft === null) return;
+                  const d = digits10(phoneDraft);
+                  setPhoneDraft(null);
+                  if (d.length === 10 && d !== digits10(phone)) {
+                    void setPhone(d);
+                    toast.success("WhatsApp actualizado.");
+                  } else if (d.length !== 10 && d.length > 0) toast.error("Escribe tu WhatsApp de 10 dígitos.");
+                }}
+                aria-describedby="phone-hint"
+                className={FIELD}
+              />
+              <p id="phone-hint" className="text-sm text-muted-foreground">Solo lo ve la empresa cuando decide contactarte.</p>
             </div>
           </div>
         </Block>
@@ -407,6 +442,8 @@ export function ProfileForm() {
             ))}
           </div>
         </Block>
+
+        <AccountBlock index={6} />
 
         <Link
           href="/empresa"

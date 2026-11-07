@@ -1,10 +1,24 @@
+"use client";
+
 import Link from "next/link";
-import { COMPANY_BY_ID } from "@/lib/data/jobs";
+import { getCatalog } from "@/lib/data/catalog";
+import { companyLabelOf } from "@/lib/data/jobs";
 import type { Job } from "@/lib/data/types";
 import { formatPay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "./job-icons";
 import { DistanceRing } from "./primitives";
+
+/**
+ * "Empresa · Sucursal" for companies with more than one location, otherwise just the company name.
+ * Shared by the seeker screens (search, map, postulaciones) so the branch reads the same everywhere.
+ * Reads the active catalog (demo mock or live Supabase): call it from a component that already
+ * subscribes via useCatalog()/useJobsByDistance()/useJob() so it re-renders when data arrives.
+ */
+export function companyLabel(job: Pick<Job, "companyId" | "branchId">): string {
+  const c = getCatalog();
+  return companyLabelOf(c.companyById[job.companyId], c.branchById[job.branchId]);
+}
 
 /** One vacancy: cartoon category icon (animates on hover/focus) · title · pay · distance ring. */
 export function JobRow({
@@ -20,7 +34,6 @@ export function JobRow({
   meta?: string;
   className?: string;
 }) {
-  const company = COMPANY_BY_ID[job.companyId];
   return (
     <Link
       href={`/vacantes/${job.id}`}
@@ -42,7 +55,7 @@ export function JobRow({
         <span className="block truncate text-[0.93rem] text-muted-foreground">
           <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span>
           {" · "}
-          {meta ?? company.name}
+          {meta ?? companyLabel(job)}
         </span>
       </span>
       <DistanceRing km={km} radiusKm={radiusKm} />

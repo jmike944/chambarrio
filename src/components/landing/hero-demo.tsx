@@ -57,7 +57,7 @@ export function HeroDemo({ className }: { className?: string }) {
           </div>
           <div className="relative order-1 mx-auto w-full max-w-[15rem] sm:order-2">
             <div className="rounded-full border-[3px] border-ink bg-white p-2">
-              <Radar jobs={jobs} radiusKm={radiusKm} compact />
+              <Radar jobs={jobs} radiusKm={radiusKm} compact interactive={false} />
             </div>
           </div>
         </div>

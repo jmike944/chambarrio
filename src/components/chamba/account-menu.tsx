@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Building06Icon,
+  LockPasswordIcon,
   Logout01Icon,
+  UserAdd01Icon,
   Moon02Icon,
   Sun03Icon,
   UserIcon,
@@ -30,7 +32,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { setTheme, useTheme } from "@/components/theme";
-import { useApp } from "@/lib/store";
+import { isLiveAvailable, useApp } from "@/lib/store";
+import { signOutEverywhere, useLiveUser } from "@/lib/live/session";
+import { PasswordDialog } from "@/components/onboarding/password-dialog";
 
 function initials(text: string) {
   return text
@@ -46,7 +50,12 @@ function maskPhone(phone: string) {
   return d.length >= 4 ? `WhatsApp ···· ${d.slice(-4)}` : null;
 }
 
-/** Avatar button with the account actions: switch mode, theme, sign out. */
+/** Full reload so no signed-in (or demo) page stays mounted in the background. */
+function reloadTo(href: string) {
+  window.location.href = href;
+}
+
+/** Avatar button with the account actions: switch mode, theme, password, sign out / leave the demo. */
 export function AccountMenu() {
   const router = useRouter();
   const pathname = usePathname();
@@ -55,21 +64,33 @@ export function AccountMenu() {
   const business = useApp((s) => s.business);
   const phone = useApp((s) => s.phone);
   const setRole = useApp((s) => s.setRole);
-  const signOut = useApp((s) => s.signOut);
+  const appMode = useApp((s) => s.mode);
+  const role = useApp((s) => s.role);
+  const exitDemo = useApp((s) => s.exitDemo);
+  const { user, hasPassword } = useLiveUser();
   const { resolvedTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const live = appMode === "live";
+  const demo = appMode === "demo";
 
   // Pages stay mounted when you navigate away; don't come back to an open menu.
   useLayoutEffect(() => {
     return () => {
       setOpen(false);
       setConfirmOpen(false);
+      setPwOpen(false);
     };
   }, []);
 
-  const displayName = isEmpresa ? (business?.name ?? "Logística Zapalinamé") : name;
-  const masked = maskPhone(phone);
+  // The demo employer runs as the demo company; a live account without a business has none.
+  const displayName = isEmpresa
+    ? (business?.name ?? (live ? "Tu negocio" : "Logística Zapalinamé"))
+    : name || (live ? "Tu cuenta" : "");
+  // Live: how they sign in (email or phone). Demo: the WhatsApp on the fake profile.
+  const account = live ? (user?.email ?? (user?.phone ? maskPhone(user.phone)?.replace("WhatsApp", "Cel.") : null)) : maskPhone(phone);
 
   function switchMode() {
     const next = isEmpresa ? "candidato" : "empresa";
@@ -77,12 +98,17 @@ export function AccountMenu() {
     router.push(next === "empresa" ? "/empresa" : "/inicio");
   }
 
-  function confirmSignOut() {
-    signOut();
-    // Full reload (per Next's "Preserving UI state" guide for logout) so no
-    // signed-in page stays mounted in the background.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- intentional full reload on logout
-    window.location.href = "/entrar";
+  async function confirmSignOut() {
+    setLeaving(true);
+    // Flushes pending edits, wipes the store and signs out of Supabase on this device.
+    await signOutEverywhere();
+    // Full reload (per Next's "Preserving UI state" guide for logout).
+    reloadTo("/");
+  }
+
+  function leaveDemo(href: string) {
+    exitDemo();
+    reloadTo(href);
   }
 
   return (
@@ -105,9 +131,10 @@ export function AccountMenu() {
             <span className="min-w-0">
               <span className="block truncate font-display text-[1.05rem] font-bold text-foreground">{displayName}</span>
               <span className="mt-0.5 block text-sm font-normal text-muted-foreground">
+                {demo ? "Demo · " : ""}
                 {isEmpresa ? "Modo empresa" : "Modo candidato"}
-                {masked ? ` · ${masked}` : ""}
               </span>
+              {account ? <span className="mt-0.5 block truncate text-sm font-normal text-muted-foreground">{account}</span> : null}
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -131,11 +158,38 @@ export function AccountMenu() {
             <HugeiconsIcon icon={resolvedTheme === "dark" ? Sun03Icon : Moon02Icon} className="size-5" strokeWidth={1.6} />
             {resolvedTheme === "dark" ? "Usar tema claro" : "Usar tema oscuro"}
           </DropdownMenuItem>
+          {live ? (
+            <DropdownMenuItem className="h-auto min-h-12 py-2 text-[0.95rem]" onSelect={() => setPwOpen(true)}>
+              <HugeiconsIcon icon={LockPasswordIcon} className="size-5" strokeWidth={1.6} />
+              <span className="min-w-0">
+                <span className="block">{hasPassword ? "Cambiar contraseña" : "Crear contraseña"}</span>
+                <span className="block text-[0.8rem] text-muted-foreground">Entra más rápido la próxima vez</span>
+              </span>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" className="h-12 text-[0.95rem]" onSelect={() => setConfirmOpen(true)}>
-            <HugeiconsIcon icon={Logout01Icon} className="size-5" strokeWidth={1.6} />
-            Cerrar sesión
-          </DropdownMenuItem>
+          {demo ? (
+            <>
+              {isLiveAvailable ? (
+                <DropdownMenuItem
+                  className="h-12 text-[0.95rem]"
+                  onSelect={() => leaveDemo(role === "empresa" || isEmpresa ? "/bienvenida/empresa" : "/bienvenida")}
+                >
+                  <HugeiconsIcon icon={UserAdd01Icon} className="size-5" strokeWidth={1.6} />
+                  Crear mi cuenta real
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem variant="destructive" className="h-12 text-[0.95rem]" onSelect={() => leaveDemo("/")}>
+                <HugeiconsIcon icon={Logout01Icon} className="size-5" strokeWidth={1.6} />
+                Salir de la demo
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem variant="destructive" className="h-12 text-[0.95rem]" onSelect={() => setConfirmOpen(true)}>
+              <HugeiconsIcon icon={Logout01Icon} className="size-5" strokeWidth={1.6} />
+              Cerrar sesión
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -144,18 +198,26 @@ export function AccountMenu() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
             <AlertDialogDescription>
-              Para volver a entrar te mandaremos un código a tu WhatsApp. Tu perfil y tus postulaciones se quedan
-              guardados.
+              Para volver a entrar te mandamos un código{hasPassword ? " o usas tu contraseña" : ""}. Tu perfil y tus
+              postulaciones se quedan guardados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmSignOut}>
-              Cerrar sesión
+            <AlertDialogCancel disabled={leaving}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={leaving}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmSignOut();
+              }}
+            >
+              {leaving ? "Cerrando…" : "Cerrar sesión"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {live ? <PasswordDialog open={pwOpen} onOpenChange={setPwOpen} hasPassword={hasPassword} /> : null}
     </>
   );
 }

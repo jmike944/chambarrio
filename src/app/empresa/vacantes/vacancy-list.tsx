@@ -1,23 +1,28 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   ArrowRight01Icon,
   Briefcase01Icon,
+  Location01Icon,
   PlusSignIcon,
   SquareUnlock02Icon,
+  Store01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
-import { SectionLabel, BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
+import { Chip, SectionLabel, BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
 import { CountUp } from "@/components/chamba/motion";
 import { CategoryArt } from "@/components/chamba/job-icons";
 import { AccessTag, HARD, HARD_SM, OUTLINE, TAPPABLE, blockSequence } from "@/components/empresa/workwear";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import { applicantsFor } from "@/lib/data/applicants";
-import type { Job } from "@/lib/data/types";
 import { formatMinutesAgo, formatPay } from "@/lib/format";
-import { useIsUnlocked } from "@/lib/store";
+import { useMyCompany } from "@/lib/data/catalog";
+import { EmployerGate } from "@/components/empresa/employer-gate";
+import { useEmployerLocations, useIsLive, useIsUnlocked } from "@/lib/store";
+import { branchIdOf, coloniaText, useEmployerJobs } from "@/app/empresa/sucursales/branch-kit";
 import { cn } from "@/lib/utils";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
@@ -51,10 +56,26 @@ function StatBlock({
   );
 }
 
-export function VacancyList({ jobs }: { jobs: Job[] }) {
+export function VacancyList() {
+  return <EmployerGate shape="list">{() => <VacancyListBody />}</EmployerGate>;
+}
+
+function VacancyListBody() {
   const isUnlocked = useIsUnlocked();
+  const live = useIsLive();
+  const all = useEmployerJobs();
+  const closed = useMyCompany().jobs.filter((j) => j.status === "cerrada");
+  // Demo: the mock applicant list; live: the real count per vacancy.
+  const countFor = (j: (typeof all)[number]) => (live ? j.applicants : applicantsFor(j.id).length);
+  const locations = useEmployerLocations();
+  const [filter, setFilter] = useState<string>("all");
+  const multi = locations.length > 1;
+  // A removed branch (or a single-location business) falls back to "Todas".
+  const current = multi ? locations.find((l) => l.id === filter) : undefined;
+  const branchOfJob = (j: (typeof all)[number]) => locations.find((l) => l.id === branchIdOf(j, locations));
+  const jobs = current ? all.filter((j) => branchIdOf(j, locations) === current.id) : all;
   const tones = blockSequence(jobs.map((j) => j.category));
-  const totalApplicants = jobs.reduce((n, j) => n + applicantsFor(j.id).length, 0);
+  const totalApplicants = jobs.reduce((n, j) => n + countFor(j), 0);
   const unlockedCount = jobs.filter((j) => isUnlocked(j.id)).length;
 
   return (
@@ -65,13 +86,48 @@ export function VacancyList({ jobs }: { jobs: Job[] }) {
         <StatBlock icon={SquareUnlock02Icon} value={unlockedCount} label="Desbloqueadas" tone="durazno" index={2} />
       </div>
 
+      {multi ? (
+        <div role="group" aria-label="Filtrar por sucursal" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pt-1 pb-2 lg:mx-0 lg:flex-wrap lg:px-0">
+          <Chip active={!current} count={all.length} onClick={() => setFilter("all")}>
+            Todas
+          </Chip>
+          {locations.map((l) => (
+            <Chip
+              key={l.id}
+              active={current?.id === l.id}
+              icon={Store01Icon}
+              count={all.filter((j) => branchIdOf(j, locations) === l.id).length}
+              onClick={() => setFilter(l.id)}
+            >
+              {l.name}
+            </Chip>
+          ))}
+        </div>
+      ) : null}
+
       <section aria-labelledby="vacantes-activas">
-        <SectionLabel title={<span id="vacantes-activas">Activas</span>} count={jobs.length} className="mb-4" />
+        <SectionLabel
+          title={<span id="vacantes-activas">{current ? `Activas en ${current.name}` : "Activas"}</span>}
+          count={jobs.length}
+          className="mb-4"
+        />
+        {jobs.length === 0 && !current ? (
+          <p className="mb-2 rounded-panel border-2 border-dashed border-ink/40 bg-card px-5 py-4 text-[0.95rem] text-muted-foreground dark:border-white/30">
+            <strong className="block font-display text-[1.2rem] font-extrabold text-foreground">Publica tu primera vacante</strong>
+            Es gratis y le avisamos a la gente que vive cerca de tu sucursal.
+          </p>
+        ) : jobs.length === 0 ? (
+          <p className="mb-2 rounded-panel border-2 border-dashed border-ink/40 bg-card px-5 py-4 text-[0.95rem] text-muted-foreground dark:border-white/30">
+            Todavía no hay vacantes en <strong className="font-semibold text-foreground">{current?.name}</strong>. Publica la
+            primera y le avisamos a quien vive cerca.
+          </p>
+        ) : null}
         <ul className="grid">
           {jobs.map((j, i) => {
             const unlocked = isUnlocked(j.id);
-            const count = applicantsFor(j.id).length;
+            const count = countFor(j);
             const tone = tones[i];
+            const branch = branchOfJob(j);
             return (
               <li
                 key={j.id}
@@ -105,7 +161,18 @@ export function VacancyList({ jobs }: { jobs: Job[] }) {
                     <span className="font-semibold text-foreground tabular-nums">{formatPay(j)}</span> ·{" "}
                     {formatMinutesAgo(j.postedMinutesAgo)}
                   </span>
+                  {branch ? (
+                    <span className="mt-1 flex items-center gap-1 text-[0.9rem] font-semibold">
+                      <HugeiconsIcon icon={multi ? Store01Icon : Location01Icon} className="size-4 shrink-0" strokeWidth={2.2} />
+                      <span className="truncate">{multi ? branch.name : coloniaText(branch)}</span>
+                    </span>
+                  ) : null}
                   <span className="mt-4 flex flex-wrap items-center gap-2">
+                    {j.status === "pausada" ? (
+                      <span className="inline-flex h-8 items-center rounded-md border-2 border-ink bg-ink px-2.5 text-[0.72rem] font-extrabold tracking-[0.1em] text-white uppercase">
+                        En pausa
+                      </span>
+                    ) : null}
                     <AccessTag unlocked={unlocked} />
                     <span className="inline-flex h-8 items-center gap-1 rounded-md px-1 text-[0.9rem] font-bold">
                       Ver postulantes
@@ -157,6 +224,30 @@ export function VacancyList({ jobs }: { jobs: Job[] }) {
           </li>
         </ul>
       </section>
+
+      {closed.length ? (
+        <section aria-labelledby="vacantes-cerradas">
+          <SectionLabel title={<span id="vacantes-cerradas">Cerradas</span>} count={closed.length} className="mb-3" />
+          <ul className="grid gap-2">
+            {closed.map((j) => (
+              <li key={j.id}>
+                <Link
+                  href={`/empresa/vacantes/${j.id}`}
+                  className="press flex min-h-14 items-center gap-3 rounded-tile border-2 border-dashed border-ink/50 bg-card px-4 py-2.5 outline-none hover:bg-tile focus-visible:ring-4 focus-visible:ring-ring/60 dark:border-white/30"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-[1.05rem] font-extrabold">{j.title}</span>
+                    <span className="block text-[0.85rem] text-muted-foreground tabular-nums">
+                      {j.applicants} postulante{j.applicants === 1 ? "" : "s"} · {formatPay(j)}
+                    </span>
+                  </span>
+                  <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0" strokeWidth={2} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

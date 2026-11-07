@@ -1,28 +1,61 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { JOBS } from "@/lib/data/jobs";
-import type { Application, ApplicationStatus, CategoryId, CompanySize, Experience, Job } from "@/lib/data/types";
-import { bearing, distanceKm, type LatLng, type RadiusKm } from "@/lib/geo";
+import { toast } from "sonner";
+import { COMPANY_BY_ID, DEMO_COMPANY_ID } from "@/lib/data/jobs";
+import type { Application, ApplicationStatus, Branch, CategoryId, CompanySize, Experience } from "@/lib/data/types";
+import { SALTILLO_CENTER, type LatLng, type RadiusKm } from "@/lib/geo";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
+import * as api from "@/lib/live/api";
+import type { LiveCompany, LiveSessionData, WriteResult } from "@/lib/live/api";
+import { emitLive } from "@/lib/live/events";
+
+/*
+ * The signed-in user, in one of two modes:
+ *  - "demo": the curated mock showcase (enterDemo). Everything stays local; never calls Supabase.
+ *  - "live": a real Supabase account. Actions update local state optimistically, write through to
+ *    Supabase and roll back + toast.error if the server says no.
+ *  - null: a visitor (landing, onboarding before the account exists). Actions are local drafts.
+ * Vacancies/companies/branches are NOT here: they live in the catalog (@/lib/data/catalog).
+ */
+
+export { DEMO_COMPANY_ID };
+// Rebased on the catalog (demo mock or live Supabase); same return shape as before.
+export { useJobsByDistance, type JobWithDistance } from "@/lib/data/catalog";
+export type { WriteResult } from "@/lib/live/api";
 
 export type Role = "candidato" | "empresa";
 export type PlanId = "por-vacante" | "pyme" | "industrial";
+export type AppMode = "demo" | "live";
+
+/** Live mode exists only when Supabase is configured; otherwise the app is demo-only. */
+export const isLiveAvailable = isSupabaseConfigured;
 
 export type Business = {
+  /** Live: the company's server id. Absent in demo and for a live draft that isn't saved yet. */
+  id?: string;
   name: string;
   kind: string;
   size: CompanySize;
-  colonia: string;
-  location: LatLng;
+  /** Sucursales / plantas. At least one; the first is the main site. Live: server ids. */
+  locations: Branch[];
   phone: string;
+  /** Live: set by the server (payments backend), never by the client. */
   plan: PlanId;
+  verified?: boolean;
+  about?: string;
+  employees?: string;
 };
 
-type State = {
-  /** Demo session flag. Starts true so the seeded demo opens straight into the app. */
+type UserData = {
+  mode: AppMode | null;
+  /** Live: the Supabase user id this data belongs to. */
+  userId: string | null;
+  email: string;
   signedIn: boolean;
+  /** Live: profile.onboarded. A live user with onboarded=false still has to finish onboarding. */
   onboarded: boolean;
   role: Role;
   phone: string;
@@ -32,90 +65,652 @@ type State = {
   name: string;
   colonia: string;
   home: LatLng;
+  /** false until the user picks a colonia / GPS (home is then Saltillo centro). */
+  hasHome: boolean;
   locationSource: "colonia" | "gps";
   approximate: boolean;
   radiusKm: RadiusKm;
   saved: string[];
   applications: Application[];
-  /** Vacancies whose applicants the business paid to see (per-vacancy plan only). */
+  /** Vacancies whose applicants the business unlocked (demo: paid in the fake flow; live: job_unlocks). */
   unlockedJobIds: string[];
-  setRadius: (r: RadiusKm) => void;
-  setHome: (home: LatLng, colonia: string, source: "colonia" | "gps") => void;
-  toggleSaved: (jobId: string) => void;
-  apply: (jobId: string) => void;
-  setName: (name: string) => void;
-  setPhone: (phone: string) => void;
-  setRole: (role: Role) => void;
-  setInterests: (interests: CategoryId[]) => void;
-  setExperience: (experience: Experience) => void;
-  setBusiness: (business: Business | null) => void;
-  completeOnboarding: (role: Role) => void;
-  signIn: (role: Role) => void;
-  /** Ends the session but keeps the profile, standing in for data a server would hold. */
-  signOut: () => void;
-  unlockJob: (jobId: string) => void;
 };
+
+type Actions = {
+  /** Replaces the user with the curated demo (Mariana in Lourdes / Logística Zapalinamé) and signs in. */
+  enterDemo: (role: Role) => void;
+  /** Wipes everything back to a signed-out visitor (mode null). */
+  exitDemo: () => void;
+  // Write-through actions: local immediately; in live mode also saved to Supabase. On a server
+  // error they roll back and toast.error themselves; await the result only to know when it landed.
+  setRadius: (r: RadiusKm) => Promise<WriteResult>;
+  setHome: (home: LatLng, colonia: string, source: "colonia" | "gps") => Promise<WriteResult>;
+  toggleSaved: (jobId: string) => Promise<WriteResult>;
+  apply: (jobId: string) => Promise<WriteResult>;
+  /** The candidate withdraws an application (status → cerrada). */
+  withdraw: (jobId: string) => Promise<WriteResult>;
+  setName: (name: string) => Promise<WriteResult>;
+  setPhone: (phone: string) => Promise<WriteResult>;
+  setRole: (role: Role) => Promise<WriteResult>;
+  setInterests: (interests: CategoryId[]) => Promise<WriteResult>;
+  setExperience: (experience: Experience) => Promise<WriteResult>;
+  /** Live: creates the company + branches the first time, afterwards updates name/kind/size/phone only. */
+  setBusiness: (business: Business | null) => Promise<WriteResult>;
+  completeOnboarding: (role: Role) => Promise<WriteResult>;
+  /** Legacy fake sign-in: enters the demo (mode null) or resumes it (signed-out demo). */
+  signIn: (role: Role) => void;
+  /** Demo: ends the session but keeps the demo profile. Live: signs out of Supabase and wipes. */
+  signOut: () => void;
+  /** Demo only (fake payment). A no-op in live mode: payments aren't available yet. */
+  unlockJob: (jobId: string) => void;
+  /** Branch management. Demo: the demo company is adopted first. Live: returns a temporary id at once. */
+  addLocation: (branch: Omit<Branch, "id">) => string;
+  /** Like addLocation but resolves with the server id (live) once saved. */
+  addLocationAsync: (branch: Omit<Branch, "id">) => Promise<WriteResult & { id?: string }>;
+  updateLocation: (id: string, patch: Partial<Omit<Branch, "id">>) => Promise<WriteResult>;
+  /** Ignored for the last remaining location (live: returns an error). */
+  removeLocation: (id: string) => Promise<WriteResult>;
+};
+
+type State = UserData & Actions;
+
+/** A signed-out visitor. Home defaults to Saltillo centro until they pick one. */
+const BLANK: UserData = {
+  mode: null,
+  userId: null,
+  email: "",
+  signedIn: false,
+  onboarded: false,
+  role: "candidato",
+  phone: "",
+  interests: [],
+  experience: "Sin experiencia",
+  business: null,
+  name: "",
+  colonia: "Centro",
+  home: SALTILLO_CENTER,
+  hasHome: false,
+  locationSource: "colonia",
+  approximate: true,
+  radiusKm: 5,
+  saved: [],
+  applications: [],
+  unlockedJobIds: [],
+};
+
+/** The curated demo user (what the app shipped with as its defaults). */
+function demoSeed(role: Role): UserData {
+  return {
+    ...BLANK,
+    mode: "demo",
+    signedIn: true,
+    onboarded: true,
+    role,
+    interests: ["caja", "almacen", "seguridad"],
+    experience: "6 meses",
+    // The demo employer runs as DEMO_COMPANY_ID (see useEmployerLocations); no business of its own.
+    business: null,
+    name: "Mariana",
+    colonia: "Lourdes",
+    home: { lat: 25.4322, lng: -100.9935 },
+    hasHome: true,
+    saved: ["soldador-arteaga"],
+    // One vacancy already unlocked so both states are visible side by side.
+    unlockedJobIds: ["montacarguista-zapaliname"],
+    applications: [
+      { jobId: "auxiliar-farmacia", status: "entrevista", minutesAgo: 1500 },
+      { jobId: "guardia-centinela", status: "vista", minutesAgo: 300 },
+      { jobId: "cajera-mirasierra", status: "enviada", minutesAgo: 45 },
+    ],
+  };
+}
+
+const DONE: Promise<WriteResult> = Promise.resolve({});
 
 export const useApp = create<State>()(
   persist(
-    (set) => ({
-      signedIn: true,
-      onboarded: false,
-      role: "candidato",
-      phone: "",
-      interests: ["caja", "almacen", "seguridad"],
-      experience: "6 meses",
-      business: null,
-      name: "Mariana",
-      colonia: "Lourdes",
-      home: { lat: 25.4322, lng: -100.9935 },
-      locationSource: "colonia",
-      approximate: true,
-      radiusKm: 5,
-      saved: ["soldador-arteaga"],
-      // Demo: one vacancy already unlocked so both states are visible side by side.
-      unlockedJobIds: ["montacarguista-zapaliname"],
-      applications: [
-        { jobId: "auxiliar-farmacia", status: "entrevista", minutesAgo: 1500 },
-        { jobId: "guardia-centinela", status: "vista", minutesAgo: 300 },
-        { jobId: "cajera-mirasierra", status: "enviada", minutesAgo: 45 },
-      ],
-      setRadius: (radiusKm) => set({ radiusKm }),
-      setHome: (home, colonia, locationSource) => set({ home, colonia, locationSource }),
-      toggleSaved: (id) =>
-        set((s) => ({ saved: s.saved.includes(id) ? s.saved.filter((x) => x !== id) : [...s.saved, id] })),
-      apply: (jobId) =>
-        set((s) =>
-          s.applications.some((a) => a.jobId === jobId)
-            ? s
-            : { applications: [{ jobId, status: "enviada" as ApplicationStatus, minutesAgo: 0 }, ...s.applications] },
-        ),
-      setName: (name) => set({ name }),
-      setPhone: (phone) => set({ phone }),
-      setRole: (role) => set({ role }),
-      setInterests: (interests) => set({ interests }),
-      setExperience: (experience) => set({ experience }),
-      setBusiness: (business) => set({ business }),
-      completeOnboarding: (role) => set({ onboarded: true, role, signedIn: true }),
-      signIn: (role) => set({ role, signedIn: true }),
-      signOut: () => set({ signedIn: false }),
-      unlockJob: (jobId) =>
-        set((s) => (s.unlockedJobIds.includes(jobId) ? s : { unlockedJobIds: [...s.unlockedJobIds, jobId] })),
+    (set, get) => ({
+      ...BLANK,
+
+      enterDemo: (role) => {
+        const wasLive = get().mode === "live";
+        resetLiveWork();
+        set(demoSeed(role));
+        emitLive("reset");
+        // Leaving a live account for the demo: drop the session so the two never mix.
+        if (wasLive) void api.signOutLocal();
+      },
+      exitDemo: () => wipe(),
+
+      setRadius: (radiusKm) => writeProfile("radiusKm", radiusKm),
+      setName: (name) => writeProfile("name", name),
+      setPhone: (phone) => writeProfile("phone", phone),
+      setRole: (role) => writeProfile("role", role),
+      setInterests: (interests) => writeProfile("interests", interests),
+      setExperience: (experience) => writeProfile("experience", experience),
+
+      setHome: (home, colonia, locationSource) => {
+        const prev = pick(get(), ["home", "colonia", "locationSource", "hasHome"]);
+        set({ home, colonia, locationSource, hasHome: true });
+        if (!isLive()) return DONE;
+        return sync(
+          () => api.setHome(home, colonia, locationSource),
+          () => {
+            if (get().home === home) set(prev);
+          },
+        );
+      },
+
+      toggleSaved: (id) => {
+        const on = !get().saved.includes(id);
+        set((s) => ({ saved: on ? [...s.saved, id] : s.saved.filter((x) => x !== id) }));
+        if (!isLive()) return DONE;
+        return sync(
+          () => api.toggleSaved(id, on),
+          () =>
+            set((s) => {
+              const has = s.saved.includes(id);
+              if (on && has) return { saved: s.saved.filter((x) => x !== id) };
+              if (!on && !has) return { saved: [...s.saved, id] };
+              return {};
+            }),
+        );
+      },
+
+      apply: (jobId) => {
+        if (get().applications.some((a) => a.jobId === jobId)) return DONE;
+        set((s) => ({ applications: [{ jobId, status: "enviada" as ApplicationStatus, minutesAgo: 0 }, ...s.applications] }));
+        if (!isLive()) return DONE;
+        return sync(
+          () => api.apply(jobId),
+          () => set((s) => ({ applications: s.applications.filter((a) => a.jobId !== jobId) })),
+        );
+      },
+
+      withdraw: (jobId) => {
+        const prev = get().applications.find((a) => a.jobId === jobId);
+        if (!prev || prev.status === "cerrada") return DONE;
+        const patchStatus = (status: ApplicationStatus) =>
+          set((s) => ({ applications: s.applications.map((a) => (a.jobId === jobId ? { ...a, status } : a)) }));
+        patchStatus("cerrada");
+        if (!isLive()) return DONE;
+        return sync(
+          () => api.withdraw(jobId),
+          () => patchStatus(prev.status),
+        );
+      },
+
+      setBusiness: (business) => {
+        const prev = get().business;
+        if (!isLive() || !business) {
+          set({ business });
+          return DONE;
+        }
+        if (prev?.id) {
+          const companyId = prev.id;
+          const next: Business = { ...prev, name: business.name, kind: business.kind, size: business.size, phone: business.phone };
+          set({ business: next });
+          return sync(
+            () => api.updateCompany(companyId, { name: next.name, kind: next.kind, size: next.size, phone: next.phone }),
+            () => {
+              if (get().business === next) set({ business: prev });
+            },
+          );
+        }
+        // First time: keep the draft locally (without id) and create the company + branches.
+        set({ business: { ...business, id: undefined, plan: "por-vacante" } });
+        return ensureBusiness();
+      },
+
+      completeOnboarding: (role) => {
+        const s = get();
+        if (s.mode === "demo" || (s.mode === null && !isLiveAvailable)) {
+          // Demo-only build: onboarding finishes into the demo with the visitor's own answers.
+          set({ onboarded: true, role, signedIn: true, mode: "demo" });
+          return DONE;
+        }
+        if (s.mode === null) {
+          // Live build, no account yet: keep it as a draft. It's pushed when they sign in.
+          set({ onboarded: true, role });
+          return DONE;
+        }
+        set({ onboarded: true, role, signedIn: true });
+        return pushOnboarding(role);
+      },
+
+      signIn: (role) => {
+        const s = get();
+        if (s.mode === null) get().enterDemo(role);
+        else if (s.mode === "demo") set({ role, signedIn: true });
+        // Live sessions come from Supabase Auth; here we only switch the role.
+        else void get().setRole(role);
+      },
+
+      signOut: () => {
+        if (get().mode === "live") {
+          wipe();
+          void api.signOutLocal();
+        } else set({ signedIn: false });
+      },
+
+      unlockJob: (jobId) => {
+        if (isLive()) return; // payments: Próximamente
+        set((s) => (s.unlockedJobIds.includes(jobId) ? s : { unlockedJobIds: [...s.unlockedJobIds, jobId] }));
+      },
+
+      addLocation: (branch) => {
+        if (!isLive()) {
+          const id = `suc-${Date.now().toString(36)}`;
+          set((s) => {
+            const b = s.business ?? demoBusiness();
+            return { business: { ...b, locations: [...b.locations, { ...branch, id }] } };
+          });
+          return id;
+        }
+        const companyId = get().business?.id;
+        if (!companyId) {
+          toast.error(api.MSG.noCompany);
+          return "";
+        }
+        const tmp = `tmp-${Date.now().toString(36)}`;
+        void createLocation(companyId, tmp, branch);
+        return tmp;
+      },
+
+      addLocationAsync: async (branch) => {
+        if (!isLive()) return { id: get().addLocation(branch) };
+        const companyId = get().business?.id;
+        if (!companyId) {
+          toast.error(api.MSG.noCompany);
+          return { error: api.MSG.noCompany };
+        }
+        return createLocation(companyId, `tmp-${Date.now().toString(36)}`, branch);
+      },
+
+      updateLocation: async (id, patch) => {
+        if (!isLive()) {
+          set((s) => {
+            const b = s.business ?? demoBusiness();
+            return { business: { ...b, locations: b.locations.map((l) => (l.id === id ? { ...l, ...patch } : l)) } };
+          });
+          return {};
+        }
+        const before = get().business?.locations.find((l) => l.id === id);
+        if (!before) return {};
+        patchLocation(id, patch);
+        const serverId = await resolveBranchId(id);
+        if (!serverId) return { error: api.MSG.save };
+        return sync(
+          async () => {
+            const r = await api.updateBranch(serverId, patch);
+            if (!r.error) emitLive("catalog", "myCompany");
+            return r;
+          },
+          () => patchLocation(serverId, { name: before.name, colonia: before.colonia, location: before.location }),
+        );
+      },
+
+      removeLocation: async (id) => {
+        if (!isLive()) {
+          set((s) => {
+            const b = s.business ?? demoBusiness();
+            if (b.locations.length <= 1) return s;
+            return { business: { ...b, locations: b.locations.filter((l) => l.id !== id) } };
+          });
+          return {};
+        }
+        const b = get().business;
+        const index = b?.locations.findIndex((l) => l.id === id) ?? -1;
+        if (!b?.id || index < 0) return {};
+        if (b.locations.length <= 1) {
+          toast.error(api.MSG.lastBranch);
+          return { error: api.MSG.lastBranch };
+        }
+        const removed = b.locations[index];
+        setLocations((ls) => ls.filter((l) => l.id !== id));
+        const serverId = await resolveBranchId(id);
+        if (!serverId) return { error: api.MSG.save };
+        return sync(
+          async () => {
+            const r = await api.removeBranch(serverId);
+            if (!r.error) emitLive("catalog", "myCompany");
+            return r;
+          },
+          () =>
+            setLocations((ls) =>
+              ls.some((l) => l.id === serverId) ? ls : [...ls.slice(0, index), { ...removed, id: serverId }, ...ls.slice(index)],
+            ),
+        );
+      },
     }),
     {
       name: "chamba-a-lado",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      version: 1,
-      // v0 → v1: the per-hire plan was replaced by per-vacancy-per-month billing.
+      version: 3,
       migrate: (persisted, version) => {
-        const s = persisted as { business?: { plan?: string } | null };
+        const s = persisted as Record<string, unknown> & { business?: (Record<string, unknown> & { plan?: string }) | null };
+        // v0 → v1: the per-hire plan was replaced by per-vacancy-per-month billing.
         if (version < 1 && s.business?.plan === "por-contratacion") s.business = { ...s.business, plan: "por-vacante" };
+        // v1 → v2: a business had one colonia/location; now it has a list of locations.
+        if (version < 2 && s.business && !Array.isArray(s.business.locations)) {
+          const { colonia, location, ...rest } = s.business as { colonia?: string; location?: LatLng };
+          s.business = {
+            ...rest,
+            locations: colonia && location ? [{ id: "suc-principal", name: "Principal", colonia, location }] : [],
+          };
+        }
+        // v2 → v3: modes. Everything persisted before is the demo (keep it, keep them signed in).
+        if (version < 3) Object.assign(s, { mode: "demo", userId: null, email: "", hasHome: true });
         return s as unknown as State;
       },
     },
   ),
 );
+
+// ------------------------------------------------------------------ write-through machinery
+
+const get = () => useApp.getState();
+const set = (patch: Partial<UserData> | ((s: State) => Partial<UserData>)) => useApp.setState(patch);
+const isLive = () => get().mode === "live";
+
+function pick<K extends keyof UserData>(s: UserData, keys: K[]): Pick<UserData, K> {
+  return Object.fromEntries(keys.map((k) => [k, s[k]])) as Pick<UserData, K>;
+}
+
+/** Bumped whenever the user changes, so late server replies can't touch the next user's state. */
+let generation = 0;
+
+/** Runs a live write; on error (if still the same user) undoes the optimistic change and toasts. */
+async function sync(run: () => Promise<WriteResult>, undo: () => void): Promise<WriteResult> {
+  const gen = generation;
+  const r = await run();
+  if (r.error && gen === generation && isLive()) {
+    undo();
+    toast.error(r.error);
+  }
+  return r;
+}
+
+// Profile fields are debounced and batched (the name field writes on every keystroke).
+type ProfileKey = "name" | "phone" | "role" | "interests" | "experience" | "radiusKm";
+type ProfileValues = Pick<UserData, ProfileKey>;
+const PROFILE_KEYS: ProfileKey[] = ["name", "phone", "role", "interests", "experience", "radiusKm"];
+const PROFILE_DEBOUNCE_MS = 600;
+
+/** Last values the server confirmed (rollback target). */
+let confirmed: Partial<ProfileValues> = {};
+let pendingProfile: Partial<ProfileValues> = {};
+let profileWaiters: ((r: WriteResult) => void)[] = [];
+let profileTimer: ReturnType<typeof setTimeout> | null = null;
+let profileFlight: Promise<WriteResult> | null = null;
+
+const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+function toProfilePatch(v: Partial<ProfileValues>): api.ProfilePatch {
+  const p: api.ProfilePatch = {};
+  if (v.name !== undefined) p.name = v.name.trim();
+  if (v.phone !== undefined) p.phone = v.phone || null;
+  if (v.role !== undefined) p.role = v.role;
+  if (v.interests !== undefined) p.interests = v.interests;
+  if (v.experience !== undefined) p.experience = v.experience;
+  if (v.radiusKm !== undefined) p.radius_km = v.radiusKm;
+  return p;
+}
+
+function writeProfile<K extends ProfileKey>(key: K, value: ProfileValues[K]): Promise<WriteResult> {
+  const live = isLive();
+  if (live && !(key in confirmed)) confirmed = { ...confirmed, [key]: get()[key] };
+  set({ [key]: value } as Partial<UserData>);
+  if (!live) return DONE;
+  pendingProfile = { ...pendingProfile, [key]: value };
+  if (profileTimer) clearTimeout(profileTimer);
+  profileTimer = setTimeout(() => void flushProfileWrites(), PROFILE_DEBOUNCE_MS);
+  return new Promise((resolve) => profileWaiters.push(resolve));
+}
+
+/** Sends any debounced profile edits now (also called when the page is hidden). */
+export async function flushProfileWrites(): Promise<WriteResult> {
+  if (profileTimer) {
+    clearTimeout(profileTimer);
+    profileTimer = null;
+  }
+  if (profileFlight) await profileFlight;
+  const batch = pendingProfile;
+  const waiters = profileWaiters;
+  pendingProfile = {};
+  profileWaiters = [];
+  if (!Object.keys(batch).length || !isLive()) {
+    for (const w of waiters) w({});
+    return {};
+  }
+  const gen = generation;
+  const flight = (async (): Promise<WriteResult> => {
+    const r = await api.saveProfile(toProfilePatch(batch));
+    if (gen !== generation) return r;
+    if (r.error) {
+      const s = get() as unknown as Record<string, unknown>;
+      const undo: Record<string, unknown> = {};
+      for (const k of Object.keys(batch) as ProfileKey[]) {
+        // Only undo fields the user hasn't changed again since.
+        if (k in confirmed && same(s[k], batch[k]) && !(k in pendingProfile)) undo[k] = confirmed[k];
+      }
+      if (isLive()) {
+        set(undo as Partial<UserData>);
+        toast.error(r.error);
+      }
+    } else confirmed = { ...confirmed, ...batch };
+    return r;
+  })();
+  profileFlight = flight;
+  const r = await flight;
+  if (profileFlight === flight) profileFlight = null;
+  for (const w of waiters) w(r);
+  return r;
+}
+
+let creatingBusiness: Promise<WriteResult> | null = null;
+let onboardingFlight: Promise<WriteResult> | null = null;
+
+function toBusiness(c: LiveCompany): Business {
+  return {
+    id: c.id,
+    name: c.name,
+    kind: c.kind,
+    size: c.size,
+    locations: c.branches,
+    phone: c.phone ?? "",
+    plan: c.plan,
+    verified: c.verified,
+    about: c.about,
+    employees: c.employees,
+  };
+}
+
+/** Creates the live company from the local draft once (concurrent callers share the request). */
+function ensureBusiness(): Promise<WriteResult> {
+  if (creatingBusiness) return creatingBusiness;
+  const draft = get().business;
+  if (!draft || draft.id || !isLive()) return DONE;
+  const gen = generation;
+  creatingBusiness = (async (): Promise<WriteResult> => {
+    const r = await api.createBusiness({
+      name: draft.name,
+      kind: draft.kind,
+      size: draft.size,
+      phone: draft.phone,
+      about: draft.about,
+      employees: draft.employees,
+      locations: draft.locations.map(({ name, colonia, location }) => ({ name, colonia, location })),
+    });
+    if (gen !== generation) return r.error !== undefined ? { error: r.error } : {};
+    if (r.error !== undefined) {
+      // Keep the draft (no id) so what they typed isn't lost; setBusiness/completeOnboarding retries.
+      toast.error(r.error);
+      return { error: r.error };
+    }
+    set({ business: toBusiness(r.data) });
+    emitLive("catalog", "myCompany");
+    return {};
+  })().finally(() => {
+    creatingBusiness = null;
+  });
+  return creatingBusiness;
+}
+
+/** Pushes the whole onboarding (home, business, profile) and marks the profile onboarded. */
+function pushOnboarding(role: Role): Promise<WriteResult> {
+  if (onboardingFlight) return onboardingFlight;
+  const gen = generation;
+  const fail = (error: string): WriteResult => {
+    if (gen === generation) toast.error(error);
+    return { error };
+  };
+  onboardingFlight = (async (): Promise<WriteResult> => {
+    await flushProfileWrites();
+    let s = get();
+    if (s.hasHome) {
+      const h = await api.setHome(s.home, s.colonia, s.locationSource);
+      if (h.error) return fail(h.error);
+    }
+    if (role === "empresa" && s.business && !s.business.id) {
+      const b = await ensureBusiness(); // toasts its own error
+      if (b.error) return b;
+    }
+    s = get();
+    const values: ProfileValues = pick(s, PROFILE_KEYS);
+    const p = await api.saveProfile({ ...toProfilePatch({ ...values, role }), onboarded: true });
+    if (p.error) return fail(p.error);
+    if (gen === generation) confirmed = { ...values, role };
+    return {};
+  })().finally(() => {
+    onboardingFlight = null;
+  });
+  return onboardingFlight;
+}
+
+// Branch ids: live branches get a temporary id until add_branch answers.
+const pendingBranchIds = new Map<string, Promise<string | null>>();
+
+function setLocations(fn: (ls: Branch[]) => Branch[]) {
+  set((s) => (s.business ? { business: { ...s.business, locations: fn(s.business.locations) } } : {}));
+}
+
+function patchLocation(id: string, patch: Partial<Omit<Branch, "id">>) {
+  setLocations((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+}
+
+async function resolveBranchId(id: string): Promise<string | null> {
+  return pendingBranchIds.get(id) ?? id;
+}
+
+async function createLocation(companyId: string, tmp: string, branch: Omit<Branch, "id">): Promise<WriteResult & { id?: string }> {
+  const gen = generation;
+  setLocations((ls) => [...ls, { ...branch, id: tmp }]);
+  const request = api.addBranch(companyId, branch);
+  pendingBranchIds.set(
+    tmp,
+    request.then((r) => r.data ?? null),
+  );
+  const r = await request;
+  pendingBranchIds.delete(tmp);
+  if (gen !== generation) return r.error !== undefined ? { error: r.error } : { id: r.data };
+  if (r.error !== undefined) {
+    setLocations((ls) => ls.filter((l) => l.id !== tmp));
+    if (isLive()) toast.error(r.error);
+    return { error: r.error };
+  }
+  const id = r.data;
+  // Keep any edits made while saving; just swap in the real id.
+  setLocations((ls) => ls.map((l) => (l.id === tmp ? { ...l, id } : l)));
+  emitLive("catalog", "myCompany");
+  return { id };
+}
+
+/** Drops queued writes and in-flight bookkeeping (the user is changing). */
+function resetLiveWork() {
+  generation++;
+  if (profileTimer) clearTimeout(profileTimer);
+  profileTimer = null;
+  for (const w of profileWaiters) w({});
+  profileWaiters = [];
+  pendingProfile = {};
+  confirmed = {};
+  pendingBranchIds.clear();
+}
+
+/** Back to a signed-out visitor, with no trace of the previous user (demo or live). */
+function wipe() {
+  resetLiveWork();
+  set({ ...BLANK });
+  emitLive("reset");
+}
+
+// ------------------------------------------------------------------ live session plumbing
+// Used by @/lib/live (LiveSession / loadSession). Screens don't call these.
+
+/** Adopts a Supabase user. Returns "same" if this user's data is already loaded locally. */
+export function adoptLiveUser(user: { id: string; email?: string | null }): "same" | "new" {
+  const s = get();
+  if (s.mode === "live" && s.userId === user.id) {
+    if (!s.signedIn || (user.email && user.email !== s.email)) set({ signedIn: true, email: user.email ?? s.email });
+    return "same";
+  }
+  // Another account (or the demo) was here: start clean. A visitor's onboarding draft is kept.
+  if (s.mode !== null) wipe();
+  set({ mode: "live", signedIn: true, userId: user.id, email: user.email ?? "" });
+  return "new";
+}
+
+/** Signs out of live state locally (the Supabase session is handled by the caller). */
+export function wipeLiveState() {
+  wipe();
+}
+
+/** Resolves once queued and in-flight writes (profile, business, onboarding) have settled. */
+export async function waitForPendingWrites(): Promise<void> {
+  await flushProfileWrites();
+  await Promise.allSettled([creatingBusiness, onboardingFlight].filter(Boolean));
+}
+
+/** Applies what the server holds for the signed-in user. Pending local edits win over it. */
+export function applyLiveSnapshot(d: LiveSessionData) {
+  const s = get();
+  if (s.mode !== "live") return;
+  const p = d.profile;
+  const pending = new Set(Object.keys(pendingProfile));
+  const server: ProfileValues = {
+    name: p.name,
+    phone: p.phone ?? "",
+    role: p.role,
+    interests: p.interests,
+    experience: p.experience,
+    radiusKm: p.radiusKm,
+  };
+  const patch: Partial<UserData> = {
+    signedIn: true,
+    email: p.email || s.email,
+    applications: d.applications,
+    saved: d.saved,
+    unlockedJobIds: d.unlockedJobIds,
+  };
+  const home = p.home ? { home: p.home, colonia: p.colonia ?? "", locationSource: p.locationSource, hasHome: true } : null;
+  if (p.onboarded) {
+    patch.onboarded = true;
+    for (const k of PROFILE_KEYS) if (!pending.has(k)) Object.assign(patch, { [k]: server[k] });
+    Object.assign(patch, home ?? { hasHome: false, home: SALTILLO_CENTER, colonia: BLANK.colonia });
+    patch.business = d.company ? toBusiness(d.company) : null;
+  } else {
+    // Still onboarding: keep what they typed here; the server only knows the role picked at sign-up.
+    if (!s.onboarded && !pending.has("role")) patch.role = p.role;
+    if (home && !s.hasHome) Object.assign(patch, home);
+    if (d.company) patch.business = toBusiness(d.company);
+  }
+  confirmed = server;
+  set(patch);
+}
+
+// ------------------------------------------------------------------ hooks & helpers
 
 /** Rehydrate persisted state after mount so SSR and first client render match. */
 export function useStoreHydration() {
@@ -132,10 +727,42 @@ export function useHydrated() {
   );
 }
 
+/** "demo" | "live" | null (visitor). */
+export function useMode(): AppMode | null {
+  return useApp((s) => s.mode);
+}
+
+export function useIsLive(): boolean {
+  return useApp((s) => s.mode === "live");
+}
+
+/** Paid unlocks / plans work only in the demo for now; live shows "Próximamente". */
+export function usePaymentsEnabled(): boolean {
+  return useApp((s) => s.mode !== "live");
+}
+
 /** Price to unlock one vacancy's applicants for a month, in MXN. */
 export const UNLOCK_PRICE = 500;
 /** The demo business (no registered business yet) is on the free per-vacancy plan. */
 export const DEMO_PLAN: PlanId = "por-vacante";
+
+/** The seeded demo company as an editable Business (used the first time a demo employer edits branches). */
+function demoBusiness(): Business {
+  const c = COMPANY_BY_ID[DEMO_COMPANY_ID];
+  return { name: c.name, kind: c.kind, size: c.size, locations: c.locations, phone: "", plan: DEMO_PLAN };
+}
+
+const NO_BRANCHES: Branch[] = [];
+
+/** The employer's locations: their own business, or (demo only) the demo company's branches. */
+export function useEmployerLocations(): Branch[] {
+  // Visitors in a live-capable build (and the first render before hydration) never get the mock branches.
+  return useApp(
+    (s) =>
+      s.business?.locations ??
+      (s.mode === "demo" || (s.mode === null && !isLiveAvailable) ? COMPANY_BY_ID[DEMO_COMPANY_ID].locations : NO_BRANCHES),
+  );
+}
 
 export function useEmployerPlan(): PlanId {
   return useApp((s) => s.business?.plan ?? DEMO_PLAN);
@@ -146,15 +773,4 @@ export function useIsUnlocked(): (jobId: string) => boolean {
   const plan = useEmployerPlan();
   const ids = useApp((s) => s.unlockedJobIds);
   return (jobId) => plan !== "por-vacante" || ids.includes(jobId);
-}
-
-export type JobWithDistance = Job & { km: number; bearing: number };
-
-/** All jobs with distance from the user's home, nearest first. */
-export function useJobsByDistance(): JobWithDistance[] {
-  const home = useApp((s) => s.home);
-  return useMemo(
-    () => JOBS.map((j) => ({ ...j, km: distanceKm(home, j.location), bearing: bearing(home, j.location) })).toSorted((a, b) => a.km - b.km),
-    [home],
-  );
 }

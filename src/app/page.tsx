@@ -19,6 +19,7 @@ import { BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
 import { ThemeToggle } from "@/components/theme";
 import { HeroDemo } from "@/components/landing/hero-demo";
 import { InstallButton } from "@/components/landing/install-button";
+import { DemoShowcase } from "@/components/landing/demo-entry";
 import { ChambitaHello, Squiggle } from "@/components/landing/fx";
 import { HARD, HARD_SM, HazardStripe, PRESSABLE, Rivets, Scatter, StencilNumber, Tape, chunky } from "@/components/landing/decor";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
@@ -154,6 +155,12 @@ export default function LandingPage() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2.5">
+          <a
+            href="#demo"
+            className="hidden h-11 items-center rounded-full px-4 text-[0.95rem] font-bold outline-none transition-colors hover:bg-card focus-visible:ring-3 focus-visible:ring-ring/50 sm:inline-flex"
+          >
+            Probar la demo
+          </a>
           <ThemeToggle className="size-11" />
           <Link href="/entrar" className={chunky("lime", "md")}>
             Entrar
@@ -195,11 +202,23 @@ export default function LandingPage() {
                   Publicar una vacante
                 </Link>
               </div>
-              <p className="mt-5 text-[0.98rem] font-medium">
-                ¿Ya tienes cuenta?{" "}
-                <Link href="/entrar" className={cn(focusLink, "font-bold underline decoration-2 underline-offset-4")}>
-                  Entra aquí
-                </Link>
+              <p className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.98rem] font-medium">
+                <a
+                  href="#demo"
+                  className={cn(
+                    focusLink,
+                    "inline-flex h-11 items-center gap-2 rounded-full border-[2.5px] border-ink bg-block-sol px-4 font-display font-extrabold text-ink",
+                  )}
+                >
+                  <span className="rounded bg-ink px-1.5 py-0.5 text-[0.7rem] tracking-[0.1em] text-limon uppercase">Demo</span>
+                  Pruébala sin registrarte
+                </a>
+                <span>
+                  ¿Ya tienes cuenta?{" "}
+                  <Link href="/entrar" className={cn(focusLink, "font-bold underline decoration-2 underline-offset-4")}>
+                    Entra aquí
+                  </Link>
+                </span>
               </p>
             </div>
             <div className="relative -mt-6 sm:mt-0">
@@ -272,6 +291,9 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Demo entry */}
+        <DemoShowcase />
 
         {/* ¿Qué chamba buscas? */}
         <section aria-labelledby="chambas-t" className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[0.8fr_1.6fr] lg:gap-12 lg:px-10 lg:py-20">

@@ -1,0 +1,271 @@
+// Generated from the Supabase project (hggxrdwjnvhuymkaqiwo) schema. Regenerate after migrations.
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
+type E = Database["public"]["Enums"];
+
+export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "14.18";
+  };
+  public: {
+    Tables: {
+      applications: {
+        Row: { candidate_id: string; created_at: string; id: string; job_id: string; status: E["application_status"]; updated_at: string };
+        Insert: { candidate_id: string; created_at?: string; id?: string; job_id: string; status?: E["application_status"]; updated_at?: string };
+        Update: { candidate_id?: string; created_at?: string; id?: string; job_id?: string; status?: E["application_status"]; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "applications_job_id_fkey"; columns: ["job_id"]; isOneToOne: false; referencedRelation: "jobs"; referencedColumns: ["id"] },
+        ];
+      };
+      branches: {
+        Row: { colonia: string; company_id: string; created_at: string; id: string; location: unknown; name: string; sort: number };
+        Insert: { colonia: string; company_id: string; created_at?: string; id?: string; location: unknown; name: string; sort?: number };
+        Update: { colonia?: string; company_id?: string; created_at?: string; id?: string; location?: unknown; name?: string; sort?: number };
+        Relationships: [
+          { foreignKeyName: "branches_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+        ];
+      };
+      companies: {
+        Row: {
+          about: string;
+          created_at: string;
+          employees: string;
+          id: string;
+          kind: string;
+          name: string;
+          owner_id: string | null;
+          phone: string | null;
+          plan: E["plan_id"];
+          size: E["company_size"];
+          verified: boolean;
+        };
+        Insert: {
+          about?: string;
+          created_at?: string;
+          employees?: string;
+          id?: string;
+          kind?: string;
+          name: string;
+          owner_id?: string | null;
+          phone?: string | null;
+          plan?: E["plan_id"];
+          size?: E["company_size"];
+          verified?: boolean;
+        };
+        Update: {
+          about?: string;
+          created_at?: string;
+          employees?: string;
+          id?: string;
+          kind?: string;
+          name?: string;
+          owner_id?: string | null;
+          phone?: string | null;
+          plan?: E["plan_id"];
+          size?: E["company_size"];
+          verified?: boolean;
+        };
+        Relationships: [];
+      };
+      job_unlocks: {
+        Row: { company_id: string; created_at: string; job_id: string; unlocked_until: string };
+        Insert: { company_id: string; created_at?: string; job_id: string; unlocked_until: string };
+        Update: { company_id?: string; created_at?: string; job_id?: string; unlocked_until?: string };
+        Relationships: [
+          { foreignKeyName: "job_unlocks_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+          { foreignKeyName: "job_unlocks_job_id_fkey"; columns: ["job_id"]; isOneToOne: false; referencedRelation: "jobs"; referencedColumns: ["id"] },
+        ];
+      };
+      jobs: {
+        Row: {
+          benefits: string[];
+          branch_id: string;
+          category: E["category_id"];
+          company_id: string;
+          created_at: string;
+          description: string;
+          experience: E["experience_level"];
+          id: string;
+          openings: number;
+          pay: number;
+          pay_max: number | null;
+          period: E["pay_period"];
+          phone: string | null;
+          requirements: string[];
+          schedule: string;
+          shift: E["shift"];
+          status: E["job_status"];
+          title: string;
+          type: E["employment_type"];
+          updated_at: string;
+          urgent: boolean;
+        };
+        Insert: {
+          benefits?: string[];
+          branch_id: string;
+          category: E["category_id"];
+          company_id: string;
+          created_at?: string;
+          description?: string;
+          experience?: E["experience_level"];
+          id?: string;
+          openings?: number;
+          pay: number;
+          pay_max?: number | null;
+          period?: E["pay_period"];
+          phone?: string | null;
+          requirements?: string[];
+          schedule?: string;
+          shift: E["shift"];
+          status?: E["job_status"];
+          title: string;
+          type?: E["employment_type"];
+          updated_at?: string;
+          urgent?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["jobs"]["Insert"]>;
+        Relationships: [
+          { foreignKeyName: "jobs_branch_id_company_id_fkey"; columns: ["branch_id", "company_id"]; isOneToOne: false; referencedRelation: "branches"; referencedColumns: ["id", "company_id"] },
+          { foreignKeyName: "jobs_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+        ];
+      };
+      profiles: {
+        Row: {
+          colonia: string | null;
+          created_at: string;
+          email: string | null;
+          experience: E["experience_level"];
+          home: unknown;
+          id: string;
+          interests: E["category_id"][];
+          location_source: E["location_source"];
+          name: string;
+          onboarded: boolean;
+          phone: string | null;
+          radius_km: number;
+          role: E["app_role"];
+          updated_at: string;
+        };
+        Insert: {
+          colonia?: string | null;
+          created_at?: string;
+          email?: string | null;
+          experience?: E["experience_level"];
+          home?: unknown;
+          id: string;
+          interests?: E["category_id"][];
+          location_source?: E["location_source"];
+          name?: string;
+          onboarded?: boolean;
+          phone?: string | null;
+          radius_km?: number;
+          role?: E["app_role"];
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
+        Relationships: [];
+      };
+      saved_jobs: {
+        Row: { candidate_id: string; created_at: string; job_id: string };
+        Insert: { candidate_id: string; created_at?: string; job_id: string };
+        Update: { candidate_id?: string; created_at?: string; job_id?: string };
+        Relationships: [
+          { foreignKeyName: "saved_jobs_job_id_fkey"; columns: ["job_id"]; isOneToOne: false; referencedRelation: "jobs"; referencedColumns: ["id"] },
+        ];
+      };
+    };
+    Views: {
+      branches_view: {
+        Row: { colonia: string | null; company_id: string | null; id: string | null; lat: number | null; lng: number | null; name: string | null; sort: number | null };
+        Relationships: [
+          { foreignKeyName: "branches_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+        ];
+      };
+    };
+    Functions: {
+      add_branch: { Args: { lat: number; lng: number; p_colonia: string; p_company_id: string; p_name: string }; Returns: string };
+      is_company_owner: { Args: { cid: string }; Returns: boolean };
+      job_applicants: {
+        Args: { p_job_id: string };
+        Returns: {
+          application_id: string;
+          applied_at: string;
+          colonia: string;
+          experience: E["experience_level"];
+          interests: E["category_id"][];
+          km: number;
+          name: string;
+          phone: string;
+          status: E["application_status"];
+          unlocked: boolean;
+        }[];
+      };
+      jobs_near: {
+        Args: { lat: number; lng: number; radius_km?: number };
+        Returns: {
+          applicants: number;
+          bearing: number;
+          benefits: string[];
+          branch_id: string;
+          branch_lat: number;
+          branch_lng: number;
+          branch_name: string;
+          category: E["category_id"];
+          colonia: string;
+          company_id: string;
+          company_name: string;
+          company_verified: boolean;
+          created_at: string;
+          description: string;
+          experience: E["experience_level"];
+          id: string;
+          km: number;
+          openings: number;
+          pay: number;
+          pay_max: number;
+          period: E["pay_period"];
+          phone: string;
+          requirements: string[];
+          schedule: string;
+          shift: E["shift"];
+          title: string;
+          type: E["employment_type"];
+          urgent: boolean;
+        }[];
+      };
+      set_my_home: {
+        Args: { lat: number; lng: number; p_colonia: string; p_source?: E["location_source"] };
+        Returns: undefined;
+      };
+    };
+    Enums: {
+      app_role: "candidato" | "empresa";
+      application_status: "enviada" | "vista" | "entrevista" | "contratada" | "cerrada";
+      category_id:
+        | "produccion"
+        | "almacen"
+        | "montacargas"
+        | "chofer"
+        | "restaurante"
+        | "caja"
+        | "ventas"
+        | "limpieza"
+        | "mantenimiento"
+        | "seguridad"
+        | "oficina"
+        | "construccion";
+      company_size: "Micro" | "Pequeña" | "Mediana" | "Grande";
+      employment_type: "Tiempo completo" | "Medio tiempo" | "Temporal" | "Fines de semana";
+      experience_level: "Sin experiencia" | "6 meses" | "1 año" | "2 años o más";
+      job_status: "abierta" | "pausada" | "cerrada";
+      location_source: "colonia" | "gps";
+      pay_period: "semana" | "quincena" | "mes" | "dia";
+      plan_id: "por-vacante" | "pyme" | "industrial";
+      shift: "Matutino" | "Vespertino" | "Nocturno" | "Mixto" | "Rotativo";
+    };
+    CompositeTypes: { [_ in never]: never };
+  };
+};
+
+export type Tables<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
+export type NearJob = Database["public"]["Functions"]["jobs_near"]["Returns"][number];

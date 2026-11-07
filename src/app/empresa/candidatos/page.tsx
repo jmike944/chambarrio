@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PageHeader } from "@/components/chamba/page-header";
+import { CandidatesHeader } from "./candidates-header";
 import { CandidatesList } from "./candidates-list";
 
 export const metadata: Metadata = { title: "Candidatos" };
@@ -7,8 +7,11 @@ export const metadata: Metadata = { title: "Candidatos" };
 export default function CandidatosPage() {
   return (
     <>
-      <PageHeader title="Candidatos" eyebrow="Cerca de Parque Industrial Santa Mónica" />
+      <CandidatesHeader />
       <CandidatesList />
     </>
   );
 }
+
+// Shell renders children client-side only, so skip dev instant-navigation validation.
+export const instant = false;

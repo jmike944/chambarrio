@@ -12,3 +12,6 @@ export default function PlanPage() {
     </>
   );
 }
+
+// Shell renders children client-side only, so skip dev instant-navigation validation.
+export const instant = false;

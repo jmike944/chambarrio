@@ -6,6 +6,7 @@ import { MotionConfig } from "motion/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { useStoreHydration } from "@/lib/store";
+import { LiveSession } from "@/lib/live/session";
 
 function OfflineBanner() {
   const offline = useOffline();
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <MotionConfig reducedMotion="user">
       <TooltipProvider>
         <OfflineBanner />
+        <LiveSession />
         {children}
         <Toaster position="top-center" />
       </TooltipProvider>

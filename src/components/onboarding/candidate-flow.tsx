@@ -17,7 +17,8 @@ import { CATEGORIES } from "@/lib/data/categories";
 import type { CategoryId, Experience } from "@/lib/data/types";
 import { monthlySavings } from "@/lib/geo";
 import { formatMXN } from "@/lib/format";
-import { useApp, useJobsByDistance } from "@/lib/store";
+import { isLiveAvailable, useApp, useJobsByDistance } from "@/lib/store";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   ArtTile,
@@ -33,7 +34,8 @@ import {
   gridTone,
   type CSSVars,
 } from "./flow";
-import { PhoneVerify } from "./phone-verify";
+import { PhoneField, PhoneVerify } from "./phone-verify";
+import { AccountStep, DemoVerifyNote, useExistingAccountExit } from "./account-step";
 import { LocationPicker, type Place } from "./location-picker";
 
 const TOTAL = 6;
@@ -119,6 +121,14 @@ export function CandidateFlow() {
   const setInterests = useApp((s) => s.setInterests);
   const setExperience = useApp((s) => s.setExperience);
   const completeOnboarding = useApp((s) => s.completeOnboarding);
+  const storePhone = useApp((s) => s.phone);
+  const appMode = useApp((s) => s.mode);
+  const signedIn = useApp((s) => s.signedIn);
+  // Real accounts whenever Supabase is configured and we're not inside the demo.
+  const real = isLiveAvailable && appMode !== "demo";
+  const liveIn = appMode === "live" && signedIn;
+  const [whatsapp, setWhatsapp] = useState("");
+  const [busy, setBusy] = useState(false);
   const jobs = useJobsByDistance();
   const inRadius = jobs.filter((j) => j.km <= radiusKm).length;
   const savings = monthlySavings(radiusKm);
@@ -135,8 +145,14 @@ export function CandidateFlow() {
     };
   }, []);
 
-  const next = () => setStep((s) => s + 1);
-  const back = () => setStep((s) => Math.max(0, s - 1));
+  // Already signed in (came from /entrar or the email link): the account step is done.
+  const next = () => setStep((s) => (s === 0 && liveIn ? 2 : s + 1));
+  const back = () => setStep((s) => (s === 2 && liveIn ? 0 : Math.max(0, s - 1)));
+  // Signed up with an email that already has a finished profile: off to the app.
+  const armExit = useExistingAccountExit("candidato", (s) => s.onboarded);
+
+  const phoneDigits = (whatsapp || storePhone.replace(/\D/g, "").replace(/^52(?=\d{10}$)/, "")).slice(0, 10);
+  const needPhone = real;
 
   async function askNotifications() {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -149,10 +165,17 @@ export function CandidateFlow() {
     if (result === "granted") toast.success("Listo. Te avisaremos cuando salga algo cerca.");
   }
 
-  function finish(e: React.MouseEvent<HTMLButtonElement>) {
-    fire({ origin: e.currentTarget, colors: WORK_CONFETTI, count: 44 });
+  async function finish(e: React.MouseEvent<HTMLButtonElement>) {
+    if (busy) return;
+    const origin = e.currentTarget;
+    if (liveIn) {
+      setBusy(true);
+      const r = await completeOnboarding("candidato");
+      setBusy(false);
+      if (r.error) return; // already toasted
+    } else void completeOnboarding("candidato");
+    fire({ origin, colors: WORK_CONFETTI, count: 44 });
     finished.current = true;
-    completeOnboarding("candidato");
     router.push("/inicio");
   }
 
@@ -210,13 +233,31 @@ export function CandidateFlow() {
               href="/entrar"
               className="rounded font-bold text-foreground underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              Entra con tu WhatsApp
+              {real ? "Entra aquí" : "Entra con tu WhatsApp"}
             </Link>
           </p>
         </FlowShell>
       );
 
     case 1:
+      if (real && !liveIn) {
+        return (
+          <AccountStep
+            step={1}
+            total={TOTAL}
+            role="candidato"
+            onBack={back}
+            onVerified={({ channel, to }) => {
+              armExit();
+              if (channel === "sms") {
+                setWhatsapp(to);
+                void setPhone(to);
+              }
+              setStep(2);
+            }}
+          />
+        );
+      }
       return (
         <FlowShell
           step={1}
@@ -228,6 +269,7 @@ export function CandidateFlow() {
           aside="Sin contraseñas que recordar. Solo tu número."
           onBack={back}
         >
+          {real ? null : <DemoVerifyNote />}
           <PhoneVerify
             onVerified={(phone) => {
               setPhone(phone);
@@ -249,7 +291,11 @@ export function CandidateFlow() {
           aside="Las empresas te contactan directo, sin intermediarios."
           onBack={back}
           footer={
-            <PrimaryButton type="submit" form="name-form" disabled={name.trim().length < 2}>
+            <PrimaryButton
+              type="submit"
+              form="name-form"
+              disabled={name.trim().length < 2 || (needPhone && phoneDigits.length !== 10)}
+            >
               Continuar
             </PrimaryButton>
           }
@@ -259,6 +305,10 @@ export function CandidateFlow() {
             onSubmit={(e) => {
               e.preventDefault();
               if (name.trim().length < 2) return;
+              if (needPhone) {
+                if (phoneDigits.length !== 10) return;
+                if (phoneDigits !== storePhone) void setPhone(phoneDigits);
+              }
               setName(name.trim());
               next();
             }}
@@ -278,6 +328,14 @@ export function CandidateFlow() {
                 className="h-17 rounded-[1.1rem] border-[3px] border-ink bg-white px-5 font-display text-[1.4rem] font-bold text-ink placeholder:text-ink/35 focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/25 md:text-[1.4rem] dark:bg-white"
               />
             </Slab>
+            {needPhone ? (
+              <Slab tone="menta" index={2} className="mt-5 pt-4">
+                <PhoneField id="contact-whatsapp" value={phoneDigits} onChange={setWhatsapp} label="Tu WhatsApp" />
+                <p className="mt-3 text-[0.9rem] font-medium text-muted-foreground">
+                  Solo lo ve la empresa cuando te postulas y decide contactarte.
+                </p>
+              </Slab>
+            ) : null}
           </form>
           <Gafete name={name} />
         </FlowShell>
@@ -438,7 +496,10 @@ export function CandidateFlow() {
           onBack={back}
           footer={
             <>
-              <PrimaryButton onClick={finish}>Ver vacantes cerca</PrimaryButton>
+              <PrimaryButton onClick={finish} disabled={busy} aria-busy={busy}>
+                {busy ? <Spinner className="size-5" /> : null}
+                {busy ? "Guardando…" : "Ver vacantes cerca"}
+              </PrimaryButton>
               {notifyState === "idle" ? (
                 <SecondaryButton onClick={askNotifications}>
                   <HugeiconsIcon icon={Notification01Icon} className="size-5" strokeWidth={2.2} />

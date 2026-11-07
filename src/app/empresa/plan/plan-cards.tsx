@@ -2,7 +2,7 @@
 
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { CheckmarkBadge01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { CheckmarkBadge01Icon, ComingSoon01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { BLOCK_CLASS, Eyebrow, type BlockTone } from "@/components/chamba/primitives";
 import { Sticker, useConfetti } from "@/components/chamba/motion";
@@ -11,7 +11,7 @@ import { Scene, type SceneName } from "@/components/chamba/art/scenes";
 import { Doodle, HazardTape, Marquee } from "@/components/chamba/art/doodles";
 import type { CategoryId } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
-import { useEmployerPlan } from "@/lib/store";
+import { useEmployerPlan, usePaymentsEnabled } from "@/lib/store";
 
 /** Rugged workwear edge: ink outline + hard offset shadow (no blur). */
 const RUG =
@@ -76,10 +76,31 @@ const PLANS: {
 
 export function PlanCards() {
   const currentPlan = useEmployerPlan();
+  const payments = usePaymentsEnabled();
   const fire = useConfetti();
   const plans = PLANS.map((p) => ({ ...p, current: p.id === currentPlan }));
   return (
     <div className="space-y-6">
+      {payments ? null : (
+        <section
+          id="planes-pronto"
+          aria-label="Pagos próximamente"
+          className={cn("relative flex items-start gap-3.5 overflow-hidden rounded-panel p-5 sm:items-center sm:p-6", BLOCK_CLASS.lila, RUG)}
+        >
+          <span className="grid size-12 shrink-0 -rotate-6 place-items-center rounded-[0.9rem] border-2 border-ink bg-limon text-ink">
+            <HugeiconsIcon icon={ComingSoon01Icon} className="size-6" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <Eyebrow>Próximamente</Eyebrow>
+            <p className="mt-1 font-display text-[1.25rem] leading-tight font-extrabold tracking-[-0.02em]">
+              Los pagos en línea llegan muy pronto
+            </p>
+            <p className="mt-1 text-[0.95rem] leading-snug text-muted-foreground">
+              Por ahora publicas gratis y recibes postulaciones. Cuando activemos los pagos podrás elegir tu plan aquí mismo.
+            </p>
+          </div>
+        </section>
+      )}
       <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch lg:gap-6 lg:pt-4">
         {plans.map((p, i) => {
           const hot = p.tone === "mandarina";
@@ -146,11 +167,14 @@ export function PlanCards() {
                 ))}
               </ul>
               <Button
-                disabled={p.current}
+                disabled={p.current || !payments}
+                aria-describedby={!payments && !p.current ? "planes-pronto" : undefined}
                 className={cn(
                   "mt-auto h-14 w-full border-2 border-ink text-[1.05rem] font-bold",
                   p.current
                     ? "bg-white/50 text-ink disabled:opacity-100"
+                    : !payments
+                      ? "bg-white/60 text-ink disabled:opacity-100"
                     : "bg-ink text-white shadow-[3px_4px_0_0_rgb(255_255_255/0.6)] hover:bg-ink/90 dark:border-black/70",
                 )}
                 style={{ marginTop: "1.75rem" }}
@@ -159,7 +183,7 @@ export function PlanCards() {
                   toast.success("¡Ándale! Te contactaremos para activar tu plan");
                 }}
               >
-                {p.current ? "Plan actual" : `Elegir ${p.name}`}
+                {p.current ? "Plan actual" : payments ? `Elegir ${p.name}` : "Próximamente"}
               </Button>
             </section>
           );

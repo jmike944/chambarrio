@@ -5,21 +5,23 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowLeft01Icon, ArrowRight01Icon, ArrowRight02Icon, Gps01Icon } from "@hugeicons/core-free-icons";
-import { JobRow } from "@/components/chamba/job-row";
+import { ArrowLeft01Icon, ArrowRight01Icon, ArrowRight02Icon, Gps01Icon, Store01Icon } from "@hugeicons/core-free-icons";
+import { JobRow, companyLabel } from "@/components/chamba/job-row";
 import { CATEGORY_BLOCK, CategoryIcon } from "@/components/chamba/job-icons";
 import { CountUp, useConfetti } from "@/components/chamba/motion";
 import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
-import { COMPANY_BY_ID } from "@/lib/data/jobs";
-import type { CategoryId } from "@/lib/data/types";
+import { useCatalog } from "@/lib/data/catalog";
+import type { CategoryId, Company } from "@/lib/data/types";
 import { formatPay } from "@/lib/format";
-import { useApp, useJobsByDistance } from "@/lib/store";
-import { RADIUS_STOPS, bandColor, bandFor, formatKm } from "@/lib/geo";
+import { useApp, useJobsByDistance, type JobWithDistance } from "@/lib/store";
+import { RADIUS_STOPS, bandColor, bandFor, distanceKm, formatKm, type LatLng } from "@/lib/geo";
 import { cn } from "@/lib/utils";
-import type { PlacedJob } from "./job-map";
+import type { BranchPin } from "./job-map";
+import { Button } from "@/components/ui/button";
+import { CatalogErrorPanel, InkSkeleton, LiveEmptyNearby, LoadingNote, RowSkeletons } from "@/app/(candidato)/vacantes/_seeker/states";
 
 /* ------------------------------------------------------------------ local styling helpers */
 
@@ -129,12 +131,12 @@ function CategoryLegend({
   onPick,
   className,
 }: {
-  jobs: PlacedJob[];
+  jobs: JobWithDistance[];
   onPick: (id: string) => void;
   className?: string;
 }) {
   const groups = useMemo(() => {
-    const m = new Map<CategoryId, { n: number; nearest: PlacedJob }>();
+    const m = new Map<CategoryId, { n: number; nearest: JobWithDistance }>();
     for (const j of jobs) {
       const g = m.get(j.category);
       if (g) g.n++;
@@ -172,24 +174,34 @@ function CategoryLegend({
 
 function SelectedJobCard({
   job,
+  pin,
+  siblings,
   radiusKm,
   index,
   total,
   onStep,
   onWiden,
+  onPickJob,
+  onPickBranch,
   className,
 }: {
-  job: PlacedJob;
+  job: JobWithDistance;
+  /** The branch the job is at (all its vacancies). */
+  pin: BranchPin;
+  /** The company's other branches, nearest first. */
+  siblings: BranchPin[];
   radiusKm: number;
   /** Position inside the radius list (-1 = outside the radius). */
   index: number;
   total: number;
   onStep: (dir: 1 | -1) => void;
   onWiden: (() => void) | null;
+  onPickJob: (jobId: string) => void;
+  onPickBranch: (branchId: string) => void;
   className?: string;
 }) {
-  const company = COMPANY_BY_ID[job.companyId];
   const inside = index >= 0;
+  const showStrip = pin.jobs.length > 1 || siblings.length > 0;
   return (
     <div className={cn("relative pt-14", className)}>
       {/* the crew boss peeking over the card */}
@@ -230,10 +242,8 @@ function SelectedJobCard({
               <h2 className="line-clamp-2 font-display text-[1.3rem] leading-[1.08] font-extrabold tracking-[-0.03em]">
                 {job.title}
               </h2>
-              <p className="mt-1 truncate text-[0.93rem]">
-                <span className="font-bold tabular-nums">{formatPay(job)}</span>
-                <span className="opacity-75"> · {company.name}</span>
-              </p>
+              <p className="mt-1 truncate text-[0.93rem] font-bold tabular-nums">{formatPay(job)}</p>
+              <p className="truncate text-[0.9rem] opacity-80">{companyLabel(job)}</p>
             </div>
           </div>
 
@@ -250,6 +260,55 @@ function SelectedJobCard({
               </span>
             ) : null}
           </div>
+
+          {showStrip ? (
+            <div className="no-scrollbar -mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 pb-1">
+              {pin.jobs.length > 1 ? (
+                <ul aria-label={`Vacantes en ${pin.multi ? pin.name : pin.companyName}`} className="flex shrink-0 gap-1.5">
+                  {pin.jobs.map((j) => {
+                    const on = j.id === job.id;
+                    return (
+                      <li key={j.id} className="shrink-0">
+                        <button
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => onPickJob(j.id)}
+                          className={cn(
+                            "press flex h-11 max-w-[13rem] items-center gap-1 rounded-full border-2 border-[#160f33] pr-3 pl-1 text-[0.85rem] font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring",
+                            on ? "bg-[#160f33] text-white" : "bg-white/70 text-[#160f33] hover:bg-white",
+                          )}
+                        >
+                          <CategoryIcon category={j.category} size="xs" className="size-7! shrink-0" />
+                          <span className="truncate">{j.title}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+              {pin.jobs.length > 1 && siblings.length > 0 ? (
+                <span aria-hidden className="my-2 w-0.5 shrink-0 rounded-full bg-[#160f33]/30" />
+              ) : null}
+              {siblings.length > 0 ? (
+                <ul aria-label={`Otras sucursales de ${pin.companyName}`} className="flex shrink-0 gap-1.5">
+                  {siblings.map((b) => (
+                    <li key={b.id} className="shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onPickBranch(b.id)}
+                        aria-label={`Ir a ${b.name}, a ${formatKm(b.km)}${b.jobs.length ? `, ${b.jobs.length} ${b.jobs.length === 1 ? "vacante" : "vacantes"}` : ", sin vacantes por ahora"}`}
+                        className="press flex h-11 items-center gap-1.5 rounded-full border-2 border-dashed border-[#160f33] bg-white/45 pr-3 pl-2 text-[0.85rem] font-semibold whitespace-nowrap text-[#160f33] outline-none hover:bg-white/80 focus-visible:ring-3 focus-visible:ring-ring"
+                      >
+                        <HugeiconsIcon icon={Store01Icon} className="size-4 shrink-0" strokeWidth={2.2} />
+                        {b.name}
+                        <span className="font-normal tabular-nums opacity-75">{formatKm(b.km)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-3.5 flex gap-2">
             {onWiden ? (
@@ -284,7 +343,7 @@ function StepButton({ dir, onClick }: { dir: 1 | -1; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      aria-label={dir === 1 ? "Siguiente vacante" : "Vacante anterior"}
+      aria-label={dir === 1 ? "Siguiente lugar" : "Lugar anterior"}
       className="press grid size-11 place-items-center rounded-full border-2 border-[#160f33] bg-white text-[#160f33] outline-none hover:bg-block-sol focus-visible:ring-3 focus-visible:ring-ring"
     >
       <HugeiconsIcon icon={dir === 1 ? ArrowRight01Icon : ArrowLeft01Icon} className="size-5" strokeWidth={2.4} />
@@ -294,44 +353,122 @@ function StepButton({ dir, onClick }: { dir: 1 | -1; onClick: () => void }) {
 
 /* ------------------------------------------------------------------ screen */
 
+/** Other locations of the selected branch's company: real pins when hiring, ghost entries otherwise. */
+function siblingBranches(
+  pin: BranchPin,
+  pinById: Map<string, BranchPin>,
+  home: LatLng,
+  companyById: Record<string, Company>,
+): BranchPin[] {
+  const company = companyById[pin.companyId];
+  if (!company) return [];
+  return company.locations
+    .filter((b) => b.id !== pin.id)
+    .map(
+      (b) =>
+        pinById.get(b.id) ?? {
+          id: b.id,
+          name: b.name,
+          companyId: company.id,
+          companyName: company.name,
+          multi: true,
+          colonia: b.colonia,
+          pos: b.location,
+          km: distanceKm(home, b.location),
+          jobs: [],
+          category: null,
+        },
+    )
+    .toSorted((a, b) => a.km - b.km);
+}
+
 export function MapScreen() {
   const home = useApp((s) => s.home);
   const radiusKm = useApp((s) => s.radiusKm);
   const setRadius = useApp((s) => s.setRadius);
   const jobs = useJobsByDistance();
+  const catalog = useCatalog();
+  const { companyById } = catalog;
+  const loading = catalog.status === "loading";
+  const failed = catalog.status === "error";
+  const live = catalog.source === "live";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Spread out jobs that share a building so every pin stays tappable.
-  const placed: PlacedJob[] = useMemo(() => {
-    const seen = new Map<string, number>();
-    return jobs.map((j) => {
-      const key = `${j.location.lat},${j.location.lng}`;
-      const n = seen.get(key) ?? 0;
-      seen.set(key, n + 1);
-      const angle = n * 2.4;
-      const off = n === 0 ? 0 : 0.0007;
-      return { ...j, pos: { lat: j.location.lat + off * Math.cos(angle), lng: j.location.lng + off * Math.sin(angle) } };
-    });
-  }, [jobs]);
+  // One marker per branch: every vacancy at the same sucursal shares a pin (jobs arrive nearest first).
+  const pins: BranchPin[] = useMemo(() => {
+    const byBranch = new Map<string, BranchPin>();
+    for (const j of jobs) {
+      const pin = byBranch.get(j.branchId);
+      if (pin) {
+        pin.jobs.push(j);
+        continue;
+      }
+      const company = companyById[j.companyId];
+      // Mid-refresh the vacancy can arrive before its company; it gets a pin on the next render.
+      if (!company) continue;
+      const branch = company.locations.find((b) => b.id === j.branchId);
+      byBranch.set(j.branchId, {
+        id: j.branchId,
+        name: branch?.name ?? j.colonia,
+        companyId: j.companyId,
+        companyName: company.name,
+        multi: company.locations.length > 1,
+        colonia: j.colonia,
+        pos: j.location,
+        km: j.km,
+        jobs: [j],
+        category: j.category,
+      });
+    }
+    return [...byBranch.values()];
+  }, [jobs, companyById]);
+  const pinById = useMemo(() => new Map(pins.map((p) => [p.id, p])), [pins]);
 
-  const inRadius = placed.filter((j) => j.km <= radiusKm);
-  const selected = placed.find((j) => j.id === selectedId) ?? inRadius[0] ?? placed[0];
-  const selectedIndex = selected ? inRadius.findIndex((j) => j.id === selected.id) : -1;
+  const inRadius = jobs.filter((j) => j.km <= radiusKm);
+  const pinsInRadius = pins.filter((p) => p.km <= radiusKm);
+  const selected = jobs.find((j) => j.id === selectedId) ?? inRadius[0] ?? jobs[0];
+  const selectedPin = selected ? pinById.get(selected.branchId) : undefined;
+  const selectedIndex = selectedPin ? pinsInRadius.findIndex((p) => p.id === selectedPin.id) : -1;
   const nextStop = RADIUS_STOPS.find((s) => s > radiusKm);
+
+  // The selected company's other branches, including ones that aren't hiring right now.
+  const siblings: BranchPin[] = useMemo(
+    () => (selectedPin?.multi ? siblingBranches(selectedPin, pinById, home, companyById) : []),
+    [selectedPin, pinById, home, companyById],
+  );
+
+  function flyTo(pos: LatLng) {
+    setFocus({ ...pos });
+  }
 
   function select(id: string, fly = false) {
     setSelectedId(id);
     if (fly) {
-      const j = placed.find((x) => x.id === id);
-      if (j) setFocus({ ...j.pos });
+      const j = jobs.find((x) => x.id === id);
+      if (j) flyTo(j.location);
+    }
+  }
+
+  function selectBranch(branchId: string, fly = false) {
+    const pin = pinById.get(branchId);
+    if (pin) {
+      // Keep the current vacancy if it's already at this branch.
+      if (!pin.jobs.some((j) => j.id === selected?.id)) setSelectedId(pin.jobs[0].id);
+      if (fly) flyTo(pin.pos);
+      return;
+    }
+    const ghost = siblings.find((b) => b.id === branchId);
+    if (ghost) {
+      flyTo(ghost.pos);
+      toast(`${ghost.companyName} · ${ghost.name} no tiene vacantes por ahora.`);
     }
   }
 
   function step(dir: 1 | -1) {
-    if (inRadius.length === 0) return;
-    const i = (Math.max(selectedIndex, 0) + dir + inRadius.length) % inRadius.length;
-    select(inRadius[i].id, true);
+    if (pinsInRadius.length === 0) return;
+    const i = (Math.max(selectedIndex, 0) + dir + pinsInRadius.length) % pinsInRadius.length;
+    selectBranch(pinsInRadius[i].id, true);
   }
 
   const widen = inRadius.length === 0 && nextStop ? () => setRadius(nextStop) : null;
@@ -352,7 +489,7 @@ export function MapScreen() {
           <h1 className="mt-1 font-display text-[3rem] leading-none font-extrabold tracking-[-0.045em]">Mapa</h1>
           <p className="mt-2 max-w-[15rem] text-[0.95rem]">
             <span className="font-display text-[1.4rem] font-extrabold tabular-nums">
-              <CountUp value={inRadius.length} />
+              {loading ? <InkSkeleton className="inline-block h-6 w-8 align-middle" /> : <CountUp value={inRadius.length} />}
             </span>{" "}
             vacantes a {radiusKm} km o menos de tu casa
           </p>
@@ -370,9 +507,17 @@ export function MapScreen() {
           <h2 className="mb-2 flex items-center gap-2 font-display text-[1.3rem] font-extrabold">
             Más cerca de ti
             <span className="grid h-7 min-w-7 place-items-center rounded-full bg-[#160f33] px-2 text-[0.8rem] text-white tabular-nums">
-              {inRadius.length}
+              {loading ? "…" : inRadius.length}
             </span>
           </h2>
+          {loading ? (
+            <>
+              <LoadingNote />
+              <RowSkeletons count={5} />
+            </>
+          ) : failed ? (
+            <CatalogErrorPanel error={catalog.error} className="border-0 shadow-none!" />
+          ) : null}
           <ul className="-mr-2 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-2">
             {inRadius.map((j, i) => (
               <li
@@ -384,14 +529,27 @@ export function MapScreen() {
                 }}
                 className={cn(
                   "animate-rise rounded-2xl px-2 transition-colors",
-                  j.id === selected?.id && "bg-white/60 ring-2 ring-[#160f33]",
+                  j.id === selected?.id
+                    ? "bg-white/60 ring-2 ring-[#160f33]"
+                    : j.branchId === selected?.branchId && "bg-white/30 ring-2 ring-[#160f33]/25",
                 )}
                 style={{ "--i": Math.min(i, 8) } as CSSVars}
               >
                 <JobRow job={j} km={j.km} radiusKm={radiusKm} />
               </li>
             ))}
-            {inRadius.length === 0 ? (
+            {inRadius.length === 0 && !loading && !failed && live ? (
+              <li className="flex flex-col items-center gap-2 py-6 text-center">
+                <Mascot mood="piensa" prop="casco" size={90} />
+                <p className="font-display text-lg font-bold">Todavía no hay vacantes a {radiusKm} km.</p>
+                <p className="opacity-75">Amplía tu radio o vuelve pronto.</p>
+                {nextStop ? (
+                  <Button size="lg" className="mt-2" onClick={() => void setRadius(nextStop)}>
+                    Buscar a {nextStop} km
+                  </Button>
+                ) : null}
+              </li>
+            ) : inRadius.length === 0 && !loading && !failed ? (
               <li className="flex flex-col items-center gap-2 py-6 text-center">
                 <Mascot mood="piensa" prop="lupa" size={90} />
                 <p className="font-display text-lg font-bold">No hay vacantes en este radio.</p>
@@ -412,9 +570,10 @@ export function MapScreen() {
         <JobMap
           home={home}
           radiusKm={radiusKm}
-          jobs={placed}
-          selectedId={selected?.id ?? null}
-          onSelect={(id) => select(id)}
+          pins={pins}
+          selectedId={selectedPin?.id ?? null}
+          siblings={siblings}
+          onSelect={(id) => selectBranch(id)}
           focus={focus}
         />
 
@@ -424,15 +583,49 @@ export function MapScreen() {
           className="absolute inset-x-0 top-[calc(max(0.75rem,env(safe-area-inset-top))+4.6rem)] z-10 px-3 pt-1 pb-2 lg:top-3 lg:px-4"
         />
 
-        {selected ? (
+        {selected && selectedPin ? (
           <SelectedJobCard
             job={selected}
+            pin={selectedPin}
+            siblings={siblings}
+            onPickJob={(id) => select(id)}
+            onPickBranch={(id) => selectBranch(id, true)}
             radiusKm={radiusKm}
             index={selectedIndex}
-            total={inRadius.length}
+            total={pinsInRadius.length}
             onStep={step}
             onWiden={widen}
             className="absolute inset-x-3 bottom-28 z-10 mx-auto max-w-xl lg:inset-x-auto lg:bottom-5 lg:left-5 lg:w-[25rem]"
+          />
+        ) : loading ? (
+          <div
+            aria-hidden
+            className={cn(
+              "absolute inset-x-3 bottom-28 z-10 mx-auto h-[13rem] max-w-xl overflow-hidden rounded-[1.6rem] block-mandarina p-4 pt-6 lg:inset-x-auto lg:bottom-5 lg:left-5 lg:w-[25rem]",
+              RUGGED,
+            )}
+          >
+            <InkSkeleton className="h-4 w-36" />
+            <div className="mt-3 flex items-center gap-3">
+              <InkSkeleton className="size-16 shrink-0 rounded-2xl" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <InkSkeleton className="h-6 w-4/5" />
+                <InkSkeleton className="h-4 w-1/2" />
+              </div>
+            </div>
+            <InkSkeleton className="mt-5 h-12 w-full rounded-full" />
+          </div>
+        ) : failed ? (
+          <CatalogErrorPanel
+            error={catalog.error}
+            className="absolute inset-x-3 bottom-28 z-10 mx-auto max-w-xl p-5 lg:inset-x-auto lg:bottom-5 lg:left-5 lg:w-[25rem] [&_svg]:max-h-24"
+          />
+        ) : live && jobs.length === 0 ? (
+          <LiveEmptyNearby
+            compact
+            radiusKm={radiusKm}
+            onWiden={(r) => void setRadius(r)}
+            className="absolute inset-x-3 bottom-28 z-10 mx-auto max-w-xl p-5 lg:inset-x-auto lg:bottom-5 lg:left-5 lg:w-[25rem]"
           />
         ) : null}
       </div>

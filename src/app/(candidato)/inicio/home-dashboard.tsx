@@ -33,11 +33,27 @@ import { Button } from "@/components/ui/button";
 import { useApp, useJobsByDistance, type JobWithDistance } from "@/lib/store";
 import { bandColor, bandFor, formatKm, monthlySavings, type RadiusKm } from "@/lib/geo";
 import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
-import { COMPANY_BY_ID } from "@/lib/data/jobs";
+import { useCatalog } from "@/lib/data/catalog";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
 import { cn } from "@/lib/utils";
+import {
+  CatalogErrorPanel,
+  InkSkeleton,
+  JobCardSkeletons,
+  LiveEmptyNearby,
+  LoadingNote,
+  PickHomeBanner,
+  RowSkeletons,
+  StaleNote,
+} from "../vacantes/_seeker/states";
 
 type Vars = React.CSSProperties & Record<`--${string}`, string | number>;
+
+/** Marquee filler while there's nothing to announce (loading / no vacancies yet). */
+const PLACEHOLDER_TAPE = [
+  { id: "tape-1", text: "Chamba cerca de tu casa" },
+  { id: "tape-2", text: "Vacantes nuevas cada día" },
+];
 
 /** Workwear hazard tape (ink + safety yellow). Local helper — no shared utility exists. */
 const HAZARD: React.CSSProperties = {
@@ -69,7 +85,11 @@ export function HomeDashboard() {
   const setRadius = useApp((s) => s.setRadius);
   const colonia = useApp((s) => s.colonia);
   const jobs = useJobsByDistance();
+  const catalog = useCatalog();
+  const loading = catalog.status === "loading";
+  const live = catalog.source === "live";
   const radiusRef = useRef<HTMLElement>(null);
+  const companyName = (id: string) => catalog.companyById[id]?.name ?? "";
 
   const inRadius = jobs.filter((j) => j.km <= radiusKm);
   const openings = inRadius.reduce((n, j) => n + j.openings, 0);
@@ -89,8 +109,15 @@ export function HomeDashboard() {
     if (more && radiusRef.current) confetti({ origin: radiusRef.current, count: 22, spread: 90 });
   }
 
+  if (catalog.status === "error") {
+    return <CatalogErrorPanel error={catalog.error} className="mx-auto mt-2 max-w-xl" />;
+  }
+
   return (
     <div className="flex flex-col gap-5 lg:grid lg:grid-cols-12 lg:items-start lg:gap-6">
+      {loading ? <LoadingNote /> : null}
+      <PickHomeBanner className="order-0 lg:col-span-12" />
+      <StaleNote className="order-0 lg:col-span-12" />
       {/* ───────────── left column (desktop) ───────────── */}
       <div className="contents lg:col-span-7 lg:flex lg:flex-col lg:gap-6">
         {/* HERO — the one saturated block */}
@@ -111,7 +138,11 @@ export function HomeDashboard() {
           <div className="relative pr-[7.5rem] sm:pr-44">
             <p className="mt-3 flex items-end gap-3">
               <span className="font-display text-[5.5rem] leading-[0.8] font-extrabold tracking-[-0.06em] tabular-nums sm:text-[7rem]">
-                <CountUp value={inRadius.length} from={0} />
+                {loading ? (
+                  <InkSkeleton className="inline-block h-[4.4rem] w-[5.5rem] bg-white/25! align-bottom sm:h-[5.6rem] sm:w-28" />
+                ) : (
+                  <CountUp value={inRadius.length} from={0} />
+                )}
               </span>
               <span className="pb-1 font-display text-[1.35rem] leading-[1.05] font-bold">
                 vacantes
@@ -120,8 +151,14 @@ export function HomeDashboard() {
               </span>
             </p>
             <p className="mt-4 text-[1.02rem] leading-snug text-primary-foreground/85">
+              {loading ? (
+                <>Buscando chamba a menos de <strong className="font-semibold text-limon tabular-nums">{radiusKm} km</strong> de tu casa en {colonia}…</>
+              ) : (
+                <>
               <strong className="font-semibold text-primary-foreground tabular-nums">{openings} lugares</strong> a menos de{" "}
               <strong className="font-semibold text-limon tabular-nums">{radiusKm} km</strong> de tu casa en {colonia}.
+                </>
+              )}
             </p>
           </div>
           <Mascot
@@ -146,7 +183,7 @@ export function HomeDashboard() {
             tone="limon"
             icon={Briefcase01Icon}
             label="Lugares"
-            value={<CountUp value={openings} />}
+            value={loading ? <InkSkeleton className="h-8 w-12" /> : <CountUp value={openings} />}
             hint="abiertos"
             className={cn("animate-rise p-3.5 sm:p-4", PLATE)}
             style={{ "--i": 1 }}
@@ -155,7 +192,7 @@ export function HomeDashboard() {
             tone="durazno"
             icon={FlashIcon}
             label="Nuevas"
-            value={<CountUp value={newToday} />}
+            value={loading ? <InkSkeleton className="h-8 w-10" /> : <CountUp value={newToday} />}
             hint="hoy"
             className={cn("animate-rise p-3.5 sm:p-4", PLATE)}
             style={{ "--i": 2 }}
@@ -164,7 +201,7 @@ export function HomeDashboard() {
             tone="menta"
             icon={Location06Icon}
             label="Cerquita"
-            value={nearest[0] ? formatKm(nearest[0].km) : "—"}
+            value={loading ? <InkSkeleton className="h-8 w-16" /> : nearest[0] ? formatKm(nearest[0].km) : "—"}
             hint="de tu casa"
             className={cn("animate-rise p-3.5 sm:p-4 [&>div:nth-child(2)]:text-[1.6rem]", PLATE)}
             style={{ "--i": 3 }}
@@ -186,7 +223,7 @@ export function HomeDashboard() {
               <li key={c.id} className="shrink-0 animate-pop-in" style={{ "--i": Math.min(i, 8) } as Vars}>
                 <Link
                   href={`/vacantes?categoria=${c.id}`}
-                  aria-label={`${c.label}: ${c.n} vacantes cerca`}
+                  aria-label={loading ? c.label : `${c.label}: ${c.n} vacantes cerca`}
                   className="group press lift flex w-[5.25rem] flex-col items-center gap-1.5 rounded-tile py-1 text-center outline-none focus-visible:ring-3 focus-visible:ring-ring/60 lg:w-full"
                 >
                   <span className="relative">
@@ -208,9 +245,13 @@ export function HomeDashboard() {
         <section aria-labelledby="home-nearest" className="order-5 lg:order-none">
           <SectionLabel
             title={<span id="home-nearest">Más cerca de ti</span>}
-            count={inRadius.length}
+            count={loading ? undefined : inRadius.length}
           />
-          {nearest.length === 0 ? (
+          {loading ? (
+            <JobCardSkeletons count={3} className="mt-3" />
+          ) : nearest.length === 0 && live ? (
+            <LiveEmptyNearby radiusKm={radiusKm} onWiden={changeRadius} className="mt-3" />
+          ) : nearest.length === 0 ? (
             <Panel tone="menta" className={cn("mt-3 flex items-center gap-4", PLATE)}>
               <Scene name="vacio" className="w-28 shrink-0" />
               <p className="font-semibold">
@@ -227,7 +268,7 @@ export function HomeDashboard() {
                     className={cn("relative animate-rise", i < nearest.length - 1 && "-mb-7")}
                     style={{ "--i": Math.min(i + 2, 8), zIndex: i } as Vars}
                   >
-                    <NearCard job={j} radiusKm={radiusKm} tone={tones[i]} last={i === nearest.length - 1} tilt={i % 2 ? 0.6 : -0.6} />
+                    <NearCard job={j} companyName={companyName(j.companyId)} radiusKm={radiusKm} tone={tones[i]} last={i === nearest.length - 1} tilt={i % 2 ? 0.6 : -0.6} />
                   </li>
                 ))}
               </ul>
@@ -267,7 +308,7 @@ export function HomeDashboard() {
               </Link>
             </Button>
           </div>
-          <Radar jobs={jobs} radiusKm={radiusKm} className="relative mt-4 max-w-[17rem] sm:max-w-[20rem]" />
+          <Radar jobs={jobs} radiusKm={radiusKm} onRadiusChange={changeRadius} className="relative mt-4 max-w-[17rem] sm:max-w-[20rem]" />
           <RadiusBar value={radiusKm} onChange={changeRadius} className="relative mt-5" />
         </Panel>
 
@@ -316,15 +357,19 @@ export function HomeDashboard() {
           <div aria-hidden className="block-sol border-y-[2.5px] border-[color:var(--ink)] text-[0.82rem] font-extrabold tracking-wide uppercase">
             <Marquee
               speed={24}
-              items={latest.map((j) => (
-                <span key={j.id} className="inline-flex items-center gap-2">
+              items={(latest.length ? latest.map((j) => ({ id: j.id, text: `${j.title} · ${formatPay(j)}` })) : PLACEHOLDER_TAPE).map((t) => (
+                <span key={t.id} className="inline-flex items-center gap-2">
                   <Doodle name="estrella" color="var(--ink)" animated={false} className="size-3.5" />
-                  {j.title} · {formatPay(j)}
+                  {t.text}
                 </span>
               ))}
             />
           </div>
-          <ul className="p-2.5">
+          {loading ? <RowSkeletons count={4} className="p-2.5 px-5" /> : null}
+          {!loading && latest.length === 0 ? (
+            <p className="px-5 py-6 text-center text-muted-foreground">Aquí verás las vacantes nuevas en cuanto se publiquen.</p>
+          ) : null}
+          <ul className="p-2.5 empty:hidden">
             {latest.map((j, i) => (
               <li key={j.id} className="animate-rise" style={{ "--i": Math.min(i + 3, 8) } as Vars}>
                 <Link
@@ -337,7 +382,7 @@ export function HomeDashboard() {
                       {j.title} · <span className="tabular-nums">{formatPay(j)}</span>
                     </span>
                     <span className="block truncate text-sm text-muted-foreground">
-                      {COMPANY_BY_ID[j.companyId].name} · {formatMinutesAgo(j.postedMinutesAgo)}
+                      {companyName(j.companyId)} · {formatMinutesAgo(j.postedMinutesAgo)}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5 text-[0.9rem] font-semibold tabular-nums">
@@ -374,12 +419,14 @@ function HeroDecor() {
 
 function NearCard({
   job,
+  companyName,
   radiusKm,
   tone,
   last,
   tilt,
 }: {
   job: JobWithDistance;
+  companyName: string;
   radiusKm: number;
   tone: BlockTone;
   last: boolean;
@@ -415,7 +462,7 @@ function NearCard({
         {job.title}
       </span>
       <span className="mt-1 block truncate text-[0.95rem] text-muted-foreground">
-        <strong className="font-bold text-foreground tabular-nums">{formatPay(job)}</strong> · {COMPANY_BY_ID[job.companyId].name}
+        <strong className="font-bold text-foreground tabular-nums">{formatPay(job)}</strong> · {companyName}
       </span>
       <span
         aria-hidden

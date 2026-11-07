@@ -11,6 +11,7 @@ import {
   FilterHorizontalIcon,
   MapsLocation01Icon,
   Search01Icon,
+  Store01Icon,
   ToolsIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
@@ -30,12 +31,15 @@ import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle, Marquee } from "@/components/chamba/art/doodles";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
-import { COMPANY_BY_ID } from "@/lib/data/jobs";
+import { useCatalog } from "@/lib/data/catalog";
+import type { Company } from "@/lib/data/types";
+import { companyLabel } from "@/components/chamba/job-row";
 import type { CategoryId, EmploymentType, Job, Shift } from "@/lib/data/types";
 import { bandColor, bandFor, formatKm, RADIUS_STOPS } from "@/lib/geo";
 import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
 import { useApp, useJobsByDistance } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { CatalogErrorPanel, InkSkeleton, JobCardSkeletons, LiveEmptyNearby, LoadingNote, PickHomeBanner, StaleNote } from "./_seeker/states";
 
 const SHIFTS: Shift[] = ["Matutino", "Vespertino", "Nocturno", "Mixto", "Rotativo"];
 const TYPES: EmploymentType[] = ["Tiempo completo", "Medio tiempo", "Temporal", "Fines de semana"];
@@ -187,8 +191,17 @@ function TopicBubble({
 
 /* ------------------------------------------------------------------ job card */
 
-function JobBlockCard({ job, tone, index }: { job: Job & { km: number }; tone: BlockTone; index: number }) {
-  const company = COMPANY_BY_ID[job.companyId];
+function JobBlockCard({
+  job,
+  company,
+  tone,
+  index,
+}: {
+  job: Job & { km: number };
+  company: Company | undefined;
+  tone: BlockTone;
+  index: number;
+}) {
   const band = bandFor(job.km);
   const tilt = index % 2 === 0 ? 8 : -8;
   return (
@@ -221,12 +234,18 @@ function JobBlockCard({ job, tone, index }: { job: Job & { km: number }; tone: B
             Urge
           </span>
         ) : null}
+        {company && company.locations.length > 1 ? (
+          <span className="inline-flex h-7 items-center gap-1 rounded-md border-2 border-dashed border-ink bg-white/55 px-2 text-[0.75rem] font-bold tabular-nums">
+            <HugeiconsIcon icon={Store01Icon} className="size-3.5" strokeWidth={2.2} />
+            {company.locations.length} sucursales
+          </span>
+        ) : null}
       </span>
 
       <span className="mt-2.5 block font-display text-[1.35rem] leading-[1.1] font-extrabold tracking-[-0.03em] sm:text-[1.5rem]">
         {job.title}
       </span>
-      <span className="mt-1 block truncate text-[0.95rem] text-muted-foreground">{company.name}</span>
+      <span className="mt-1 line-clamp-2 text-[0.95rem] leading-snug text-muted-foreground">{companyLabel(job)}</span>
 
       <span className="mt-4 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
         <span className="font-display text-[1.9rem] leading-none font-extrabold tracking-[-0.04em] tabular-nums">
@@ -264,6 +283,10 @@ export function JobSearch() {
   const radiusKm = useApp((s) => s.radiusKm);
   const setRadius = useApp((s) => s.setRadius);
   const jobs = useJobsByDistance();
+  const catalog = useCatalog();
+  const { companyById, branchById } = catalog;
+  const loading = catalog.status === "loading";
+  const live = catalog.source === "live";
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -280,8 +303,12 @@ export function JobSearch() {
     if (type && j.type !== type) return false;
     if (minPay && weeklyPay(j) < minPay) return false;
     if (q) {
-      const company = COMPANY_BY_ID[j.companyId]?.name.toLowerCase() ?? "";
-      if (!j.title.toLowerCase().includes(q) && !company.includes(q)) return false;
+      const branch = branchById[j.branchId];
+      const haystack = [j.title, companyById[j.companyId]?.name, branch?.name, branch?.colonia ?? j.colonia]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
     }
     return true;
   });
@@ -346,6 +373,7 @@ export function JobSearch() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-12 lg:items-start">
+      <PickHomeBanner className="lg:col-span-12" />
       {/* ---------------------------------------------------------- hero: search + radius */}
       <section
         className={cn("relative isolate animate-rise overflow-hidden rounded-panel border-2 border-ink p-5 pb-20 block-uva sm:p-7 sm:pb-20 lg:col-span-12", HARD)}
@@ -376,7 +404,11 @@ export function JobSearch() {
             ¡Chamba a la vista!
           </p>
           <h2 id="buscar-hero" className="mt-2 pr-24 font-display text-[2.05rem] leading-[1.02] font-extrabold tracking-[-0.04em] sm:pr-0 sm:text-[2.6rem]">
-            <CountUp value={results.length} className="text-limon" />{" "}
+            {loading ? (
+              <InkSkeleton className="inline-block h-[1.6rem] w-12 bg-white/25! align-middle sm:h-8" />
+            ) : (
+              <CountUp value={results.length} className="text-limon" />
+            )}{" "}
             {results.length === 1 ? "vacante" : "vacantes"} a menos de{" "}
             <span className="whitespace-nowrap">{radiusKm} km</span>
           </h2>
@@ -384,12 +416,12 @@ export function JobSearch() {
           {/* Search */}
           <label className="mt-5 flex h-14 items-center gap-3 rounded-full border-2 border-ink bg-white px-5 text-ink shadow-[4px_4px_0_0_var(--ink)] focus-within:ring-4 focus-within:ring-limon sm:max-w-xl">
             <HugeiconsIcon icon={Search01Icon} className="size-5 shrink-0" strokeWidth={2} />
-            <span className="sr-only">Buscar por puesto o empresa</span>
+            <span className="sr-only">Buscar por puesto, empresa, sucursal o colonia</span>
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Puesto o empresa…"
+              placeholder="Puesto, empresa o colonia…"
               autoComplete="off"
               enterKeyHint="search"
               className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink/55"
@@ -547,13 +579,23 @@ export function JobSearch() {
           <h2 id="resultados" className="flex items-center gap-2 font-display text-[1.45rem] leading-tight font-extrabold tracking-[-0.03em]">
             {category ? CATEGORY_BY_ID[category].label : "Cerquita de ti"}
             <span className="grid h-7 min-w-7 -rotate-3 place-items-center rounded-md bg-ink px-2 font-sans text-[0.85rem] font-bold tracking-normal text-limon tabular-nums dark:bg-limon dark:text-ink">
-              {results.length}
+              {loading ? "…" : results.length}
             </span>
           </h2>
           <span className="shrink-0 text-sm text-muted-foreground">Más cerca primero</span>
         </div>
 
-        {results.length === 0 ? (
+        <StaleNote className="mb-2" />
+        {loading ? (
+          <>
+            <LoadingNote />
+            <JobCardSkeletons count={4} tall />
+          </>
+        ) : catalog.status === "error" ? (
+          <CatalogErrorPanel error={catalog.error} />
+        ) : results.length === 0 && live && activeFilters === 0 ? (
+          <LiveEmptyNearby radiusKm={radiusKm} onWiden={(r) => void setRadius(r)} />
+        ) : results.length === 0 ? (
           <Panel tone="cielo" className="animate-pop-in overflow-hidden text-center">
             <Scene name="vacio" className="mx-auto w-full max-w-[18rem]" />
             <h3 className="mt-3 font-display text-[1.6rem] leading-tight font-extrabold tracking-[-0.03em]">
@@ -579,7 +621,7 @@ export function JobSearch() {
           <ul className="grid grid-cols-1 gap-3.5">
             {results.map((j, i) => (
               <li key={j.id} className="min-w-0 animate-rise [--rise:22px]" style={{ "--i": Math.min(i, 8) } as CSSVars}>
-                <JobBlockCard job={j} tone={tones[i]} index={i} />
+                <JobBlockCard job={j} company={companyById[j.companyId]} tone={tones[i]} index={i} />
               </li>
             ))}
           </ul>

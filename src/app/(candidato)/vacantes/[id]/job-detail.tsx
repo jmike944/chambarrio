@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowLeft01Icon,
+  ArrowRight01Icon,
   Bicycle01Icon,
   Bookmark01Icon,
   Building06Icon,
@@ -18,6 +19,7 @@ import {
   Money03Icon,
   Note01Icon,
   Route01Icon,
+  Store01Icon,
   Tick02Icon,
   WalkingIcon,
   WhatsappIcon,
@@ -31,11 +33,13 @@ import { Scene } from "@/components/chamba/art/scenes";
 import { Mascot } from "@/components/chamba/art/mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
-import { COMPANY_BY_ID, JOB_BY_ID } from "@/lib/data/jobs";
-import { bandColor, bandFor, BAND_LABEL, commuteOptions, distanceKm, formatKm, type CommuteMode } from "@/lib/geo";
+import { useCatalog, useJob } from "@/lib/data/catalog";
+import type { Branch, Company, Job } from "@/lib/data/types";
+import { bandColor, bandFor, BAND_LABEL, commuteOptions, distanceKm, formatKm, type CommuteMode, type LatLng } from "@/lib/geo";
 import { formatMinutesAgo, formatMXN, formatNumber, formatPay, PERIOD_LONG } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { CatalogErrorPanel, GoneScene, InkSkeleton, LoadingNote } from "../_seeker/states";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
@@ -82,17 +86,309 @@ function BlockHeader({ icon, title, onCard }: { icon: typeof Car01Icon; title: s
   );
 }
 
+type BranchStop = Branch & { km: number; jobs: Job[] };
+
+/** Every branch of the company with its distance from home and open vacancies, nearest first. */
+function branchStops(company: Company, home: LatLng, jobsAtBranch: (branchId: string) => Job[]): BranchStop[] {
+  return company.locations
+    .map((b) => ({ ...b, km: distanceKm(home, b.location), jobs: jobsAtBranch(b.id) }))
+    .toSorted((a, b) => a.km - b.km);
+}
+
+/**
+ * A closer branch of the same company hiring for the same thing (same title first, then same category).
+ * Only counts when it saves a real trip (≥ 300 m).
+ */
+function closerAlternative(job: Job, stops: BranchStop[], km: number) {
+  const title = job.title.toLowerCase();
+  let best: { branch: BranchStop; job: Job; sameTitle: boolean } | null = null;
+  for (const b of stops) {
+    if (b.id === job.branchId || b.km > km - 0.3) continue;
+    const same = b.jobs.find((j) => j.title.toLowerCase() === title);
+    const match = same ?? b.jobs.find((j) => j.category === job.category);
+    if (!match) continue;
+    const cand = { branch: b, job: match, sameTitle: !!same };
+    // Same title beats same category; within a kind, the nearest wins (stops are sorted).
+    if (!best || (cand.sameTitle && !best.sameTitle)) best = cand;
+  }
+  return best;
+}
+
+/** "Hay una sucursal más cerca" nudge. */
+function CloserBranchNudge({
+  company,
+  alt,
+  savedKm,
+}: {
+  company: Company;
+  alt: NonNullable<ReturnType<typeof closerAlternative>>;
+  savedKm: number;
+}) {
+  return (
+    <section
+      aria-label="Sucursal más cerca"
+      className={cn("relative isolate animate-rise overflow-hidden rounded-panel border-2 border-ink p-4 sm:p-5", surface("lila"), HARD)}
+      style={{ "--i": 4 } as CSSVars}
+    >
+      <span aria-hidden className="pointer-events-none absolute -right-8 -bottom-10 -z-10 size-36 rounded-full bg-dots text-ink/12" />
+      <div className="flex items-start gap-3.5">
+        <span aria-hidden className="grid size-12 shrink-0 -rotate-6 place-items-center rounded-2xl border-2 border-ink bg-block-sol text-ink shadow-[2px_3px_0_0_var(--ink)]">
+          <HugeiconsIcon icon={Location01Icon} className="size-6" strokeWidth={2.2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.72rem] font-extrabold tracking-[0.14em] uppercase">¡Ojo! Te queda más cerquita</p>
+          <h2 className="mt-1 font-display text-[1.3rem] leading-[1.1] font-extrabold tracking-[-0.03em] sm:text-[1.45rem]">
+            Hay una sucursal más cerca: {alt.branch.name}, a {formatKm(alt.branch.km)}
+          </h2>
+          <p className="mt-1 text-[0.95rem] text-muted-foreground">
+            {company.name} también busca <strong className="font-semibold text-foreground">{alt.job.title}</strong> en {alt.branch.colonia}.
+            Te ahorras {formatKm(savedKm)} de camino.
+          </p>
+        </div>
+      </div>
+      <Button
+        asChild
+        variant="white"
+        size="lg"
+        className="mt-3.5 w-full border-2 border-ink bg-white text-ink hover:bg-white/90 sm:ml-[3.875rem] sm:w-auto dark:bg-white dark:text-ink dark:hover:bg-white/90"
+      >
+        <Link href={`/vacantes/${alt.job.id}`}>
+          Ver la de {alt.branch.name}
+          <HugeiconsIcon icon={ArrowRight01Icon} className="size-5" strokeWidth={2.2} />
+        </Link>
+      </Button>
+    </section>
+  );
+}
+
+/** "Sucursales de <empresa>": every site, nearest first, with its vacancies as links. */
+function BranchesPanel({ company, stops, job }: { company: Company; stops: BranchStop[]; job: Job }) {
+  const nearestId = stops[0]?.id;
+  const total = stops.reduce((n, b) => n + b.jobs.length, 0);
+  return (
+    <Panel aria-labelledby="sucursales-titulo" className="border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
+      <header className="mb-1 flex items-center gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white dark:bg-limon dark:text-ink">
+          <HugeiconsIcon icon={Store01Icon} className="size-5" strokeWidth={2} />
+        </span>
+        <h2 id="sucursales-titulo" className="min-w-0 font-display text-[1.35rem] leading-tight font-extrabold tracking-[-0.03em]">
+          Sucursales de {company.name}
+        </h2>
+      </header>
+      <p className="mb-4 pl-14 text-[0.92rem] text-muted-foreground">
+        {stops.length} lugares · {total} {total === 1 ? "vacante abierta" : "vacantes abiertas"}
+      </p>
+      <ol className="space-y-2.5">
+        {stops.map((b) => {
+          const here = b.id === job.branchId;
+          const nearest = b.id === nearestId;
+          const band = bandFor(b.km);
+          return (
+            <li
+              key={b.id}
+              aria-current={here ? "location" : undefined}
+              className={cn(
+                "rounded-tile border-2 p-3 sm:p-3.5",
+                here ? "border-ink bg-block-sol text-ink" : "border-border bg-tile",
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden
+                  className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-full border-2 border-ink bg-white text-ink"
+                >
+                  <HugeiconsIcon icon={Location01Icon} className="size-5" strokeWidth={2.2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-[1.05rem] leading-tight font-bold">{b.name}</span>
+                    {here ? (
+                      <span className="inline-flex h-6 items-center rounded-md bg-ink px-1.5 text-[0.68rem] font-extrabold tracking-[0.1em] text-limon uppercase">
+                        Esta vacante
+                      </span>
+                    ) : null}
+                    {nearest ? (
+                      <span className="inline-flex h-6 items-center gap-1 rounded-md border-2 border-ink bg-block-menta px-1.5 text-[0.68rem] font-extrabold tracking-[0.1em] text-ink uppercase">
+                        La más cerca
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className={cn("mt-0.5 text-[0.9rem]", here ? "text-ink/75" : "text-muted-foreground")}>
+                    {b.colonia}
+                    {b.id === company.locations[0].id ? " · Matriz" : null}
+                  </p>
+                </div>
+                <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-ink px-2.5 text-[0.85rem] font-semibold text-white tabular-nums">
+                  <span aria-hidden className="size-2 rounded-full" style={{ background: bandColor(band) }} />
+                  {formatKm(b.km)}
+                </span>
+              </div>
+              {b.jobs.length > 0 ? (
+                <ul aria-label={`Vacantes en ${b.name}`} className="mt-2.5 flex flex-wrap gap-2 sm:pl-[3.25rem]">
+                  {b.jobs.map((j) =>
+                    j.id === job.id ? (
+                      <li key={j.id}>
+                        <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border-2 border-dashed border-ink/50 px-3 text-[0.9rem] font-semibold">
+                          <CategoryIcon category={j.category} size="xs" className="-ml-1 size-6!" />
+                          {j.title}
+                          <span className="sr-only">(estás viendo esta)</span>
+                        </span>
+                      </li>
+                    ) : (
+                      <li key={j.id}>
+                        <Link
+                          href={`/vacantes/${j.id}`}
+                          className="group press inline-flex min-h-11 items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3 text-[0.9rem] font-semibold text-ink outline-none hover:bg-block-limon focus-visible:ring-3 focus-visible:ring-ring/60"
+                        >
+                          <CategoryIcon category={j.category} size="xs" className="-ml-1 size-6!" />
+                          {j.title}
+                          <HugeiconsIcon icon={ArrowRight01Icon} className="size-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.4} />
+                        </Link>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              ) : (
+                <p className={cn("mt-2 text-[0.88rem] sm:pl-[3.25rem]", here ? "text-ink/75" : "text-muted-foreground")}>
+                  Sin vacantes por ahora.
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </Panel>
+  );
+}
+
+/** Back link to the list (shared by every state of the page). */
+function BackLink() {
+  return (
+    <Link
+      href="/vacantes"
+      className={cn(
+        "press inline-flex h-11 items-center gap-2 rounded-full border-2 border-ink bg-card pr-4 pl-2.5 font-semibold outline-none hover:-translate-x-0.5 focus-visible:ring-3 focus-visible:ring-ring/50",
+        HARD_SM,
+      )}
+    >
+      <HugeiconsIcon icon={ArrowLeft01Icon} className="size-5" strokeWidth={2.2} />
+      Vacantes
+    </Link>
+  );
+}
+
+/** Same footprint as the real page (hero, stat tiles, description), so nothing jumps. */
+function DetailSkeleton() {
+  return (
+    <div className="pt-5 pb-48 lg:pt-10 lg:pb-0">
+      <LoadingNote>Cargando la vacante…</LoadingNote>
+      <BackLink />
+      <div aria-hidden className="mt-5 grid gap-5 lg:grid-cols-12">
+        <div className="min-w-0 space-y-5 lg:col-span-8">
+          <div className={cn("relative h-[19rem] overflow-hidden rounded-panel border-2 border-ink p-5 sm:h-[21rem] sm:p-7", surface("cielo"), HARD)}>
+            <InkSkeleton className="h-7 w-28 rounded-md" />
+            <InkSkeleton className="mt-4 h-10 w-3/4" />
+            <InkSkeleton className="mt-3 h-5 w-1/2" />
+            <InkSkeleton className="mt-8 h-12 w-48" />
+            <InkSkeleton className="absolute top-4 right-4 size-28 rounded-full sm:size-44" />
+          </div>
+          <div className="grid grid-cols-3 gap-2.5 pt-4 sm:gap-3">
+            {PASTELS.slice(0, 3).map((t) => (
+              <div key={t} className={cn("h-28 rounded-tile border-2 border-ink p-3", surface(t), HARD_SM)}>
+                <InkSkeleton className="h-4 w-14" />
+                <InkSkeleton className="mt-3 h-7 w-20 max-w-full" />
+              </div>
+            ))}
+          </div>
+          <div className={cn("h-48 rounded-panel border-2 border-ink bg-card p-5", HARD)}>
+            <InkSkeleton className="h-6 w-40" />
+            <InkSkeleton className="mt-4 h-4 w-full" />
+            <InkSkeleton className="mt-2 h-4 w-5/6" />
+            <InkSkeleton className="mt-2 h-4 w-2/3" />
+          </div>
+        </div>
+        <div className="hidden lg:col-span-4 lg:block">
+          <div className={cn("h-80 rounded-panel border-2 border-ink p-6 block-uva", HARD)}>
+            <InkSkeleton className="h-4 w-32 bg-white/25!" />
+            <InkSkeleton className="mt-3 h-8 w-4/5 bg-white/25!" />
+            <InkSkeleton className="mt-8 h-14 w-full rounded-full bg-white/25!" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Not found / closed / paused. Shown only once the catalog is ready. */
+function DetailGone() {
+  return (
+    <div className="pt-5 pb-28 lg:pt-10">
+      <BackLink />
+      <Panel tone="cielo" className={cn("mx-auto mt-6 max-w-xl animate-pop-in overflow-hidden border-2 border-ink text-center", HARD)}>
+        <GoneScene />
+        <h1 className="mt-3 font-display text-[1.7rem] leading-tight font-extrabold tracking-[-0.03em]">Esta vacante ya cerró</h1>
+        <p className="mx-auto mt-1.5 max-w-sm text-muted-foreground">
+          Ya no recibe postulaciones o el enlace no es correcto. Hay más chamba cerquita de tu casa.
+        </p>
+        <Button asChild size="lg" className="mt-5">
+          <Link href="/vacantes">
+            Ver vacantes cerca
+            <HugeiconsIcon icon={ArrowRight01Icon} className="size-5" strokeWidth={2.2} />
+          </Link>
+        </Button>
+      </Panel>
+    </div>
+  );
+}
+
+/**
+ * Reads the vacancy from the catalog (demo mock or live Supabase; live fetches it by id when it isn't
+ * in the nearby list). Not-found only once the catalog is ready.
+ */
 export function JobDetail({ jobId }: { jobId: string }) {
-  const job = JOB_BY_ID[jobId];
-  const company = COMPANY_BY_ID[job.companyId];
+  const { status, error, job, company, branch } = useJob(jobId);
+  const { jobsAtBranch, source } = useCatalog();
+  if (job && company) {
+    return <JobDetailView job={job} company={company} branch={branch} jobsAtBranch={jobsAtBranch} live={source === "live"} />;
+  }
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") {
+    return (
+      <div className="pt-5 pb-28 lg:pt-10">
+        <BackLink />
+        <CatalogErrorPanel error={error} title="No pudimos cargar esta vacante" className="mx-auto mt-6 max-w-xl" />
+      </div>
+    );
+  }
+  return <DetailGone />;
+}
+
+function JobDetailView({
+  job,
+  company,
+  branch,
+  jobsAtBranch,
+  live,
+}: {
+  job: Job;
+  company: Company;
+  branch: Branch | undefined;
+  jobsAtBranch: (branchId: string) => Job[];
+  live: boolean;
+}) {
+  const jobId = job.id;
   const home = useApp((s) => s.home);
+  const signedIn = useApp((s) => s.signedIn);
   const saved = useApp((s) => s.saved.includes(jobId));
   const applied = useApp((s) => s.applications.some((a) => a.jobId === jobId));
   const apply = useApp((s) => s.apply);
   const toggleSaved = useApp((s) => s.toggleSaved);
   const fire = useConfetti();
 
+  const multi = company.locations.length > 1;
   const km = distanceKm(home, job.location);
+  const stops = multi ? branchStops(company, home, jobsAtBranch) : [];
+  const alt = multi ? closerAlternative(job, stops, km) : null;
   const band = bandFor(km);
   const commutes = commuteOptions(km);
   const fastest = commutes.reduce((a, b) => (b.minutes < a.minutes ? b : a), commutes[0]);
@@ -112,22 +408,48 @@ export function JobDetail({ jobId }: { jobId: string }) {
     .join("")
     .toUpperCase();
 
-  function onApply(e: React.MouseEvent<HTMLButtonElement>) {
-    apply(jobId);
-    fire({ origin: e.currentTarget, count: 56, colors: CONFETTI });
+  // Live visitors without a session can't apply or save: send them to sign in instead.
+  const needsAccount = live && !signedIn;
+  const hasPhone = !!job.phone;
+
+  async function onApply(e: React.MouseEvent<HTMLButtonElement>) {
+    const origin = e.currentTarget;
+    if (!live) {
+      apply(jobId);
+      fire({ origin, count: 56, colors: CONFETTI });
+      toast.success("¡Ya quedó! Postulación enviada", {
+        description: `${company.name} ya tiene tu solicitud. Te avisamos por WhatsApp.`,
+      });
+      return;
+    }
+    // Live: the button flips to "Ya te postulaste" at once; celebrate only once the server agrees
+    // (on error the store rolls back and toasts by itself).
+    const r = await apply(jobId);
+    if (r.error) return;
+    fire({ origin, count: 56, colors: CONFETTI });
     toast.success("¡Ya quedó! Postulación enviada", {
-      description: `${company.name} ya tiene tu solicitud. Te avisamos por WhatsApp.`,
+      description: `${company.name} ya tiene tu solicitud. Sigue el avance en tus postulaciones.`,
     });
   }
 
-  function onSave() {
-    toggleSaved(jobId);
-    toast(saved ? "Quitada de tus guardadas" : "Guardada para después");
+  async function onSave() {
+    if (!live) {
+      toggleSaved(jobId);
+      toast(saved ? "Quitada de tus guardadas" : "Guardada para después");
+      return;
+    }
+    const r = await toggleSaved(jobId);
+    if (!r.error) toast(saved ? "Quitada de tus guardadas" : "Guardada para después");
   }
 
   /** CTA cluster — lives on the violet action block (mobile bar; `stacked` in the narrower desktop aside). */
   const renderActions = (stacked = false) => (
     <div className="flex flex-col gap-2.5">
+      {needsAccount ? (
+        <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
+          <Link href="/entrar">Entra para postularte</Link>
+        </Button>
+      ) : (
       <Button
         variant="lime"
         size="xl"
@@ -144,7 +466,10 @@ export function JobDetail({ jobId }: { jobId: string }) {
           "¡Postularme!"
         )}
       </Button>
-      <div className={cn("grid gap-2.5", stacked ? "grid-cols-2" : "grid-cols-[1fr_1fr_auto]")}>
+      )}
+      <div className={cn("grid gap-2.5", !hasPhone ? "grid-cols-1" : stacked ? "grid-cols-2" : "grid-cols-[1fr_1fr_auto]")}>
+        {hasPhone ? (
+        <>
         <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
           <a href={`https://wa.me/52${job.phone}?text=${waText}`} target="_blank" rel="noopener noreferrer">
             <HugeiconsIcon icon={WhatsappIcon} className="size-5 text-nopal" strokeWidth={2} />
@@ -157,20 +482,24 @@ export function JobDetail({ jobId }: { jobId: string }) {
             Llamar
           </a>
         </Button>
+        </>
+        ) : null}
         <Button
           variant="white"
-          size={stacked ? "lg" : "icon-lg"}
+          size={stacked || !hasPhone ? "lg" : "icon-lg"}
           className={cn(
             "border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink",
             saved && "bg-block-sol hover:bg-block-sol dark:bg-block-sol",
-            stacked && "col-span-2 w-full",
+            stacked && hasPhone && "col-span-2",
+            (stacked || !hasPhone) && "w-full",
           )}
-          onClick={onSave}
+          onClick={needsAccount ? undefined : onSave}
+          disabled={needsAccount}
           aria-pressed={saved}
           aria-label={saved ? "Quitar de guardadas" : "Guardar vacante"}
         >
           <HugeiconsIcon icon={Bookmark01Icon} className="size-5" strokeWidth={saved ? 2.6 : 2} />
-          {stacked ? <span aria-hidden>{saved ? "Guardada" : "Guardar para después"}</span> : null}
+          {stacked || !hasPhone ? <span aria-hidden>{saved ? "Guardada" : "Guardar para después"}</span> : null}
         </Button>
       </div>
     </div>
@@ -178,16 +507,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
 
   return (
     <div className="pt-5 pb-48 lg:pt-10 lg:pb-0">
-      <Link
-        href="/vacantes"
-        className={cn(
-          "press inline-flex h-11 items-center gap-2 rounded-full border-2 border-ink bg-card pr-4 pl-2.5 font-semibold outline-none hover:-translate-x-0.5 focus-visible:ring-3 focus-visible:ring-ring/50",
-          HARD_SM,
-        )}
-      >
-        <HugeiconsIcon icon={ArrowLeft01Icon} className="size-5" strokeWidth={2.2} />
-        Vacantes
-      </Link>
+      <BackLink />
 
       <div className="mt-5 grid gap-5 lg:grid-cols-12">
         <div className="min-w-0 space-y-5 lg:col-span-8">
@@ -232,8 +552,11 @@ export function JobDetail({ jobId }: { jobId: string }) {
               >
                 {job.title}
               </h1>
-              <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[1.02rem] font-medium">
-                {company.name}
+              <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 pr-16 text-[1.02rem] font-medium sm:pr-48">
+                <span>
+                  {company.name}
+                  {multi && branch ? <span className="font-semibold"> · {branch.name}</span> : null}
+                </span>
                 {company.verified ? (
                   <span className="inline-flex h-7 items-center gap-1 rounded-full bg-ink px-2.5 text-[0.8rem] font-semibold text-white">
                     <HugeiconsIcon icon={CheckmarkBadge01Icon} className="size-4 text-limon" strokeWidth={2} />
@@ -296,6 +619,8 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </div>
             ))}
           </div>
+
+          {alt ? <CloserBranchNudge company={company} alt={alt} savedKm={km - alt.branch.km} /> : null}
 
           {/* ------------------------------------------------ success moment */}
           {applied ? (
@@ -441,6 +766,13 @@ export function JobDetail({ jobId }: { jobId: string }) {
             </Panel>
           </Reveal>
 
+          {/* ------------------------------------------------ branches (multi-location companies) */}
+          {multi ? (
+            <Reveal inView>
+              <BranchesPanel company={company} stops={stops} job={job} />
+            </Reveal>
+          ) : null}
+
           {/* ------------------------------------------------ company */}
           <Reveal inView>
             <Panel tone={tones[0]} className={cn("border-2 border-ink", HARD)}>
@@ -457,13 +789,13 @@ export function JobDetail({ jobId }: { jobId: string }) {
                 </div>
               </div>
               <ul className="mt-4 flex flex-wrap gap-2 text-[0.9rem] font-semibold">
-                {[company.kind, company.employees, company.colonia].map((t) => (
+                {[company.kind, company.employees, multi ? `${company.locations.length} sucursales` : job.colonia].filter(Boolean).map((t) => (
                   <li key={t} className="inline-flex h-8 items-center rounded-full bg-white/60 px-3">
                     {t}
                   </li>
                 ))}
               </ul>
-              <p className="mt-4 text-[1.02rem] leading-relaxed">{company.about}</p>
+              {company.about ? <p className="mt-4 text-[1.02rem] leading-relaxed">{company.about}</p> : null}
             </Panel>
           </Reveal>
         </div>
@@ -477,7 +809,16 @@ export function JobDetail({ jobId }: { jobId: string }) {
             <span aria-hidden className="pointer-events-none absolute -right-12 -bottom-12 -z-10 size-48 rounded-full bg-dots text-white/10" />
             <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">¡Ándale, no la dejes ir!</p>
             <p className="mt-2 font-display text-[1.6rem] leading-[1.05] font-extrabold tracking-[-0.03em]">
-              <CountUp value={job.applicants} className="text-limon" /> personas ya se postularon
+              {job.applicants > 0 ? (
+                <>
+                  <CountUp value={job.applicants} className="text-limon" />{" "}
+                  {job.applicants === 1 ? "persona ya se postuló" : "personas ya se postularon"}
+                </>
+              ) : (
+                <>
+                  Sé <span className="text-limon">de los primeros</span> en postularte
+                </>
+              )}
             </p>
             <p className="mt-1.5 mb-5 text-primary-foreground/80">Contacta directo a {company.name}</p>
             {renderActions(true)}
