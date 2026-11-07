@@ -342,7 +342,7 @@ export function LiveDashboard() {
           <HugeiconsIcon icon={ComingSoon01Icon} className="mt-0.5 size-5 shrink-0" strokeWidth={2} />
           <p className="text-[0.95rem] leading-snug">
             <strong className="font-bold">Pagos: próximamente.</strong> Ya puedes publicar y recibir postulaciones. Muy pronto
-            podrás desbloquear nombres y WhatsApp, o elegir un plan.
+            podrás desbloquear nombres y teléfonos, o elegir un plan.
           </p>
         </div>
         <div className="mt-5 flex items-end gap-3">

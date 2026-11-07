@@ -267,7 +267,7 @@ export function SignIn() {
   return (
     <FlowShell
       tone="mandarina"
-      art={{ scene: "whatsapp" }}
+      art={{ scene: "codigo" }}
       title="Entra a tu cuenta"
       stepKey={`entrar-${mode}`}
       hint={copy.hint}

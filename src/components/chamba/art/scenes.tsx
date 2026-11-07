@@ -20,7 +20,7 @@ export type SceneName =
   | "vacio" // empty state: Chambita napping on a bench / tumbleweed, zZz
   | "contratado" // high-five / handshake + party hat: you got the job
   | "negocio" // storefront with striped awning + "open" sign, customers — employer side
-  | "whatsapp" // phone with chat bubbles + a code bubble, Chambita waving — sign-in / OTP
+  | "codigo" // phone with chat bubbles + a code bubble, Chambita waving — sign-in / OTP
   | "mapa" // folded map with bouncing pins and a dashed route
   | "ahorro" // steel savings box + coins + clock: saved time & money from working close
   | "equipo"; // a small crew of workers (hard hat, apron, cap) waving — employer hiring
@@ -34,7 +34,7 @@ export const SCENE_RATIO: Record<SceneName, number> = {
   vacio: 1.25,
   contratado: 1,
   negocio: 1,
-  whatsapp: 1,
+  codigo: 1,
   mapa: 1,
   ahorro: 1.5,
   equipo: 2,
@@ -970,7 +970,7 @@ function ThumbsUp() {
   );
 }
 
-function Whatsapp() {
+function Codigo() {
   return (
     <>
       <Halftone x={14} y={18} cols={6} rows={9} gap={15} r={4} />
@@ -1192,8 +1192,8 @@ export function Scene({ name, className, animated = true, title }: SceneProps) {
     case "negocio":
       art = <Negocio />;
       break;
-    case "whatsapp":
-      art = <Whatsapp />;
+    case "codigo":
+      art = <Codigo />;
       break;
     case "mapa":
       art = <Mapa />;

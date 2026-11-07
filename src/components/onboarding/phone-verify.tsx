@@ -144,13 +144,13 @@ export function useCountdown() {
 }
 
 /**
- * DEMO ONLY: WhatsApp number → 6-digit code. Demo mode accepts any 6 digits.
+ * DEMO ONLY: mobile number → 6-digit code. Demo mode accepts any 6 digits.
  * Renders its own pinned action, so the parent step passes no footer.
  */
 export function PhoneVerify({
   initialPhone = "",
   onVerified,
-  inputId = "whatsapp",
+  inputId = "celular",
 }: {
   initialPhone?: string;
   onVerified: (phone: string) => void;
@@ -186,7 +186,7 @@ export function PhoneVerify({
         }}
       >
         <Slab tone="cielo" index={1} className="pt-4">
-          <PhoneField id={inputId} value={phone} onChange={setPhone} label="Número de WhatsApp (10 dígitos)" />
+          <PhoneField id={inputId} value={phone} onChange={setPhone} label="Tu celular (10 dígitos)" />
         </Slab>
         <Slab
           tone="limon"

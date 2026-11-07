@@ -127,7 +127,7 @@ export function CandidateFlow() {
   // Real accounts whenever Supabase is configured and we're not inside the demo.
   const real = isLiveAvailable && appMode !== "demo";
   const liveIn = appMode === "live" && signedIn;
-  const [whatsapp, setWhatsapp] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const jobs = useJobsByDistance();
   const inRadius = jobs.filter((j) => j.km <= radiusKm).length;
@@ -151,7 +151,7 @@ export function CandidateFlow() {
   // Signed up with an email that already has a finished profile: off to the app.
   const armExit = useExistingAccountExit("candidato", (s) => s.onboarded);
 
-  const phoneDigits = (whatsapp || storePhone.replace(/\D/g, "").replace(/^52(?=\d{10}$)/, "")).slice(0, 10);
+  const phoneDigits = (contactPhone || storePhone.replace(/\D/g, "").replace(/^52(?=\d{10}$)/, "")).slice(0, 10);
   const needPhone = real;
 
   async function askNotifications() {
@@ -233,7 +233,7 @@ export function CandidateFlow() {
               href="/entrar"
               className="rounded font-bold text-foreground underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              {real ? "Entra aquí" : "Entra con tu WhatsApp"}
+              {real ? "Entra aquí" : "Entra con tu celular"}
             </Link>
           </p>
         </FlowShell>
@@ -250,7 +250,7 @@ export function CandidateFlow() {
             onVerified={({ channel, to }) => {
               armExit();
               if (channel === "sms") {
-                setWhatsapp(to);
+                setContactPhone(to);
                 void setPhone(to);
               }
               setStep(2);
@@ -263,9 +263,9 @@ export function CandidateFlow() {
           step={1}
           total={TOTAL}
           tone="mandarina"
-          art={{ scene: "whatsapp" }}
-          title="Tu WhatsApp"
-          hint="Te mandamos un código para confirmar que eres tú. Las empresas te contactan por aquí."
+          art={{ scene: "codigo" }}
+          title="Tu celular"
+          hint="Te mandamos un código por SMS para confirmar que eres tú. Las empresas te llaman o te escriben por aquí."
           aside="Sin contraseñas que recordar. Solo tu número."
           onBack={back}
         >
@@ -330,9 +330,9 @@ export function CandidateFlow() {
             </Slab>
             {needPhone ? (
               <Slab tone="menta" index={2} className="mt-5 pt-4">
-                <PhoneField id="contact-whatsapp" value={phoneDigits} onChange={setWhatsapp} label="Tu WhatsApp" />
+                <PhoneField id="contact-phone" value={phoneDigits} onChange={setContactPhone} label="Tu celular" />
                 <p className="mt-3 text-[0.9rem] font-medium text-muted-foreground">
-                  Solo lo ve la empresa cuando te postulas y decide contactarte.
+                  Solo lo ve la empresa cuando te postulas y decide contactarte, por llamada o SMS.
                 </p>
               </Slab>
             ) : null}
@@ -552,7 +552,7 @@ export function CandidateFlow() {
               steps={[
                 { title: "Crea tu cuenta", meta: "¡Hecho!" },
                 { title: "Elige una vacante cerca", body: "Ordenadas por distancia a tu casa." },
-                { title: "Postúlate en un toque", body: "Sin currículum. Te contactan por WhatsApp." },
+                { title: "Postúlate en un toque", body: "Sin currículum. Te contactan por llamada o SMS." },
               ]}
             />
           </Slab>

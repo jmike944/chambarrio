@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Add01Icon, ArrowRight01Icon, LockIcon, UserIcon, WhatsappIcon } from "@hugeicons/core-free-icons";
+import { Add01Icon, ArrowRight01Icon, LockIcon, Message01Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BLOCK_CLASS, DistanceRing, Eyebrow, HeroCard, Panel, rotateTone } from "@/components/chamba/primitives";
@@ -22,7 +22,7 @@ import { InitialsAvatar, LockAvatar, RadiusChips } from "../wait-ring";
 
 /*
  * Live /empresa/candidatos: the people who applied to my vacancies (there is no "people near you
- * who didn't apply" source, by design). Colonia + rounded km always; name / WhatsApp only once
+ * who didn't apply" source, by design). Colonia + rounded km always; name / phone only once
  * the vacancy is unlocked.
  */
 
@@ -227,9 +227,9 @@ export function LiveCandidates() {
                   <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
                     {named && phone.length >= 10 ? (
                       <Button asChild className="h-12 border-2 border-ink bg-ink px-4 text-white hover:bg-ink/90 dark:border-black/70">
-                        <a href={`https://wa.me/${phone}`} target="_blank" rel="noopener noreferrer">
-                          <HugeiconsIcon icon={WhatsappIcon} className="size-5 text-limon" strokeWidth={1.8} />
-                          WhatsApp
+                        <a href={`sms:+${phone}`}>
+                          <HugeiconsIcon icon={Message01Icon} className="size-5 text-limon" strokeWidth={1.8} />
+                          SMS
                         </a>
                       </Button>
                     ) : null}
@@ -258,7 +258,7 @@ export function LiveCandidates() {
           <div>
             <Eyebrow tone="lime">Privacidad</Eyebrow>
             <p className="mt-1 text-[0.98rem] leading-snug">
-              Mostramos la colonia y una distancia aproximada. Nombres y WhatsApp se ven al desbloquear la vacante (pagos
+              Mostramos la colonia y una distancia aproximada. Nombres y teléfonos se ven al desbloquear la vacante (pagos
               próximamente). La dirección exacta de cada persona nunca se comparte.
             </p>
           </div>

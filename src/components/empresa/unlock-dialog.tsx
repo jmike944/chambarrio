@@ -83,7 +83,7 @@ export function UnlockDialog({
         <div className="grid gap-4 p-6">
           <AlertDialogDescription className="text-left text-[0.98rem] leading-relaxed text-pretty text-muted-foreground">
             {count === 1 ? "1 persona se postuló" : `${count} personas se postularon`}. Al desbloquear ves sus nombres, su
-            experiencia y su WhatsApp para contactarlas, incluidas las que se postulen durante el mes.
+            experiencia y su teléfono para contactarlas, incluidas las que se postulen durante el mes.
           </AlertDialogDescription>
           <div className={cn("block-sol rounded-tile p-4", OUTLINE, HARD_SM)}>
             <p className="flex items-baseline gap-2">

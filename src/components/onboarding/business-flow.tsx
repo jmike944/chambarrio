@@ -486,9 +486,9 @@ export function BusinessFlow() {
             step={3}
             total={TOTAL}
             tone="mandarina"
-            art={{ scene: "whatsapp" }}
-            title="WhatsApp de contacto"
-            hint="Aquí te llegan los avisos cuando alguien cerca se postule."
+            art={{ scene: "codigo" }}
+            title="Teléfono de contacto"
+            hint="Aquí te avisamos por SMS cuando alguien cerca se postule."
             aside="Tu cuenta ya está lista. Solo falta cómo contactarte."
             onBack={back}
             footer={
@@ -508,10 +508,10 @@ export function BusinessFlow() {
             >
               <Slab tone="cielo" index={1} className="pt-4">
                 <PhoneField
-                  id="business-whatsapp"
+                  id="business-phone"
                   value={contact}
                   onChange={setPhoneLocal}
-                  label="Número de WhatsApp (10 dígitos)"
+                  label="Celular o teléfono (10 dígitos)"
                 />
               </Slab>
             </form>
@@ -523,15 +523,15 @@ export function BusinessFlow() {
           step={3}
           total={TOTAL}
           tone="mandarina"
-          art={{ scene: "whatsapp" }}
-          title="WhatsApp de contacto"
-          hint="Aquí te llegan los avisos cuando alguien cerca se postule."
+          art={{ scene: "codigo" }}
+          title="Teléfono de contacto"
+          hint="Aquí te avisamos por SMS cuando alguien cerca se postule."
           aside="Sin contraseñas que recordar. Solo tu número."
           onBack={back}
         >
           <DemoVerifyNote />
           <PhoneVerify
-            inputId="business-whatsapp"
+            inputId="business-phone"
             initialPhone={phone}
             onVerified={(p) => {
               setPhoneLocal(p);

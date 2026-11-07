@@ -17,7 +17,7 @@ import {
   SquareUnlock02Icon,
   Store01Icon,
   UserGroupIcon,
-  WhatsappIcon,
+  Message01Icon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -127,7 +127,7 @@ function VacancyNotFound() {
   );
 }
 
-/** wa.me / tel: links from a stored phone (E.164 digits, with or without "+"). */
+/** sms: / tel: links from a stored phone (E.164 digits, with or without "+"). */
 function phoneDigits(phone: string | null): string | null {
   const d = phone?.replace(/\D/g, "") ?? "";
   return d.length >= 10 ? d : null;
@@ -361,7 +361,7 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
 
           {unlocked ? (
             <p className="mt-4 text-[1.02rem] leading-relaxed text-muted-foreground">
-              Ya puedes ver quién se postuló y escribirle por WhatsApp. Responde en menos de 24 horas para no perder a los
+              Ya puedes ver quién se postuló y llamarle o mandarle un SMS. Responde en menos de 24 horas para no perder a los
               mejores.
             </p>
           ) : (
@@ -532,9 +532,9 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
                       {open && phone ? (
                         <>
                           <Button asChild size="lg" className={cn("h-12 px-3", INK_BUTTON)}>
-                            <a href={`https://wa.me/${phone}`} target="_blank" rel="noopener noreferrer">
-                              <HugeiconsIcon icon={WhatsappIcon} className="size-5" strokeWidth={2} />
-                              WhatsApp
+                            <a href={`sms:+${phone}`}>
+                              <HugeiconsIcon icon={Message01Icon} className="size-5" strokeWidth={2} />
+                              SMS
                             </a>
                           </Button>
                           <Button asChild size="lg" className={cn("h-12 px-3", WHITE_BUTTON)}>
@@ -577,10 +577,10 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
                       <Button
                         size="lg"
                         className={cn("h-12 px-3", INK_BUTTON)}
-                        onClick={() => toast.success(`Abriendo WhatsApp con ${name.split(" ")[0]}…`)}
+                        onClick={() => toast.success(`Abriendo SMS para ${name.split(" ")[0]}…`)}
                       >
-                        <HugeiconsIcon icon={WhatsappIcon} className="size-5" strokeWidth={2} />
-                        WhatsApp
+                        <HugeiconsIcon icon={Message01Icon} className="size-5" strokeWidth={2} />
+                        SMS
                       </Button>
                       <Button
                         size="lg"

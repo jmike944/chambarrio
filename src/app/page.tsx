@@ -48,9 +48,9 @@ const PHILOSOPHY: { line: string; fact: string; tone: BlockTone }[] = [
 const PHILO_SPAN = ["md:col-span-2", "md:col-span-4", "md:col-span-3", "md:col-span-3"];
 
 const STEPS: { title: string; body: string; tone: BlockTone; scene: SceneName; tilt: string }[] = [
-  { title: "Entra con tu WhatsApp", body: "Sin contraseñas y sin currículum. Te mandamos un código y listo.", tone: "durazno", scene: "whatsapp", tilt: "-rotate-[1.6deg]" },
+  { title: "Entra con tu celular o correo", body: "Sin currículum. Te mandamos un código por SMS o correo y listo.", tone: "durazno", scene: "codigo", tilt: "-rotate-[1.6deg]" },
   { title: "Elige qué tan lejos", body: "2, 5, 10 o 15 km de tu casa. Ves sueldo, horario y prestaciones antes de moverte.", tone: "cielo", scene: "mapa", tilt: "rotate-[1.2deg]" },
-  { title: "Habla directo con la empresa", body: "Postúlate con un toque o escríbeles por WhatsApp. Sin intermediarios.", tone: "limon", scene: "contratado", tilt: "-rotate-[0.8deg]" },
+  { title: "Habla directo con la empresa", body: "Postúlate con un toque o llámales directo. Sin intermediarios.", tone: "limon", scene: "contratado", tilt: "-rotate-[0.8deg]" },
 ];
 
 const BENEFITS: { icon: typeof Clock01Icon; title: string; body: string; tone: BlockTone }[] = [
@@ -187,7 +187,7 @@ export default function LandingPage() {
               </h1>
               <p className="mt-5 max-w-[32rem] text-[1.08rem] leading-relaxed font-medium sm:text-lg">
                 Vacantes a 2, 5, 10 o 15 km de tu casa en Saltillo. Gratis para quien busca trabajo, sin currículum y
-                desde tu WhatsApp.
+                desde tu celular.
               </p>
               <div className="mt-7 flex flex-col gap-3.5 sm:flex-row sm:flex-wrap [&>a]:whitespace-nowrap">
                 <Link href="/bienvenida" className={cn(chunky("ink"), "group")}>
@@ -277,7 +277,7 @@ export default function LandingPage() {
                 reverse
                 speed={26}
                 className="py-1.5"
-                items={["Sin currículum", "Gratis", "Cerca de tu casa", "Desde tu WhatsApp", "Saltillo", "Ramos Arizpe"].map((t) => (
+                items={["Sin currículum", "Gratis", "Cerca de tu casa", "Desde tu celular", "Saltillo", "Ramos Arizpe"].map((t) => (
                   <span key={t} className="inline-flex items-center gap-4 pr-2 font-display text-[1rem] font-extrabold tracking-[0.12em] uppercase">
                     {t}
                     <Doodle name="estrella" color="var(--block-mandarina)" className="size-5" />

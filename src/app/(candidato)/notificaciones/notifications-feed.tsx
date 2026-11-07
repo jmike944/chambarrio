@@ -61,7 +61,7 @@ const NEW_JOB_WINDOW = 48 * 60;
 /** Application updates worth a notice (the company moved it). "enviada" is the user's own action. */
 const APP_NOTICE: Partial<Record<ApplicationStatus, { kind: Item["kind"]; tag: string; title: (company: string) => string; body: string }>> = {
   vista: { kind: "vista", tag: "Te vieron", title: (c) => `${c} vio tu postulación`, body: "Ten tu teléfono a la mano: pueden llamarte." },
-  entrevista: { kind: "entrevista", tag: "Entrevista", title: (c) => `${c} quiere entrevistarte`, body: "Te contactan por WhatsApp para acordar el día y la hora." },
+  entrevista: { kind: "entrevista", tag: "Entrevista", title: (c) => `${c} quiere entrevistarte`, body: "Te llaman o te mandan SMS para acordar el día y la hora." },
   contratada: { kind: "contratada", tag: "¡Contratada!", title: () => "¡Te contrataron!", body: "Acuerda tu primer día con la empresa." },
   cerrada: { kind: "cerrada", tag: "Cerrada", title: () => "Una postulación ya no sigue", body: "Hay más chamba cerca de ti." },
 };
@@ -153,7 +153,7 @@ function Feed({ items: ITEMS, loading, live }: { items: Item[]; loading: boolean
             <div className="mt-3 flex items-end gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[1rem] leading-snug text-muted-foreground">
-                  Vacantes nuevas, entrevistas y quién vio tu postulación. Todo aquí y por WhatsApp.
+                  Vacantes nuevas, entrevistas y quién vio tu postulación. Todo aquí, por SMS y por correo.
                 </p>
                 <div className="mt-4 flex items-center gap-2">
                   <span className="grid size-12 shrink-0 origin-top animate-ring place-items-center rounded-full border-2 border-ink bg-white text-ink">
@@ -165,7 +165,7 @@ function Feed({ items: ITEMS, loading, live }: { items: Item[]; loading: boolean
                   </p>
                 </div>
               </div>
-              <Scene name="whatsapp" className="-mr-3 -mb-3 w-36 shrink-0 sm:w-40" />
+              <Scene name="codigo" className="-mr-3 -mb-3 w-36 shrink-0 sm:w-40" />
             </div>
             <Link
               href="/perfil"

@@ -49,7 +49,7 @@ export function KitShowcase() {
           steps={[
             { title: "Postulación enviada", body: "Hace 2 días", meta: "lun" },
             { title: "La empresa revisa tu perfil", body: "Suele tardar 1 a 2 días" },
-            { title: "Entrevista", body: "Te avisamos por WhatsApp" },
+            { title: "Entrevista", body: "Te avisamos por SMS" },
             { title: "¡Contratada!" },
           ]}
         />

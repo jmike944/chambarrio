@@ -38,7 +38,7 @@ const PLANS: {
     features: [
       "Publica vacantes sin costo",
       "Ve cuántos se postulan y a qué distancia viven",
-      "Desbloquea nombres y WhatsApp por $500 al mes por vacante",
+      "Desbloquea nombres y teléfonos por $500 al mes por vacante",
     ],
     tone: "sol",
     scene: "negocio",
@@ -50,7 +50,7 @@ const PLANS: {
     price: "$1,500",
     unit: "MXN al mes",
     who: "Para negocios que contratan seguido.",
-    features: ["Hasta 5 vacantes con postulaciones desbloqueadas", "Contacto directo por WhatsApp", "Factura CFDI"],
+    features: ["Hasta 5 vacantes con postulaciones desbloqueadas", "Contacto directo por llamada o SMS", "Factura CFDI"],
     tone: "mandarina",
     scene: "reparto",
     icons: ["chofer", "almacen"],

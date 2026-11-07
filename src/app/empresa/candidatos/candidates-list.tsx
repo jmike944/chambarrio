@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { LockIcon, Tick02Icon, UserIcon, WhatsappIcon } from "@hugeicons/core-free-icons";
+import { LockIcon, Message01Icon, Tick02Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BLOCK_CLASS, DistanceRing, Eyebrow, HeroCard, Panel, rotateTone } from "@/components/chamba/primitives";
@@ -196,10 +196,10 @@ function DemoCandidates() {
                   <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
                     <Button
                       className="h-12 border-2 border-ink bg-ink px-4 text-white hover:bg-ink/90 dark:border-black/70"
-                      onClick={() => toast.success(`Abriendo WhatsApp con ${c.name.split(" ")[0]}…`)}
+                      onClick={() => toast.success(`Abriendo SMS para ${c.name.split(" ")[0]}…`)}
                     >
-                      <HugeiconsIcon icon={WhatsappIcon} className="size-5 text-limon" strokeWidth={1.8} />
-                      WhatsApp
+                      <HugeiconsIcon icon={Message01Icon} className="size-5 text-limon" strokeWidth={1.8} />
+                      SMS
                     </Button>
                     <Button
                       variant="white"

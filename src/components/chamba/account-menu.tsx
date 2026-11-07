@@ -47,7 +47,7 @@ function initials(text: string) {
 
 function maskPhone(phone: string) {
   const d = phone.replace(/\D/g, "");
-  return d.length >= 4 ? `WhatsApp ···· ${d.slice(-4)}` : null;
+  return d.length >= 4 ? `Cel. ···· ${d.slice(-4)}` : null;
 }
 
 /** Full reload so no signed-in (or demo) page stays mounted in the background. */
@@ -89,8 +89,8 @@ export function AccountMenu() {
   const displayName = isEmpresa
     ? (business?.name ?? (live ? "Tu negocio" : "Logística Zapalinamé"))
     : name || (live ? "Tu cuenta" : "");
-  // Live: how they sign in (email or phone). Demo: the WhatsApp on the fake profile.
-  const account = live ? (user?.email ?? (user?.phone ? maskPhone(user.phone)?.replace("WhatsApp", "Cel.") : null)) : maskPhone(phone);
+  // Live: how they sign in (email or phone). Demo: the phone on the fake profile.
+  const account = live ? (user?.email ?? (user?.phone ? maskPhone(user.phone) : null)) : maskPhone(phone);
 
   function switchMode() {
     const next = isEmpresa ? "candidato" : "empresa";

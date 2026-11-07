@@ -14,7 +14,8 @@ import {
   Tick02Icon,
   UserMultipleIcon,
   Briefcase01Icon,
-  WhatsappIcon,
+  Call02Icon,
+  Message01Icon,
   StarIcon,
   Store01Icon,
 } from "@hugeicons/core-free-icons";
@@ -300,10 +301,10 @@ function DemoDashboard() {
                     <Button
                       variant="lime"
                       className="h-11 px-4"
-                      onClick={() => toast.success(`Abriendo WhatsApp con ${c.name.split(" ")[0]}…`)}
+                      onClick={() => toast.success(`Abriendo SMS para ${c.name.split(" ")[0]}…`)}
                     >
-                      <HugeiconsIcon icon={WhatsappIcon} className="size-4.5" strokeWidth={1.8} />
-                      WhatsApp
+                      <HugeiconsIcon icon={Message01Icon} className="size-4.5" strokeWidth={1.8} />
+                      SMS
                     </Button>
                   ) : null}
                   <Button variant={open ? "white" : "lime"} className={cn("h-11 border-ink px-4 text-ink", open && "bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink")} asChild>
@@ -451,7 +452,7 @@ function DemoDashboard() {
                 {[
                   { t: "Revisaste 7 postulaciones", m: "ayer", done: true },
                   { t: "Agenda entrevistas con los 3 más cerca", m: "hoy", now: true },
-                  { t: "Elige y avisa por WhatsApp", m: "jue" },
+                  { t: "Elige y avisa por SMS", m: "jue" },
                 ].map((s, i) => (
                   <li key={s.t} className="relative animate-rise" style={{ "--i": i + 2 } as CSSVars}>
                     <span
@@ -527,7 +528,7 @@ function DemoDashboard() {
         <div className="mt-5 flex items-end gap-3">
           <div className="min-w-0 flex-1">
             <p className="font-semibold">¿Dudas con tu plan?</p>
-            <p className="mt-0.5 text-[0.92rem] leading-snug text-muted-foreground">Te ayudamos por WhatsApp, de lunes a sábado.</p>
+            <p className="mt-0.5 text-[0.92rem] leading-snug text-muted-foreground">Te ayudamos por teléfono o correo, de lunes a sábado.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button asChild size="lg">
                 <Link href="/empresa/plan">Ver planes</Link>
@@ -536,9 +537,9 @@ function DemoDashboard() {
                 variant="white"
                 size="lg"
                 className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink"
-                onClick={() => toast.success("Abriendo WhatsApp con tu asesor…")}
+                onClick={() => toast.success("Llamando a tu asesor…")}
               >
-                <HugeiconsIcon icon={WhatsappIcon} className="text-nopal" strokeWidth={1.8} />
+                <HugeiconsIcon icon={Call02Icon} className="text-nopal" strokeWidth={1.8} />
                 Asesor
               </Button>
             </div>

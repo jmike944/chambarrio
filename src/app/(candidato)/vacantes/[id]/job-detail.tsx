@@ -22,7 +22,7 @@ import {
   Store01Icon,
   Tick02Icon,
   WalkingIcon,
-  WhatsappIcon,
+  Message01Icon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -418,7 +418,7 @@ function JobDetailView({
       apply(jobId);
       fire({ origin, count: 56, colors: CONFETTI });
       toast.success("¡Ya quedó! Postulación enviada", {
-        description: `${company.name} ya tiene tu solicitud. Te avisamos por WhatsApp.`,
+        description: `${company.name} ya tiene tu solicitud. Te avisamos por SMS o correo.`,
       });
       return;
     }
@@ -471,9 +471,9 @@ function JobDetailView({
         {hasPhone ? (
         <>
         <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-          <a href={`https://wa.me/52${job.phone}?text=${waText}`} target="_blank" rel="noopener noreferrer">
-            <HugeiconsIcon icon={WhatsappIcon} className="size-5 text-nopal" strokeWidth={2} />
-            WhatsApp
+          <a href={`sms:+52${job.phone}?&body=${waText}`}>
+            <HugeiconsIcon icon={Message01Icon} className="size-5 text-nopal" strokeWidth={2} />
+            SMS
           </a>
         </Button>
         <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
@@ -638,7 +638,7 @@ function JobDetailView({
                   Tu solicitud ya va en camino
                 </h2>
                 <p className="mt-1.5 text-[0.95rem] text-muted-foreground">
-                  {company.name} te contacta por WhatsApp. Sigue el avance en tus postulaciones.
+                  {company.name} te contacta por llamada o SMS. Sigue el avance en tus postulaciones.
                 </p>
                 <Button asChild variant="white" size="lg" className="mt-3 hidden sm:inline-flex border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
                   <Link href="/postulaciones">Ver mis postulaciones</Link>
@@ -759,7 +759,7 @@ function JobDetailView({
                 steps={[
                   { title: "Enviada", body: applied ? "Tu solicitud ya llegó." : "Un toque y listo, sin currículum." },
                   { title: "La empresa la ve", body: "Revisan tu perfil, casi siempre en 1–2 días." },
-                  { title: "Entrevista", body: "Te escriben por WhatsApp para agendar." },
+                  { title: "Entrevista", body: "Te llaman o te mandan SMS para agendar." },
                   { title: "¡Contratado!", body: "A chambear cerca de tu casa." },
                 ]}
               />

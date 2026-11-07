@@ -13,7 +13,7 @@ export default function PrivacidadPage() {
         {
           title: "Qué datos usamos",
           body: [
-            "Candidatos: nombre, número de WhatsApp, colonia o ubicación aproximada, tipo de trabajo que buscas y experiencia.",
+            "Candidatos: nombre, número de celular, correo, colonia o ubicación aproximada, tipo de trabajo que buscas y experiencia.",
             "Empresas: razón social o nombre comercial, ubicación del centro de trabajo, datos de contacto y datos de facturación.",
           ],
         },

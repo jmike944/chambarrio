@@ -39,7 +39,7 @@ const OUTFITS: { prop: MascotProp; line: string }[] = [
   { prop: "chef", line: "¿Cocina? ¡Hay restaurantes buscando gente en tu colonia!" },
   { prop: "paquete", line: "¿Reparto? ¡Ándale, hay rutas a la vuelta de la esquina!" },
   { prop: "gorra", line: "¿Seguridad o almacén? ¡Chamba a la vista!" },
-  { prop: "telefono", line: "Sin currículum: entras con tu WhatsApp y ¡ya quedó!" },
+  { prop: "telefono", line: "Sin currículum: entras con tu celular o correo y ¡ya quedó!" },
 ];
 
 /** Tap Chambita: confetti, a dance and a new outfit each time. */

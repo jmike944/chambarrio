@@ -41,7 +41,7 @@ export function AccountStep({
       step={step}
       total={total}
       tone="mandarina"
-      art={{ scene: "whatsapp" }}
+      art={{ scene: "codigo" }}
       title="Crea tu cuenta"
       hint={
         role === "empresa"

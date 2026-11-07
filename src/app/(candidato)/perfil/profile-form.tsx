@@ -103,7 +103,7 @@ export function ProfileForm() {
   const [phoneDraft, setPhoneDraft] = useState<string | null>(null);
   const [approx, setApprox] = useState(true);
   const [notify, setNotify] = useState(true);
-  const [whatsapp, setWhatsapp] = useState(true);
+  const [smsAlerts, setSmsAlerts] = useState(true);
 
   /* ---- profile completion (drives the hero bars + a confetti burst when it hits 100% by hand) */
   const checks = [
@@ -111,7 +111,7 @@ export function ProfileForm() {
     { label: "Tu zona", ok: colonia.trim().length > 0 },
     { label: "Qué chamba buscas", ok: interests.length > 0 },
     { label: "Tu experiencia", ok: !!experience },
-    { label: "Tus avisos", ok: notify || whatsapp },
+    { label: "Tus avisos", ok: notify || smsAlerts },
   ];
   const done = checks.filter((c) => c.ok).length;
   const total = checks.length;
@@ -249,7 +249,7 @@ export function ProfileForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-[0.95rem] font-semibold">WhatsApp</Label>
+              <Label htmlFor="phone" className="text-[0.95rem] font-semibold">Celular</Label>
               <Input
                 id="phone"
                 type="tel"
@@ -264,8 +264,8 @@ export function ProfileForm() {
                   setPhoneDraft(null);
                   if (d.length === 10 && d !== digits10(phone)) {
                     void setPhone(d);
-                    toast.success("WhatsApp actualizado.");
-                  } else if (d.length !== 10 && d.length > 0) toast.error("Escribe tu WhatsApp de 10 dígitos.");
+                    toast.success("Celular actualizado.");
+                  } else if (d.length !== 10 && d.length > 0) toast.error("Escribe tu celular de 10 dígitos.");
                 }}
                 aria-describedby="phone-hint"
                 className={FIELD}
@@ -423,7 +423,7 @@ export function ProfileForm() {
           <div className="space-y-2">
             {[
               { label: "Vacantes nuevas dentro de mi radio", on: notify, set: setNotify },
-              { label: "Avisos por WhatsApp", on: whatsapp, set: setWhatsapp },
+              { label: "Avisos por SMS", on: smsAlerts, set: setSmsAlerts },
             ].map((o) => (
               <label
                 key={o.label}

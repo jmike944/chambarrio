@@ -104,7 +104,7 @@ export type JobInput = {
   description?: string;
   openings?: number;
   urgent?: boolean;
-  /** WhatsApp for this vacancy; defaults to none (the company phone is shown instead). */
+  /** Contact phone for this vacancy; defaults to none (the company phone is shown instead). */
   phone?: string | null;
 };
 

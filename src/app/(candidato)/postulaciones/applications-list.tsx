@@ -59,7 +59,7 @@ const HERO: Record<ApplicationStatus, { eyebrow: string; title: string; mood: Ma
 
 /** Live: there's no interview scheduling yet, so no made-up day/time. */
 const LIVE_HINT: Partial<Record<ApplicationStatus, string>> = {
-  entrevista: "La empresa te contacta por WhatsApp para acordar el día y la hora.",
+  entrevista: "La empresa te llama o te manda SMS para acordar el día y la hora.",
   cerrada: "Esta postulación ya no sigue. Hay más chamba cerca de ti.",
 };
 const LIVE_STICKER: Partial<Record<ApplicationStatus, React.ReactNode>> = {

@@ -13,7 +13,7 @@ import { VacancyList } from "./vacancy-list";
 
 export const metadata: Metadata = { title: "Tus vacantes" };
 
-const TICKER = ["Publicar es gratis", "Gente a 5 km de tu centro", "Contacto directo por WhatsApp", "Sin contratos forzosos"];
+const TICKER = ["Publicar es gratis", "Gente a 5 km de tu centro", "Contacto directo por llamada o SMS", "Sin contratos forzosos"];
 
 export default function EmpresaVacantesPage() {
   return (
