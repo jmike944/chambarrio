@@ -54,7 +54,7 @@ export function surface(tone: SurfaceTone = "white") {
 }
 
 /** Pick a pastel that differs from its neighbours: rotate(i) for lists of cards. */
-const ROTATION: BlockTone[] = ["sol", "cielo", "limon", "durazno", "lila", "menta"];
+const ROTATION: BlockTone[] = ["sol", "cielo", "limon", "durazno", "menta"];
 export function rotateTone(i: number): BlockTone {
   return ROTATION[((i % ROTATION.length) + ROTATION.length) % ROTATION.length];
 }

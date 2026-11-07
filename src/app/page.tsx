@@ -10,7 +10,7 @@ import {
   LockIcon,
   UserCheck01Icon,
 } from "@hugeicons/core-free-icons";
-import { Logo } from "@/components/chamba/logo";
+import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { Reveal, Sticker, Stagger, StaggerItem, CountUp } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
 import { Scene, type SceneName } from "@/components/chamba/art/scenes";
@@ -29,7 +29,7 @@ import { formatMXN } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: { absolute: "Chamb-a lado · El trabajo que buscas, cerca de ti" },
+  title: { absolute: "Chambarrio · El trabajo que buscas, cerca de ti" },
   description:
     "Vacantes a 2, 5, 10 o 15 km de tu casa en Saltillo. Gratis para quien busca trabajo. Para empresas: personal que vive cerca, llega a tiempo y se queda.",
 };
@@ -135,8 +135,8 @@ export default function LandingPage() {
     <div className="min-h-dvh overflow-x-clip [--hard:var(--ink)] dark:[--hard:#2c2464]">
       {/* Nav */}
       <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 sm:px-6 lg:px-10">
-        <Link href="/" aria-label="Chamb-a lado, inicio" className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          <Logo />
+        <Link href="/" aria-label="Chambarrio, inicio" className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
         </Link>
         <nav aria-label="Secciones" className="ml-8 hidden items-center gap-1 md:flex">
           {[
@@ -216,7 +216,7 @@ export default function LandingPage() {
             <Reveal index={2} y={22}>
               <HeroDemo />
             </Reveal>
-            <ul aria-label="Chamb-a lado en números" className="grid grid-cols-3 gap-3 sm:gap-4">
+            <ul aria-label="Chambarrio en números" className="grid grid-cols-3 gap-3 sm:gap-4">
               {HERO_STATS.map((s, i) => (
                 <Reveal
                   as="li"
@@ -510,7 +510,7 @@ export default function LandingPage() {
               <HugeiconsIcon icon={Agreement01Icon} className="size-5" strokeWidth={2} />
             </span>
             <p className="text-muted-foreground">
-              Chamb-a lado no es agencia de reclutamiento: conectamos personas y empresas. Cada empresa entrevista,
+              Chambarrio no es agencia de reclutamiento: conectamos personas y empresas. Cada empresa entrevista,
               contrata y cumple sus obligaciones laborales.{" "}
               <Link href="/terminos" className={cn(focusLink, "font-semibold text-foreground underline decoration-2 underline-offset-4")}>
                 Lee los términos
@@ -560,7 +560,7 @@ export default function LandingPage() {
         <HazardStripe className="h-2.5 opacity-90" />
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:px-6 lg:px-10">
           <div>
-            <Logo />
+            <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
             <p className="mt-3 text-sm text-muted-foreground">Hecho en Saltillo, Coahuila.</p>
           </div>
           <nav aria-label="Legal" className="flex flex-wrap gap-x-6 gap-y-2 text-[0.95rem] font-medium text-muted-foreground sm:ml-auto">

@@ -8,7 +8,7 @@ export default function PrivacidadPage() {
     <LegalPage
       title="Aviso de privacidad"
       tone="cielo"
-      intro="Tu ubicación es la base de Chamb-a lado, así que la cuidamos en serio. Aquí explicamos qué datos usamos, para qué y cómo puedes controlarlos."
+      intro="Tu ubicación es la base de Chambarrio, así que la cuidamos en serio. Aquí explicamos qué datos usamos, para qué y cómo puedes controlarlos."
       sections={[
         {
           title: "Qué datos usamos",

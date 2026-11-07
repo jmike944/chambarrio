@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { ArrowLeft01Icon, ArrowRight02Icon, Cancel01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
-import { Logo, LogoMark } from "@/components/chamba/logo";
+import { ChambarrioLogo, ChambarrioMark } from "@/components/brand/chambarrio-logo";
 import { StageBars, springs } from "@/components/chamba/motion";
 import { BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
 import { Scene, SCENE_RATIO, type SceneName } from "@/components/chamba/art/scenes";
@@ -55,20 +55,21 @@ function HeroArtwork({ art }: { art: HeroArt }) {
       <Scene
         name={art.scene}
         className={cn(
-          "drop-shadow-[5px_5px_0_rgb(22_15_51/0.35)]",
+          "lg:mx-auto lg:block",
+          // Desktop sizes are capped by viewport height too, so short laptop screens keep the slogan band visible.
           ratio >= 2.5
             ? "w-full lg:w-[min(36rem,100%)]"
             : ratio >= 1.5
-              ? "w-44 sm:w-52 lg:w-[min(36rem,100%)]"
-              : "w-36 sm:w-40 lg:w-[min(25rem,86%)]",
+              ? "w-44 sm:w-52 lg:w-[min(34rem,100%,76dvh)]"
+              : "w-36 sm:w-40 lg:w-[min(24rem,86%,38dvh)]",
         )}
       />
     );
   }
   return (
     <>
-      <Mascot {...art.mascot} size={124} className="drop-shadow-[5px_5px_0_rgb(22_15_51/0.35)] lg:hidden" />
-      <Mascot {...art.mascot} size={250} className="hidden drop-shadow-[8px_8px_0_rgb(22_15_51/0.35)] lg:block" />
+      <Mascot {...art.mascot} size={124} className="lg:hidden" />
+      <Mascot {...art.mascot} size={250} className="hidden lg:mx-auto lg:block" />
     </>
   );
 }
@@ -355,12 +356,12 @@ export function FlowShell({
               Atrás
             </button>
           ) : (
-            <Link href="/" className={cn("group rounded-xl", focusRing)} aria-label="Chamb-a lado, inicio">
+            <Link href="/" className={cn("group rounded-xl", focusRing)} aria-label="Chambarrio, inicio">
               <span className="lg:hidden">
-                <LogoMark className="size-11 rounded-[0.9rem] border-[2.5px] border-ink" />
+                <ChambarrioMark className="size-11 shrink-0 group-hover:animate-wiggle" />
               </span>
-              <span className="block-on-pastel hidden rounded-2xl border-[3px] border-ink bg-white px-3 py-2 shadow-[4px_4px_0_0_var(--ink)] lg:inline-flex">
-                <Logo />
+              <span className="hidden lg:inline-flex">
+                <ChambarrioLogo iconClassName="size-10 shrink-0 group-hover:animate-wiggle" wordmarkClassName="text-[1.4rem]" />
               </span>
             </Link>
           )}
@@ -424,7 +425,7 @@ export function FlowShell({
               key={`a-${key}`}
               className={cn(
                 "animate-pop-in lg:mr-0 lg:mb-0 lg:self-center",
-                panoramic ? "-mx-2 mt-2 -mb-4 lg:w-full" : "-mr-3 -mb-9 self-end",
+                panoramic ? "-mx-2 mt-2 -mb-4 lg:w-full" : "-mr-3 -mb-9 self-end lg:w-full",
               )}
               style={{ "--i": 1 } as CSSVars}
             >

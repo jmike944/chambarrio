@@ -1,5 +1,5 @@
 /*
- * Chamb-a lado · DOODLES — "bold workwear sticker" decorations.
+ * Chambarrio · DOODLES — "bold workwear sticker" decorations.
  *
  * Server-component safe: no hooks, no "use client", fully deterministic (seeded PRNG, never
  * Math.random at render). All motion is CSS (./doodles.css, `dd`-prefixed global classes),

@@ -166,7 +166,7 @@ export function CandidateFlow() {
           art={{ scene: "reparto" }}
           band
           title="¿Qué buscas?"
-          hint="Buscar trabajo en Chamb-a lado es gratis."
+          hint="Buscar trabajo en Chambarrio es gratis."
           aside="El trabajo que buscas, cerca de ti."
         >
           <div className="space-y-4">

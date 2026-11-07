@@ -1,5 +1,5 @@
 /*
- * Chamb-a lado · hero scenes ("bold workwear sticker" style).
+ * Chambarrio · hero scenes ("bold workwear sticker" style).
  * Thick ink outlines, flat fills, hard offset ink shadows, one white shine per main object,
  * hazard stripes / rivets / halftone accents. No faces on objects; people get simple confident faces.
  * Server-component safe (no hooks, deterministic). All motion is CSS (scenes.css), transform/opacity only,

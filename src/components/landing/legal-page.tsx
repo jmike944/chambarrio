@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
-import { Logo } from "@/components/chamba/logo";
+import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { Reveal } from "@/components/chamba/motion";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
@@ -29,8 +29,8 @@ export function LegalPage({
   return (
     <div className="min-h-dvh overflow-x-clip [--hard:var(--ink)] dark:[--hard:#2c2464]">
       <header className="mx-auto flex max-w-3xl items-center gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 sm:px-6">
-        <Link href="/" aria-label="Chamb-a lado, inicio" className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          <Logo />
+        <Link href="/" aria-label="Chambarrio, inicio" className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
         </Link>
         <ThemeToggle className="ml-auto size-11" />
       </header>

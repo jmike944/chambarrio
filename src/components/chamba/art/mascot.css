@@ -1,5 +1,5 @@
 /*
- * Chamb-a lado · "Chambita" (el Chambas) mascot motion.
+ * Chambarrio · "Chambita" (el Chambas) mascot motion.
  * Served as GLOBAL css by the project's Turbopack *.css rule, so every class is
  * `msc`-prefixed. Motion is transform/opacity only and runs only when the root
  * svg has `data-animated`; prefers-reduced-motion switches all of it off.

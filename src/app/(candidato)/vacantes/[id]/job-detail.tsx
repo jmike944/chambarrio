@@ -53,8 +53,11 @@ const HARD_SM = "shadow-[3px_3px_0_0_var(--ink)] dark:shadow-[3px_3px_0_0_rgb(0_
 const HAZARD: React.CSSProperties = {
   backgroundImage: "repeating-linear-gradient(-45deg, var(--ink) 0 12px, transparent 12px 24px)",
 };
-/** Pastel order for the page's blocks; the hero's own tone is removed so neighbours never match. */
-const PASTELS: BlockTone[] = ["sol", "cielo", "durazno", "menta", "lila", "limon"];
+/**
+ * Pastel order for the page's blocks; the hero's own tone is removed so neighbours never match.
+ * No lila here: the rugged palette keeps lavender for at most one accent per screen.
+ */
+const PASTELS: BlockTone[] = ["sol", "cielo", "durazno", "menta", "limon"];
 const CHIP_BG = ["bg-block-sol", "bg-block-cielo", "bg-block-menta", "bg-block-durazno", "bg-block-limon"];
 const CONFETTI = ["var(--block-sol)", "var(--block-mandarina)", "var(--limon)", "var(--cielo)", "var(--primary)"];
 
@@ -94,7 +97,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const commutes = commuteOptions(km);
   const fastest = commutes.reduce((a, b) => (b.minutes < a.minutes ? b : a), commutes[0]);
   const waText = encodeURIComponent(
-    `Hola, vi la vacante de ${job.title} en Chamb-a lado y me interesa. ¿Sigue disponible?`,
+    `Hola, vi la vacante de ${job.title} en Chambarrio y me interesa. ¿Sigue disponible?`,
   );
   const category = CATEGORY_BY_ID[job.category];
 
@@ -380,7 +383,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
 
           {/* ------------------------------------------------ commute */}
           <Reveal inView>
-            <Panel tone={tones[4]} className={cn("border-2 border-ink", HARD)}>
+            <Panel tone={tones[4] ?? tones[1]} className={cn("border-2 border-ink", HARD)}>
               <BlockHeader icon={Route01Icon} title="Cómo llegar" />
               <ul className="grid gap-2 sm:grid-cols-2">
                 {commutes.map((c) => {

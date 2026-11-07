@@ -1,5 +1,5 @@
 /*
- * Chamb-a lado · hero scene motion (scenes.tsx).
+ * Chambarrio · hero scene motion (scenes.tsx).
  * Imported as plain global CSS (the project's Turbopack `*.css` rule), so every class is
  * `sc`-prefixed. Transform / opacity only. Loops run only inside `[data-animated]` and are
  * switched off under prefers-reduced-motion (the art's resting pose is the static image).

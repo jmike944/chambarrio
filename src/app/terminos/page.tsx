@@ -7,12 +7,12 @@ export default function TerminosPage() {
   return (
     <LegalPage
       title="Términos y condiciones"
-      intro="Estas reglas explican qué hace Chamb-a lado, qué no hace, y qué le toca a cada quien. Si usas la plataforma, aceptas estos términos."
+      intro="Estas reglas explican qué hace Chambarrio, qué no hace, y qué le toca a cada quien. Si usas la plataforma, aceptas estos términos."
       sections={[
         {
-          title: "Qué es Chamb-a lado",
+          title: "Qué es Chambarrio",
           body: [
-            "Chamb-a lado es una plataforma que conecta a personas que buscan empleo con empresas y negocios cercanos a su domicilio, usando la ubicación como herramienta principal.",
+            "Chambarrio es una plataforma que conecta a personas que buscan empleo con empresas y negocios cercanos a su domicilio, usando la ubicación como herramienta principal.",
             "No somos agencia de reclutamiento, colocación ni outsourcing. No contratamos personal, no somos patrón de nadie y no intervenimos en la relación laboral entre candidatos y empresas.",
           ],
         },
@@ -27,7 +27,7 @@ export default function TerminosPage() {
         {
           title: "Uso para candidatos",
           body: [
-            "Buscar trabajo en Chamb-a lado es gratis. Nunca te pediremos dinero para postularte.",
+            "Buscar trabajo en Chambarrio es gratis. Nunca te pediremos dinero para postularte.",
             "Te comprometes a dar información verdadera en tu perfil y a tratar con respeto a las empresas que contactes.",
           ],
         },
@@ -47,7 +47,7 @@ export default function TerminosPage() {
         {
           title: "Limitación de responsabilidad",
           body: [
-            "Chamb-a lado no garantiza la contratación ni la permanencia en un empleo, ni responde por las decisiones, condiciones laborales o actos de las empresas o de los candidatos.",
+            "Chambarrio no garantiza la contratación ni la permanencia en un empleo, ni responde por las decisiones, condiciones laborales o actos de las empresas o de los candidatos.",
           ],
         },
       ]}

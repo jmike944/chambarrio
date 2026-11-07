@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Notification01Icon } from "@hugeicons/core-free-icons";
 import { useApp } from "@/lib/store";
-import { LogoMark } from "./logo";
+import { ChambarrioMark } from "@/components/brand/chambarrio-logo";
 import { AccountMenu } from "./account-menu";
 
 const dateFmt = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
@@ -63,7 +63,7 @@ export function PageHeader({
         aria-label="Chambarrio, inicio"
         className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:hidden"
       >
-        <LogoMark className="size-10" />
+        <ChambarrioMark className="size-10 shrink-0 group-hover:animate-wiggle" />
       </Link>
 
       <div className="order-3 w-full min-w-0 lg:order-1 lg:w-auto lg:flex-1">

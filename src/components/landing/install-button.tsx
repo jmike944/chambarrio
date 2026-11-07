@@ -48,7 +48,7 @@ export function InstallButton({ className }: { className?: string }) {
       const { outcome } = await evt.userChoice;
       if (outcome === "accepted") {
         fire({ origin, count: 48 });
-        toast.success("¡Ya quedó! Busca Chamb-a lado en tu pantalla de inicio.");
+        toast.success("¡Ya quedó! Busca Chambarrio en tu pantalla de inicio.");
       }
       setEvt(null);
       return;

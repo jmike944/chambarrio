@@ -178,7 +178,7 @@ export function PlanCards() {
             Los candidatos nunca pagan.
           </h2>
           <p className="mt-2 max-w-xl text-[0.98rem] leading-relaxed text-muted-foreground">
-            Chamb-a lado conecta; cada empresa entrevista, contrata y cumple sus obligaciones laborales. Precios
+            Chambarrio conecta; cada empresa entrevista, contrata y cumple sus obligaciones laborales. Precios
             preliminares en pesos mexicanos, más IVA.
           </p>
         </div>

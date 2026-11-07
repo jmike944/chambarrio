@@ -20,7 +20,7 @@ import {
   Building06Icon,
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
-import { Logo } from "./logo";
+import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { springs } from "./motion";
 import { ThemeToggle } from "@/components/theme";
 import { useApp, useHydrated } from "@/lib/store";
@@ -235,8 +235,8 @@ export function AppShell({
     <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
       {/* Desktop rail */}
       <aside className="sticky top-0 hidden h-dvh flex-col gap-8 px-5 py-7 lg:flex">
-        <Link href="/" className="self-start rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-          <Logo />
+        <Link href="/" aria-label="Chambarrio, inicio" className="group self-start rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
         </Link>
         <nav aria-label="Principal" className="flex flex-col gap-1">
           {nav.map((item) => (

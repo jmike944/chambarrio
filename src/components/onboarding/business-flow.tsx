@@ -356,7 +356,7 @@ export function BusinessFlow() {
           tone="mandarina"
           art={{ scene: "contratado" }}
           title="Un último detalle"
-          hint="Chamb-a lado no es agencia de reclutamiento: conectamos a tu negocio con personas que viven cerca."
+          hint="Chambarrio no es agencia de reclutamiento: conectamos a tu negocio con personas que viven cerca."
           aside="Menos distancia. Menos ausentismo. Más permanencia."
           onBack={back}
           footer={
@@ -419,7 +419,7 @@ export function BusinessFlow() {
                 className="mt-1 size-7 rounded-md border-[2.5px] border-ink bg-white data-[state=checked]:border-ink data-[state=checked]:bg-ink data-[state=checked]:text-limon"
               />
               <span>
-                Entiendo que Chamb-a lado solo conecta candidatos y empresas. Mi empresa entrevista, contrata y cumple
+                Entiendo que Chambarrio solo conecta candidatos y empresas. Mi empresa entrevista, contrata y cumple
                 sus obligaciones laborales.{" "}
                 <Link
                   href="/terminos"
