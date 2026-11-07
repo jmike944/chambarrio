@@ -99,8 +99,9 @@ type Anim =
 
 /** Animation hook-up: class + timing vars. `o` = transform-origin within the element's own box. */
 function a(kind: Anim, t: number, opts: { dl?: number; o?: string; v?: Record<string, string> } = {}) {
-  const style: Record<string, string> = { "--t": `${t}s`, "--dl": `${opts.dl ?? 0}s`, ...opts.v };
-  if (opts.o) style["--o"] = opts.o;
+  // Always set the pivot: custom properties inherit, so a nested animation without its own --o would
+  // otherwise pivot on its parent's origin (e.g. the clock hand orbiting the shake's bottom edge).
+  const style: Record<string, string> = { "--t": `${t}s`, "--dl": `${opts.dl ?? 0}s`, "--o": opts.o ?? "50% 50%", ...opts.v };
   return { className: `scP sc-${kind}`, style: style as CSSProperties };
 }
 
