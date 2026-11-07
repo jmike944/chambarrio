@@ -11,7 +11,7 @@ import {
   Gps01Icon,
   Location06Icon,
   LockIcon,
-  Notification01Icon,
+  Mail01Icon,
   Route01Icon,
   Tick02Icon,
   ToolsIcon,
@@ -22,7 +22,6 @@ import { springs, StageBars, Sticker, useConfetti } from "@/components/chamba/mo
 import { CATEGORY_BLOCK, CategoryIcon } from "@/components/chamba/job-icons";
 import { Mascot, type MascotProp } from "@/components/chamba/art/mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,6 +33,7 @@ import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { HARD, HARD_SM, HazardTape, Rivets, STENCIL } from "../postulaciones/rugged";
 import { AccountBlock } from "./account-block";
+import { EmailAlertsBlock } from "./email-alerts-block";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
@@ -100,10 +100,9 @@ export function ProfileForm() {
   const setRadius = useApp((s) => s.setRadius);
   const phone = useApp((s) => s.phone);
   const setPhone = useApp((s) => s.setPhone);
+  const emailAlerts = useApp((s) => s.emailAlerts);
+  const emailUpdates = useApp((s) => s.emailUpdates);
   const [phoneDraft, setPhoneDraft] = useState<string | null>(null);
-  const [approx, setApprox] = useState(true);
-  const [notify, setNotify] = useState(true);
-  const [smsAlerts, setSmsAlerts] = useState(true);
 
   /* ---- profile completion (drives the hero bars + a confetti burst when it hits 100% by hand) */
   const checks = [
@@ -111,7 +110,7 @@ export function ProfileForm() {
     { label: "Tu zona", ok: colonia.trim().length > 0 },
     { label: "Qué chamba buscas", ok: interests.length > 0 },
     { label: "Tu experiencia", ok: !!experience },
-    { label: "Tus avisos", ok: notify || smsAlerts },
+    { label: "Tus avisos", ok: emailAlerts || emailUpdates },
   ];
   const done = checks.filter((c) => c.ok).length;
   const total = checks.length;
@@ -404,43 +403,26 @@ export function ProfileForm() {
               <HugeiconsIcon icon={Gps01Icon} className="size-5 group-hover:animate-wiggle" strokeWidth={2} />
               Usar mi ubicación actual
             </button>
-            <label className="flex items-start gap-3 rounded-tile border-2 border-dashed border-ink/25 bg-white/50 p-4">
+            {/* A guarantee, not a setting: companies never get more than colonia + distance. */}
+            <div className="flex items-start gap-3 rounded-tile border-2 border-dashed border-ink/25 bg-white/50 p-4">
               <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-5 shrink-0" strokeWidth={2} />
-              <span className="flex-1 text-[0.95rem] leading-snug font-semibold">
-                Mostrar solo mi zona aproximada
+              <p className="flex-1 text-[0.95rem] leading-snug font-semibold">
+                Solo compartimos tu zona aproximada
                 <span className="block text-sm font-normal text-muted-foreground">
                   Las empresas ven tu colonia y la distancia, nunca tu dirección exacta.
                 </span>
+              </p>
+              <span className="shrink-0 -rotate-3 rounded-full bg-ink px-2.5 py-1 text-[0.72rem] font-bold tracking-[0.08em] text-limon uppercase">
+                Siempre
               </span>
-              <Switch checked={approx} onCheckedChange={setApprox} aria-label="Mostrar solo mi zona aproximada" />
-            </label>
+            </div>
           </div>
         </Block>
 
         {/* ---------------------------------------------------------------- avisos */}
-        <Block tone="menta" index={5} title="Avisos" icon={Notification01Icon} className="overflow-hidden">
+        <Block tone="menta" index={5} title="Avisos por correo" icon={Mail01Icon} className="overflow-hidden" id="avisos">
           <Doodle name="chispa" color="#FFD23F" className="absolute top-5 right-5 size-8" />
-          <div className="space-y-2">
-            {[
-              { label: "Vacantes nuevas dentro de mi radio", on: notify, set: setNotify },
-              { label: "Avisos por SMS", on: smsAlerts, set: setSmsAlerts },
-            ].map((o) => (
-              <label
-                key={o.label}
-                className="flex min-h-14 items-center justify-between gap-3 rounded-tile bg-white/55 px-4 text-[0.95rem] font-semibold"
-              >
-                {o.label}
-                <Switch
-                  checked={o.on}
-                  onCheckedChange={(v) => {
-                    touch();
-                    o.set(v);
-                  }}
-                  aria-label={o.label}
-                />
-              </label>
-            ))}
-          </div>
+          <EmailAlertsBlock onChange={touch} />
         </Block>
 
         <AccountBlock index={6} />

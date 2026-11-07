@@ -74,6 +74,13 @@ type UserData = {
   applications: Application[];
   /** Vacancies whose applicants the business unlocked (demo: paid in the fake flow; live: job_unlocks). */
   unlockedJobIds: string[];
+  /** Email: the daily digest of new vacancies nearby (live: profiles.email_alerts). */
+  emailAlerts: boolean;
+  /**
+   * Email: application updates (candidate: seen / interview / hired; business owner: someone
+   * applied). Live: profiles.email_updates, one flag for both roles.
+   */
+  emailUpdates: boolean;
 };
 
 type Actions = {
@@ -94,6 +101,9 @@ type Actions = {
   setRole: (role: Role) => Promise<WriteResult>;
   setInterests: (interests: CategoryId[]) => Promise<WriteResult>;
   setExperience: (experience: Experience) => Promise<WriteResult>;
+  /** Email preferences. Demo: local only (the demo never sends email). */
+  setEmailAlerts: (on: boolean) => Promise<WriteResult>;
+  setEmailUpdates: (on: boolean) => Promise<WriteResult>;
   /** Live: creates the company + branches the first time, afterwards updates name/kind/size/phone only. */
   setBusiness: (business: Business | null) => Promise<WriteResult>;
   completeOnboarding: (role: Role) => Promise<WriteResult>;
@@ -136,6 +146,8 @@ const BLANK: UserData = {
   saved: [],
   applications: [],
   unlockedJobIds: [],
+  emailAlerts: true,
+  emailUpdates: true,
 };
 
 /** The curated demo user (what the app shipped with as its defaults). */
@@ -188,6 +200,8 @@ export const useApp = create<State>()(
       setRole: (role) => writeProfile("role", role),
       setInterests: (interests) => writeProfile("interests", interests),
       setExperience: (experience) => writeProfile("experience", experience),
+      setEmailAlerts: (on) => writeProfile("emailAlerts", on),
+      setEmailUpdates: (on) => writeProfile("emailUpdates", on),
 
       setHome: (home, colonia, locationSource) => {
         const prev = pick(get(), ["home", "colonia", "locationSource", "hasHome"]);
@@ -387,7 +401,7 @@ export const useApp = create<State>()(
       name: "chamba-a-lado",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
         const s = persisted as Record<string, unknown> & { business?: (Record<string, unknown> & { plan?: string }) | null };
         // v0 → v1: the per-hire plan was replaced by per-vacancy-per-month billing.
@@ -402,6 +416,11 @@ export const useApp = create<State>()(
         }
         // v2 → v3: modes. Everything persisted before is the demo (keep it, keep them signed in).
         if (version < 3) Object.assign(s, { mode: "demo", userId: null, email: "", hasHome: true });
+        // v3 → v4: email preferences (on by default, like the server columns).
+        if (version < 4) {
+          if (typeof s.emailAlerts !== "boolean") s.emailAlerts = true;
+          if (typeof s.emailUpdates !== "boolean") s.emailUpdates = true;
+        }
         return s as unknown as State;
       },
     },
@@ -433,9 +452,13 @@ async function sync(run: () => Promise<WriteResult>, undo: () => void): Promise<
 }
 
 // Profile fields are debounced and batched (the name field writes on every keystroke).
-type ProfileKey = "name" | "phone" | "role" | "interests" | "experience" | "radiusKm";
+type ProfileKey = "name" | "phone" | "role" | "interests" | "experience" | "radiusKm" | "emailAlerts" | "emailUpdates";
 type ProfileValues = Pick<UserData, ProfileKey>;
-const PROFILE_KEYS: ProfileKey[] = ["name", "phone", "role", "interests", "experience", "radiusKm"];
+const PROFILE_KEYS: ProfileKey[] = ["name", "phone", "role", "interests", "experience", "radiusKm", "emailAlerts", "emailUpdates"];
+/** What onboarding asks for. Email preferences aren't part of it, so it never overwrites them. */
+const ONBOARDING_KEYS = ["name", "phone", "role", "interests", "experience", "radiusKm"] as const satisfies ProfileKey[];
+/** Server-owned until the user changes them here (an unsubscribe link may have turned them off). */
+const EMAIL_KEYS = ["emailAlerts", "emailUpdates"] as const satisfies ProfileKey[];
 const PROFILE_DEBOUNCE_MS = 600;
 
 /** Last values the server confirmed (rollback target). */
@@ -455,6 +478,8 @@ function toProfilePatch(v: Partial<ProfileValues>): api.ProfilePatch {
   if (v.interests !== undefined) p.interests = v.interests;
   if (v.experience !== undefined) p.experience = v.experience;
   if (v.radiusKm !== undefined) p.radius_km = v.radiusKm;
+  if (v.emailAlerts !== undefined) p.email_alerts = v.emailAlerts;
+  if (v.emailUpdates !== undefined) p.email_updates = v.emailUpdates;
   return p;
 }
 
@@ -578,10 +603,10 @@ function pushOnboarding(role: Role): Promise<WriteResult> {
       if (b.error) return b;
     }
     s = get();
-    const values: ProfileValues = pick(s, PROFILE_KEYS);
+    const values = pick(s, [...ONBOARDING_KEYS]);
     const p = await api.saveProfile({ ...toProfilePatch({ ...values, role }), onboarded: true });
     if (p.error) return fail(p.error);
-    if (gen === generation) confirmed = { ...values, role };
+    if (gen === generation) confirmed = { ...confirmed, ...values, role };
     return {};
   })().finally(() => {
     onboardingFlight = null;
@@ -686,6 +711,8 @@ export function applyLiveSnapshot(d: LiveSessionData) {
     interests: p.interests,
     experience: p.experience,
     radiusKm: p.radiusKm,
+    emailAlerts: p.emailAlerts,
+    emailUpdates: p.emailUpdates,
   };
   const patch: Partial<UserData> = {
     signedIn: true,
@@ -703,6 +730,7 @@ export function applyLiveSnapshot(d: LiveSessionData) {
   } else {
     // Still onboarding: keep what they typed here; the server only knows the role picked at sign-up.
     if (!s.onboarded && !pending.has("role")) patch.role = p.role;
+    for (const k of EMAIL_KEYS) if (!pending.has(k)) patch[k] = server[k];
     if (home && !s.hasHome) Object.assign(patch, home);
     if (d.company) patch.business = toBusiness(d.company);
   }

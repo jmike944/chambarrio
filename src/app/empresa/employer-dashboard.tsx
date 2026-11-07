@@ -31,7 +31,7 @@ import { formatMXN, formatPay } from "@/lib/format";
 import { formatKm, type RadiusKm } from "@/lib/geo";
 import { UNLOCK_PRICE, useApp, useEmployerPlan, useIsLive, useIsUnlocked, type PlanId } from "@/lib/store";
 import { EmployerGate } from "@/components/empresa/employer-gate";
-import { LiveDashboard } from "./live-dashboard";
+import { EmailAlertsCard, LiveDashboard } from "./live-dashboard";
 import { BranchMapArt, GPS_COLONIA, coloniaText, nearPlaceText, placeText, useBranchSummaries, useEmployerJobs } from "./sucursales/branch-kit";
 import { APPLICANTS } from "@/lib/data/applicants";
 import { cn } from "@/lib/utils";
@@ -547,6 +547,8 @@ function DemoDashboard() {
           <Mascot mood="saluda" prop="telefono" size={78} className="-mr-2 -mb-6 shrink-0" />
         </div>
       </Panel>
+
+      <EmailAlertsCard />
     </div>
   );
 }

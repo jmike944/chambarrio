@@ -125,8 +125,14 @@ export function NotificationsFeed() {
   return <Feed items={loading ? [] : items} loading={loading} live={live} />;
 }
 
+/** Live: whether any email avisos are on (the copy mentions email only when it's true). */
+function useEmailOn() {
+  return useApp((s) => s.mode === "live" && (s.emailAlerts || s.emailUpdates));
+}
+
 function Feed({ items: ITEMS, loading, live }: { items: Item[]; loading: boolean; live: boolean }) {
   const fresh = ITEMS.filter(isNew).length;
+  const emailOn = useEmailOn();
   return (
     <>
       <PageHeader title="Avisos" />
@@ -153,7 +159,12 @@ function Feed({ items: ITEMS, loading, live }: { items: Item[]; loading: boolean
             <div className="mt-3 flex items-end gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[1rem] leading-snug text-muted-foreground">
-                  Vacantes nuevas, entrevistas y quién vio tu postulación. Todo aquí, por SMS y por correo.
+                  Vacantes nuevas, entrevistas y quién vio tu postulación. Todo aquí
+                  {!live
+                    ? "."
+                    : emailOn
+                      ? ", y lo importante también te llega por correo."
+                      : ". Si quieres, también te lo mandamos por correo."}
                 </p>
                 <div className="mt-4 flex items-center gap-2">
                   <span className="grid size-12 shrink-0 origin-top animate-ring place-items-center rounded-full border-2 border-ink bg-white text-ink">
@@ -206,7 +217,8 @@ function Feed({ items: ITEMS, loading, live }: { items: Item[]; loading: boolean
               <Mascot mood="duerme" prop="casco" size={120} className="mx-auto w-28" />
               <p className="mt-2 font-display text-[1.45rem] leading-tight font-extrabold tracking-[-0.03em]">Pronto verás tus avisos aquí</p>
               <p className="mx-auto mt-1.5 max-w-sm text-muted-foreground">
-                Cuando una empresa vea tu postulación o salga una vacante cerca de tu casa, te avisamos aquí.
+                Cuando una empresa vea tu postulación o salga una vacante cerca de tu casa, te avisamos aquí
+                {emailOn ? " y por correo" : ""}.
               </p>
               <Button asChild size="lg" className="mt-5">
                 <Link href="/vacantes">Ver vacantes cerca</Link>

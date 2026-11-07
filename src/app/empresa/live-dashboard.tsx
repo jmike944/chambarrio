@@ -10,6 +10,7 @@ import {
   ComingSoon01Icon,
   Invoice01Icon,
   Location01Icon,
+  Mail01Icon,
   Store01Icon,
   Tick02Icon,
   UserMultipleIcon,
@@ -17,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { BLOCK_CLASS, HeroCard, Panel, PanelHeader, SectionLabel, StatTile } from "@/components/chamba/primitives";
 import { CountUp, Sticker } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
@@ -25,9 +27,10 @@ import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle, HazardTape } from "@/components/chamba/art/doodles";
 import { useMyCompany } from "@/lib/data/catalog";
 import { useApplicants } from "@/lib/live/applicants";
+import { useLiveUser } from "@/lib/live/session";
 import { formatPay } from "@/lib/format";
 import { formatKm } from "@/lib/geo";
-import { useEmployerPlan, type PlanId } from "@/lib/store";
+import { useApp, useEmployerPlan, type PlanId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { BranchMapArt, coloniaText, placeText, useBranchSummaries } from "./sucursales/branch-kit";
 import { InitialsAvatar, LockAvatar, WaitRing } from "./wait-ring";
@@ -426,6 +429,60 @@ export function LiveDashboard() {
           )}
         </ul>
       </Panel>
+
+      <EmailAlertsCard />
     </div>
+  );
+}
+
+/**
+ * "Avisos por correo" for the business owner: one switch for "someone applied" emails. It's the
+ * owner's profile flag (email_updates), the same one that sends candidate updates. Live and demo.
+ */
+export function EmailAlertsCard({ className }: { className?: string }) {
+  const live = useApp((s) => s.mode === "live");
+  const storeEmail = useApp((s) => s.email);
+  const on = useApp((s) => s.emailUpdates);
+  const setOn = useApp((s) => s.setEmailUpdates);
+  const { user } = useLiveUser();
+  const email = live ? user?.email || storeEmail || null : null;
+  const hint = !live
+    ? "En la demo no se mandan correos."
+    : email
+      ? `Te escribimos a ${email} con la colonia y la distancia de cada postulante.`
+      : "Tu cuenta entró con celular y no tiene correo, así que por ahora no te llegan.";
+
+  return (
+    <Panel
+      tone="cielo"
+      aria-labelledby="avisos-correo-t"
+      className={cn("flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center lg:col-span-12", RUG, className)}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="grid size-11 shrink-0 -rotate-6 place-items-center rounded-xl bg-ink text-white">
+          <HugeiconsIcon icon={Mail01Icon} className="size-5" strokeWidth={2} />
+        </span>
+        <div className="min-w-0">
+          <h2 id="avisos-correo-t" className="font-display text-[1.2rem] leading-tight font-extrabold tracking-[-0.02em]">
+            Avisos por correo
+          </h2>
+          <p id="avisos-correo-hint" className="mt-0.5 text-[0.92rem] leading-snug break-words text-muted-foreground">
+            {hint}
+          </p>
+        </div>
+      </div>
+      <label
+        htmlFor="avisos-correo-postulantes"
+        className="flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-tile border-2 border-ink bg-white/75 px-4 text-[0.95rem] font-semibold text-ink sm:shrink-0 dark:bg-white/85"
+      >
+        Avisarme cuando alguien se postule
+        <Switch
+          id="avisos-correo-postulantes"
+          checked={on}
+          onCheckedChange={(v) => void setOn(v)}
+          aria-describedby="avisos-correo-hint"
+        />
+      </label>
+    </Panel>
   );
 }

@@ -61,6 +61,10 @@ export type LiveProfile = {
   locationSource: LocationSource;
   radiusKm: RadiusKm;
   onboarded: boolean;
+  /** profiles.email_alerts: the daily digest of new vacancies nearby. */
+  emailAlerts: boolean;
+  /** profiles.email_updates: application updates (candidate) / new applicants (business owner). */
+  emailUpdates: boolean;
 };
 
 export type LiveSessionData = {
@@ -124,7 +128,7 @@ export type CompanyPatch = Partial<Pick<LiveCompany, "name" | "kind" | "size" | 
 export type ProfilePatch = Partial<
   Pick<
     Database["public"]["Tables"]["profiles"]["Update"],
-    "role" | "name" | "phone" | "email" | "interests" | "experience" | "radius_km" | "onboarded"
+    "role" | "name" | "phone" | "email" | "interests" | "experience" | "radius_km" | "onboarded" | "email_alerts" | "email_updates"
   >
 >;
 
@@ -387,6 +391,8 @@ const BLANK_PROFILE: LiveProfile = {
   locationSource: "colonia",
   radiusKm: 5,
   onboarded: false,
+  emailAlerts: true,
+  emailUpdates: true,
 };
 
 async function fetchCompanyWithBranches(
@@ -442,6 +448,9 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
           locationSource: p.location_source,
           radiusKm: asRadius(p.radius_km),
           onboarded: p.onboarded,
+          // Older rows / a stale schema cache: treat a missing value as the column default (on).
+          emailAlerts: p.email_alerts ?? true,
+          emailUpdates: p.email_updates ?? true,
         }
       : BLANK_PROFILE;
 
