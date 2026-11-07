@@ -145,6 +145,19 @@ export type Database = {
           onboarded: boolean;
           phone: string | null;
           radius_km: number;
+          headline: string | null;
+          about: string | null;
+          education: E["education_level"] | null;
+          skills: string[];
+          certifications: string[];
+          languages: string[];
+          shifts: E["shift"][];
+          available_from: E["start_availability"] | null;
+          transport: string[];
+          expected_pay: number | null;
+          expected_period: E["pay_period"] | null;
+          avatar_path: string | null;
+          cv_path: string | null;
           role: E["app_role"];
           unsubscribe_token: string;
           updated_at: string;
@@ -164,11 +177,54 @@ export type Database = {
           onboarded?: boolean;
           phone?: string | null;
           radius_km?: number;
+          headline?: string | null;
+          about?: string | null;
+          education?: E["education_level"] | null;
+          skills?: string[];
+          certifications?: string[];
+          languages?: string[];
+          shifts?: E["shift"][];
+          available_from?: E["start_availability"] | null;
+          transport?: string[];
+          expected_pay?: number | null;
+          expected_period?: E["pay_period"] | null;
+          avatar_path?: string | null;
+          cv_path?: string | null;
           role?: E["app_role"];
           unsubscribe_token?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
+        Relationships: [];
+      };
+      work_experiences: {
+        Row: {
+          id: string;
+          profile_id: string;
+          title: string;
+          company: string | null;
+          category: E["category_id"] | null;
+          start_month: string | null;
+          end_month: string | null;
+          is_current: boolean;
+          description: string | null;
+          sort: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id: string;
+          title: string;
+          company?: string | null;
+          category?: E["category_id"] | null;
+          start_month?: string | null;
+          end_month?: string | null;
+          is_current?: boolean;
+          description?: string | null;
+          sort?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["work_experiences"]["Insert"]>;
         Relationships: [];
       };
       saved_jobs: {
@@ -239,6 +295,22 @@ export type Database = {
           urgent: boolean;
         }[];
       };
+      job_applicants_detail: {
+        Args: { p_job_id: string };
+        Returns: {
+          application_id: string;
+          status: E["application_status"];
+          applied_at: string;
+          colonia: string;
+          km: number;
+          unlocked: boolean;
+          strength: number;
+          profile: Json;
+          experiences: Json;
+          contact: Json | null;
+        }[];
+      };
+      profile_strength: { Args: { p: Database["public"]["Tables"]["profiles"]["Row"] }; Returns: number };
       unsubscribe_email: { Args: { p_token: string; p_kind?: string }; Returns: boolean };
       set_my_home: {
         Args: { lat: number; lng: number; p_colonia: string; p_source?: E["location_source"] };
@@ -262,6 +334,8 @@ export type Database = {
         | "oficina"
         | "construccion";
       company_size: "Micro" | "Pequeña" | "Mediana" | "Grande";
+      education_level: "primaria" | "secundaria" | "preparatoria" | "tecnico" | "licenciatura";
+      start_availability: "inmediata" | "1_semana" | "2_semanas" | "1_mes";
       employment_type: "Tiempo completo" | "Medio tiempo" | "Temporal" | "Fines de semana";
       experience_level: "Sin experiencia" | "6 meses" | "1 año" | "2 años o más";
       job_status: "abierta" | "pausada" | "cerrada";
