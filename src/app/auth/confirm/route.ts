@@ -22,7 +22,13 @@ export async function GET(request: NextRequest) {
       : tokenHash && type
         ? await supabase.auth.verifyOtp({ type, token_hash: tokenHash })
         : { error: new Error("missing token") };
-    if (!error) return NextResponse.redirect(safeNext);
+    if (!error) {
+      // Land on /entrar/listo: it leaves any saved demo (the app ignores auth while in the demo),
+      // waits for the profile, then routes to onboarding or home. A caller-provided `next` rides along.
+      const landing = new URL("/entrar/listo", url.origin);
+      if (url.searchParams.get("next")) landing.searchParams.set("next", safeNext.pathname + safeNext.search);
+      return NextResponse.redirect(landing);
+    }
   }
   return NextResponse.redirect(new URL("/entrar?error=enlace", url.origin));
 }
