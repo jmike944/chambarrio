@@ -166,7 +166,7 @@ export default function LandingPage() {
 
       <main>
         {/* Hero */}
-        <section className="mx-auto grid max-w-6xl items-start gap-7 px-4 pt-5 pb-10 sm:px-6 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:px-10 lg:pt-10 lg:pb-16">
+        <section className="mx-auto grid max-w-6xl items-start gap-7 px-4 pt-5 pb-10 sm:px-6 lg:grid-cols-[1.12fr_1fr] lg:items-stretch lg:gap-10 lg:px-10 lg:pt-10 lg:pb-16">
           <Reveal y={22} className={cn("relative isolate min-w-0 overflow-hidden rounded-panel block-mandarina", HARD)}>
             <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-60" />
             <Scatter count={4} seed={2} palette={["var(--block-sol)", "var(--limon)"]} className="-z-10" />
@@ -227,9 +227,10 @@ export default function LandingPage() {
               <HazardStripe className="h-4" />
             </div>
           </Reveal>
-          <div className="grid min-w-0 gap-6">
-            <Reveal index={2} y={22}>
-              <HeroDemo />
+          {/* On desktop this column stretches to the hero's height: the demo card grows, the stat tiles sit on the bottom line. */}
+          <div className="flex min-w-0 flex-col gap-6">
+            <Reveal index={2} y={22} className="lg:flex lg:flex-1 lg:flex-col">
+              <HeroDemo className="lg:flex-1" />
             </Reveal>
             <ul aria-label="Chambarrio en números" className="grid grid-cols-3 gap-3 sm:gap-4">
               {HERO_STATS.map((s, i) => (

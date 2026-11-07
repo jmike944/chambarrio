@@ -22,12 +22,12 @@ export function HeroDemo({ className }: { className?: string }) {
   return (
     <section
       aria-labelledby="demo-t"
-      className={cn("relative isolate min-w-0 overflow-hidden rounded-panel block-cielo", HARD, className)}
+      className={cn("relative isolate flex min-w-0 flex-col overflow-hidden rounded-panel block-cielo", HARD, className)}
     >
       <HazardStripe className="h-3.5" />
       <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-70" />
       <Rivets className="top-3.5" />
-      <div className="p-5 pt-4 sm:p-7 sm:pt-5">
+      <div className="flex flex-1 flex-col p-5 pt-4 sm:p-7 sm:pt-5">
         <header className="flex items-center gap-3">
           <h2 id="demo-t" className="font-display text-[1.55rem] leading-tight font-extrabold tracking-[-0.03em]">
             Pruébalo aquí
@@ -37,8 +37,8 @@ export function HeroDemo({ className }: { className?: string }) {
             En vivo
           </span>
         </header>
-        <div className="mt-3 grid items-center gap-4 sm:grid-cols-[1fr_minmax(0,13rem)]">
-          <div className="order-2 sm:order-1">
+        <div className="mt-3 grid flex-1 items-center gap-4 sm:grid-cols-[1fr_minmax(0,13rem)] lg:grid-cols-1 lg:content-center lg:gap-5">
+          <div className="order-2 sm:order-1 lg:order-2 lg:flex lg:items-end lg:justify-center lg:gap-5">
             <p className="flex flex-wrap items-baseline gap-x-3">
               <CountUp
                 value={inRadius.length}
@@ -46,7 +46,7 @@ export function HeroDemo({ className }: { className?: string }) {
               />
               <span className="font-display text-xl font-extrabold uppercase tracking-[0.04em]">vacantes</span>
             </p>
-            <p className="mt-3 text-[1.02rem] text-muted-foreground">
+            <p className="mt-3 text-[1.02rem] text-muted-foreground lg:mt-0 lg:max-w-[14rem] lg:pb-1">
               a menos de{" "}
               <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-2.5 py-0.5 font-bold text-ink tabular-nums">
                 <span aria-hidden className="size-2.5 rounded-full" style={{ background: bandColor(bandFor(radiusKm)) }} />
@@ -55,7 +55,7 @@ export function HeroDemo({ className }: { className?: string }) {
               de {colonia}, Saltillo
             </p>
           </div>
-          <div className="relative order-1 mx-auto w-full max-w-[15rem] sm:order-2">
+          <div className="relative order-1 mx-auto w-full max-w-[15rem] sm:order-2 lg:order-1 lg:max-w-[18.5rem]">
             <div className="rounded-full border-[3px] border-ink bg-white p-2">
               <Radar jobs={jobs} radiusKm={radiusKm} compact interactive={false} />
             </div>
