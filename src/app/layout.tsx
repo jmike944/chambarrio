@@ -17,12 +17,16 @@ const bricolage = Bricolage_Grotesque({
 });
 
 /**
- * Absolute base for Open Graph / Twitter image URLs. NEXT_PUBLIC_SITE_URL wins (set it when a custom
- * domain goes live); on Vercel it falls back to the project's production domain; locally, localhost.
+ * Absolute base for Open Graph / Twitter image URLs. NEXT_PUBLIC_SITE_URL wins; production is the
+ * canonical https://chambarrio.com; Vercel previews use their own URL; locally, localhost.
  */
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+  (process.env.VERCEL_ENV === "production"
+    ? "https://chambarrio.com"
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
