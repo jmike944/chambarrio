@@ -17,6 +17,8 @@ import { emitLive } from "./events";
 export type {
   BusinessInput,
   CompanyPatch,
+  ExperienceInput,
+  LiveExperience,
   JobInput,
   JobStatus,
   LiveApplicant,
@@ -32,10 +34,12 @@ export {
   addBranch,
   apply,
   createBusiness,
+  deleteExperience,
   fetchCatalog,
   fetchJob,
   fetchMyJobs,
   friendlyError,
+  insertExperience,
   listApplicants,
   removeBranch,
   saveProfile,
@@ -43,6 +47,7 @@ export {
   toggleSaved,
   updateBranch,
   updateCompany,
+  updateExperience,
   withdraw,
 } from "./api";
 

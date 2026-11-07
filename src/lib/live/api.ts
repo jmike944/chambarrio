@@ -16,6 +16,18 @@ import type {
   Shift,
 } from "@/lib/data/types";
 import { RADIUS_STOPS, type LatLng, type RadiusKm } from "@/lib/geo";
+import {
+  EDUCATION_LEVELS,
+  EMPTY_PROFILE_EXTRAS,
+  EXPECTED_PERIODS,
+  PROFILE_LIMITS,
+  SHIFTS,
+  START_AVAILABILITIES,
+  TRANSPORTS,
+  monthToDate,
+  type CandidateProfileExtras,
+  type WorkExperience,
+} from "@/lib/profile-strength";
 
 /*
  * Pure Supabase calls for live mode. No store imports (the store imports this file); every function
@@ -65,10 +77,19 @@ export type LiveProfile = {
   emailAlerts: boolean;
   /** profiles.email_updates: application updates (candidate) / new applicants (business owner). */
   emailUpdates: boolean;
+  /** The optional richer candidate profile (headline, skills, availability, photo/CV paths…). */
+  extras: CandidateProfileExtras;
+  /** public.profile_strength(profiles), 0–100; null when the server didn't send it. */
+  strength: number | null;
 };
+
+/** A saved work-history row (server id). */
+export type LiveExperience = WorkExperience & { id: string };
 
 export type LiveSessionData = {
   profile: LiveProfile;
+  /** The candidate's work history (ordered by `sort`); null when it couldn't be loaded. */
+  experiences: LiveExperience[] | null;
   applications: Application[];
   saved: string[];
   company: LiveCompany | null;
@@ -128,7 +149,29 @@ export type CompanyPatch = Partial<Pick<LiveCompany, "name" | "kind" | "size" | 
 export type ProfilePatch = Partial<
   Pick<
     Database["public"]["Tables"]["profiles"]["Update"],
-    "role" | "name" | "phone" | "email" | "interests" | "experience" | "radius_km" | "onboarded" | "email_alerts" | "email_updates"
+    | "role"
+    | "name"
+    | "phone"
+    | "email"
+    | "interests"
+    | "experience"
+    | "radius_km"
+    | "onboarded"
+    | "email_alerts"
+    | "email_updates"
+    | "headline"
+    | "about"
+    | "education"
+    | "skills"
+    | "certifications"
+    | "languages"
+    | "shifts"
+    | "available_from"
+    | "transport"
+    | "expected_pay"
+    | "expected_period"
+    | "avatar_path"
+    | "cv_path"
   >
 >;
 
@@ -147,6 +190,7 @@ export const MSG = {
   noCompany: "Primero registra tu negocio.",
   jobClosed: "Esta vacante ya no recibe postulaciones.",
   jobGone: "Esa vacante ya no existe.",
+  experienceLimit: `Puedes guardar hasta ${PROFILE_LIMITS.experiencesMax} experiencias. Borra una para agregar otra.`,
 } as const;
 
 type DbError = { message?: string; code?: string; details?: string | null } | null | undefined;
@@ -393,7 +437,58 @@ const BLANK_PROFILE: LiveProfile = {
   onboarded: false,
   emailAlerts: true,
   emailUpdates: true,
+  extras: EMPTY_PROFILE_EXTRAS,
+  strength: null,
 };
+
+function oneOf<T extends string>(v: unknown, allowed: readonly T[]): T | null {
+  return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : null;
+}
+function manyOf<T extends string>(v: unknown, allowed: readonly T[]): T[] {
+  return Array.isArray(v) ? v.filter((x): x is T => typeof x === "string" && (allowed as readonly string[]).includes(x)) : [];
+}
+const texts = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : []);
+const textOrNull = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
+
+type ProfileRow = Tables<"profiles"> & { profile_strength?: number | null };
+
+/** The optional profile columns, defensively parsed (older rows / a stale schema cache read as empty). */
+function profileExtras(p: ProfileRow): CandidateProfileExtras {
+  return {
+    headline: textOrNull(p.headline),
+    about: textOrNull(p.about),
+    education: oneOf(p.education, EDUCATION_LEVELS),
+    skills: texts(p.skills),
+    certifications: texts(p.certifications),
+    languages: texts(p.languages),
+    shifts: manyOf<Shift>(p.shifts, SHIFTS),
+    availableFrom: oneOf(p.available_from, START_AVAILABILITIES),
+    transport: manyOf(p.transport, TRANSPORTS),
+    expectedPay: typeof p.expected_pay === "number" && Number.isFinite(p.expected_pay) ? p.expected_pay : null,
+    expectedPeriod: oneOf<PayPeriod>(p.expected_period, EXPECTED_PERIODS),
+    avatarPath: textOrNull(p.avatar_path),
+    cvPath: textOrNull(p.cv_path),
+  };
+}
+
+type ExperienceRow = Pick<
+  Tables<"work_experiences">,
+  "id" | "title" | "company" | "category" | "start_month" | "end_month" | "is_current" | "description"
+>;
+const EXPERIENCE_COLUMNS = "id, title, company, category, start_month, end_month, is_current, description";
+
+function experienceFromRow(r: ExperienceRow): LiveExperience {
+  return {
+    id: r.id,
+    title: r.title,
+    company: r.company,
+    category: r.category,
+    startMonth: r.start_month,
+    endMonth: r.is_current ? null : r.end_month,
+    isCurrent: r.is_current,
+    description: r.description,
+  };
+}
 
 async function fetchCompanyWithBranches(
   company: Omit<LiveCompany, "branches">,
@@ -418,8 +513,9 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
   const sb = client();
   if (!sb) return { error: MSG.unavailable };
   try {
-    const [profile, apps, saved, company] = await Promise.all([
-      sb.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    const [profileTry, apps, saved, company, experiences] = await Promise.all([
+      // profile_strength is a computed column (a SQL function over the row).
+      sb.from("profiles").select("*, profile_strength").eq("id", userId).maybeSingle(),
       sb.from("applications").select("job_id, status, created_at").eq("candidate_id", userId).order("created_at", { ascending: false }),
       sb.from("saved_jobs").select("job_id, created_at").eq("candidate_id", userId).order("created_at"),
       sb
@@ -429,12 +525,17 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
         .order("created_at")
         .limit(1)
         .maybeSingle(),
+      sb.from("work_experiences").select(EXPERIENCE_COLUMNS).eq("profile_id", userId).order("sort").order("created_at"),
     ]);
+    // A schema cache without the computed column must not lock the user out: retry plain.
+    const profile = profileTry.error
+      ? await sb.from("profiles").select("*").eq("id", userId).maybeSingle()
+      : { data: profileTry.data as unknown as ProfileRow | null, error: null };
     const err = profile.error ?? apps.error ?? saved.error ?? company.error;
     if (err) return { error: friendlyError(err, MSG.load) };
 
     const now = Date.now();
-    const p = profile.data;
+    const p = profile.data as ProfileRow | null;
     const live: LiveProfile = p
       ? {
           role: p.role,
@@ -451,6 +552,8 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
           // Older rows / a stale schema cache: treat a missing value as the column default (on).
           emailAlerts: p.email_alerts ?? true,
           emailUpdates: p.email_updates ?? true,
+          extras: profileExtras(p),
+          strength: typeof p.profile_strength === "number" ? p.profile_strength : null,
         }
       : BLANK_PROFILE;
 
@@ -469,6 +572,8 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
     return {
       data: {
         profile: live,
+        // Work history is optional: if it fails to load, keep what's on screen instead of failing the session.
+        experiences: experiences.error ? null : (experiences.data ?? []).map(experienceFromRow),
         applications: (apps.data ?? []).map((a) => ({ jobId: a.job_id, status: a.status, minutesAgo: minutesSince(a.created_at, now) })),
         saved: (saved.data ?? []).map((s) => s.job_id),
         company: myCompany,
@@ -487,10 +592,97 @@ export async function saveProfile(patch: ProfilePatch): Promise<WriteResult> {
     const id = await currentUserId();
     if (!id) return { error: MSG.session };
     const { data, error } = await sb.from("profiles").update(patch).eq("id", id).select("id");
-    if (error) return { error: friendlyError(error) };
+    if (error) return { error: profileError(error) };
     return data?.length ? {} : { error: MSG.session };
   } catch (e) {
-    return { error: friendlyError(e as DbError) };
+    return { error: profileError(e as DbError) };
+  }
+}
+
+/** Check-constraint violations on profiles → what to fix, in Spanish. */
+function profileError(e: DbError): string {
+  const m = `${e?.message ?? ""}`.toLowerCase();
+  if (e?.code === "23514") {
+    if (m.includes("headline")) return `Tu frase de presentación puede tener hasta ${PROFILE_LIMITS.headlineMax} letras.`;
+    if (m.includes("about")) return `«Sobre mí» puede tener hasta ${PROFILE_LIMITS.aboutMax} letras.`;
+    if (m.includes("certifications")) return `Puedes agregar hasta ${PROFILE_LIMITS.certificationsMax} licencias o certificados.`;
+    if (m.includes("skills")) return `Puedes agregar hasta ${PROFILE_LIMITS.skillsMax} habilidades.`;
+    if (m.includes("languages")) return `Puedes agregar hasta ${PROFILE_LIMITS.languagesMax} idiomas.`;
+    if (m.includes("expected_pay")) return "Escribe un sueldo entre $100 y $200,000.";
+    if (m.includes("transport")) return "Elige cómo llegas de la lista.";
+    return "Revisa los datos de tu perfil.";
+  }
+  return friendlyError(e);
+}
+
+// ------------------------------------------------------------------ work history (own rows, RLS)
+
+export type ExperienceInput = Omit<WorkExperience, "id">;
+
+function experienceRow(e: ExperienceInput) {
+  return {
+    title: e.title.trim(),
+    company: e.company?.trim() || null,
+    category: e.category,
+    start_month: monthToDate(e.startMonth),
+    end_month: e.isCurrent ? null : monthToDate(e.endMonth),
+    is_current: e.isCurrent,
+    description: e.description?.trim() || null,
+  };
+}
+
+function experienceError(e: DbError): string {
+  const m = `${e?.message ?? ""}`.toLowerCase();
+  if (m.includes("hasta 10 experiencias")) return MSG.experienceLimit;
+  if (e?.code === "23514") {
+    if (m.includes("title")) return `El puesto debe tener entre 2 y ${PROFILE_LIMITS.experienceTitleMax} letras.`;
+    if (m.includes("company")) return `La empresa puede tener hasta ${PROFILE_LIMITS.experienceCompanyMax} letras.`;
+    if (m.includes("description")) return `La descripción puede tener hasta ${PROFILE_LIMITS.experienceDescriptionMax} letras.`;
+    return "La fecha de fin no puede ser antes del inicio.";
+  }
+  return friendlyError(e);
+}
+
+/** Adds a row to my work history; returns its id. Fails (friendly) past 10 rows. */
+export async function insertExperience(e: ExperienceInput, sort: number): Promise<Result<string>> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  try {
+    const id = await currentUserId();
+    if (!id) return { error: MSG.session };
+    const { data, error } = await sb
+      .from("work_experiences")
+      .insert({ ...experienceRow(e), profile_id: id, sort: Math.max(0, Math.min(32767, Math.round(sort))) })
+      .select("id")
+      .single();
+    if (error || !data) return { error: experienceError(error) };
+    return { data: data.id };
+  } catch (err) {
+    return { error: experienceError(err as DbError) };
+  }
+}
+
+export async function updateExperience(experienceId: string, e: ExperienceInput): Promise<WriteResult> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  try {
+    const { data, error } = await sb.from("work_experiences").update(experienceRow(e)).eq("id", experienceId).select("id");
+    if (error) return { error: experienceError(error) };
+    return data?.length ? {} : { error: "No encontramos esa experiencia." };
+  } catch (err) {
+    return { error: experienceError(err as DbError) };
+  }
+}
+
+export async function deleteExperience(experienceId: string): Promise<WriteResult> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  try {
+    const { error } = await sb.from("work_experiences").delete().eq("id", experienceId);
+    // Already gone counts as done.
+    return error ? { error: experienceError(error) } : {};
+  } catch (err) {
+    return { error: experienceError(err as DbError) };
   }
 }
 

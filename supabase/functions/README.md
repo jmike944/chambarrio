@@ -18,20 +18,22 @@ Kinds: `new_applicant` (business owner: someone applied, showing only colonia an
 ### How it runs
 
 1. Database events insert rows into `email_outbox`. An AFTER INSERT trigger calls this function
-   via `pg_net`. `pg_cron` also calls it every 10 min for retries and enqueues the digest at 14:00
-   UTC (8:00 in Saltillo).
+   via `pg_net` (once per statement that actually added rows; the daily digest is a single
+   INSERT for every candidate). `pg_cron` runs `email_retry_tick()` every 10 min, which wakes the
+   function only when rows are waiting, and enqueues the digest at 14:00 UTC (8:00 in Saltillo).
 2. Each call claims batches of 10 with `claim_email_batch`, re-checks the recipient's
    `email_alerts` / `email_updates` (opted-out rows become `skipped`) and renders the email. It
    then sends with `Idempotency-Key: <outbox id>`, `List-Unsubscribe` (one-click, RFC 8058) and a
    `kind` tag, and records the result with `finish_email`.
 3. Pacing is 600 ms per send because Resend allows 2 req/s by default. A 429 stops the run, and
    the remaining claimed rows go back to `pending`. A run stops claiming after about 45 s.
-   Failures retry until 5 attempts, then become `failed`. Note that the claim counts an attempt
-   even for rows the run releases without trying them.
-4. The HTTP call is answered within about 4 s, and the rest of the run continues through
-   `EdgeRuntime.waitUntil`, because pg_net gives up after 5 s. When the daily digest triggers a
-   burst of calls, each call waits a random 0–1.2 s and then stands down if another run claimed
-   rows in the last 90 s, so usually only one run sends.
+   Failures retry until 5 attempts, then become `failed`. Rows a run claimed but never tried go
+   back with `release_email`, which gives the attempt back. Rows stuck in `sending` after their
+   5th attempt are marked `failed` by the retry tick.
+4. The HTTP call is answered within about 1 s, and the rest of the run continues through
+   `EdgeRuntime.waitUntil`, because pg_net gives up after 5 s and a cold start can take most of
+   that. When a burst of wake-ups arrives, each call waits a random 0–1.2 s and then stands down
+   if another run claimed rows in the last 90 s, so usually only one run sends.
 
 Logs contain only outbox ids, kinds, HTTP statuses and error codes. They never contain addresses,
 names or payloads.
@@ -70,7 +72,6 @@ supabase functions deploy send-emails --no-verify-jwt --project-ref hggxrdwjnvhu
 
 ### Type checking
 
-The app's `tsconfig.json` also covers this folder. Because of that, `index.ts` declares a minimal
-`Deno` type, and a `@ts-expect-error` lets the app's `tsc` accept the `.ts` import extension that
-Deno requires. To check the function with Deno instead, add `"supabase/functions"` to the
-tsconfig `exclude` list and drop that directive.
+The app's `tsconfig.json` excludes `supabase/functions` (Deno resolves `./templates.ts` and
+`npm:` imports itself). Check the function with `deno check supabase/functions/send-emails/index.ts`.
+`index.ts` still declares a minimal `Deno` type so editors without the Deno extension stay quiet.

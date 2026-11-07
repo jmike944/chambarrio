@@ -11,6 +11,13 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import * as api from "@/lib/live/api";
 import type { LiveCompany, LiveSessionData, WriteResult } from "@/lib/live/api";
 import { emitLive } from "@/lib/live/events";
+import {
+  EMPTY_PROFILE_EXTRAS,
+  PROFILE_LIMITS,
+  validateExperience,
+  type CandidateProfileExtras,
+  type WorkExperience,
+} from "@/lib/profile-strength";
 
 /*
  * The signed-in user, in one of two modes:
@@ -27,6 +34,11 @@ export { useJobsByDistance, type JobWithDistance } from "@/lib/data/catalog";
 export type { WriteResult } from "@/lib/live/api";
 
 export type Role = "candidato" | "empresa";
+
+/** A row of the candidate's work history. `id`: server id (live), "tmp-…" while saving, "exp-…" in demo. */
+export type StoredExperience = WorkExperience & { id: string };
+/** The optional profile fields edited through `updateProfile` (photo / CV go through @/lib/live/profile-files). */
+export type ProfileExtrasPatch = Partial<Omit<CandidateProfileExtras, "avatarPath" | "cvPath">>;
 export type PlanId = "por-vacante" | "pyme" | "industrial";
 export type AppMode = "demo" | "live";
 
@@ -81,7 +93,15 @@ type UserData = {
    * applied). Live: profiles.email_updates, one flag for both roles.
    */
   emailUpdates: boolean;
-};
+  /** Candidate work history (live: public.work_experiences), in the order it was added. */
+  workExperiences: StoredExperience[];
+  /** Live: public.profile_strength as of the last load (the editor computes its own live value). */
+  serverStrength: number | null;
+  /** The CV's original file name, remembered on this device (the server only keeps the path). */
+  cvFileName: string | null;
+  /** Demo only: a small data-URL thumbnail of the "uploaded" photo (never sent anywhere). */
+  demoAvatarUrl: string | null;
+} & CandidateProfileExtras;
 
 type Actions = {
   /** Replaces the user with the curated demo (Mariana in Lourdes / Logística Zapalinamé) and signs in. */
@@ -104,6 +124,15 @@ type Actions = {
   /** Email preferences. Demo: local only (the demo never sends email). */
   setEmailAlerts: (on: boolean) => Promise<WriteResult>;
   setEmailUpdates: (on: boolean) => Promise<WriteResult>;
+  /**
+   * The optional richer profile (headline, about, skills, availability, expected pay…). Any subset of
+   * fields; live: debounced and batched with the other profile writes, rolled back + toasted on error.
+   */
+  updateProfile: (patch: ProfileExtrasPatch) => Promise<WriteResult>;
+  /** Work history. Live: insert/update/delete on work_experiences (optimistic, rollback + toast). */
+  addExperience: (experience: WorkExperience) => Promise<WriteResult & { id?: string }>;
+  updateExperience: (id: string, patch: Partial<WorkExperience>) => Promise<WriteResult>;
+  removeExperience: (id: string) => Promise<WriteResult>;
   /** Live: creates the company + branches the first time, afterwards updates name/kind/size/phone only. */
   setBusiness: (business: Business | null) => Promise<WriteResult>;
   completeOnboarding: (role: Role) => Promise<WriteResult>;
@@ -148,6 +177,25 @@ const BLANK: UserData = {
   unlockedJobIds: [],
   emailAlerts: true,
   emailUpdates: true,
+  ...EMPTY_PROFILE_EXTRAS,
+  workExperiences: [],
+  serverStrength: null,
+  cvFileName: null,
+  demoAvatarUrl: null,
+};
+
+/**
+ * Mariana's partly-filled profile (demo): headline, "sobre mí" and 3 skills/licenses, but no work
+ * history, phone, availability, schooling, photo or CV yet → 55 %, so the meter and the tips have
+ * something to show ("+15 % · Agrega dónde has trabajado").
+ */
+const DEMO_EXTRAS: CandidateProfileExtras = {
+  ...EMPTY_PROFILE_EXTRAS,
+  headline: "Cajera con experiencia en minisúper",
+  about:
+    "Trabajé medio año de cajera en un minisúper de mi colonia: cobro, corte de caja y acomodo de mercancía. Busco algo cerca de Lourdes, de preferencia en turno matutino.",
+  skills: ["Manejo de caja", "Atención al cliente"],
+  certifications: ["Manejo higiénico de alimentos"],
 };
 
 /** The curated demo user (what the app shipped with as its defaults). */
@@ -174,6 +222,7 @@ function demoSeed(role: Role): UserData {
       { jobId: "guardia-centinela", status: "vista", minutesAgo: 300 },
       { jobId: "cajera-mirasierra", status: "enviada", minutesAgo: 45 },
     ],
+    ...DEMO_EXTRAS,
   };
 }
 
@@ -202,6 +251,56 @@ export const useApp = create<State>()(
       setExperience: (experience) => writeProfile("experience", experience),
       setEmailAlerts: (on) => writeProfile("emailAlerts", on),
       setEmailUpdates: (on) => writeProfile("emailUpdates", on),
+      updateProfile: (patch) => writeProfileMany(cleanExtrasPatch(patch)),
+
+      addExperience: async (input) => {
+        const entry = normalizeExperience(input);
+        const invalid = validateExperience(entry);
+        if (invalid) return fail(invalid);
+        if (get().workExperiences.length >= PROFILE_LIMITS.experiencesMax) return fail(api.MSG.experienceLimit);
+        if (!isLive()) {
+          const id = `exp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+          set((s) => ({ workExperiences: [...s.workExperiences, { ...entry, id }] }));
+          return { id };
+        }
+        return createExperience(entry);
+      },
+
+      updateExperience: async (id, patch) => {
+        const before = get().workExperiences.find((e) => e.id === id);
+        if (!before) return {};
+        const next = normalizeExperience({ ...before, ...patch });
+        const invalid = validateExperience(next);
+        if (invalid) return fail(invalid);
+        patchExperience(id, next);
+        if (!isLive()) return {};
+        const serverId = await resolveExperienceId(id);
+        if (!serverId) return { error: api.MSG.save };
+        return sync(
+          () => trackWrite(api.updateExperience(serverId, next)),
+          () => patchExperience(serverId, stripId(before)),
+        );
+      },
+
+      removeExperience: async (id) => {
+        const list = get().workExperiences;
+        const index = list.findIndex((e) => e.id === id);
+        if (index < 0) return {};
+        const removed = list[index];
+        set((s) => ({ workExperiences: s.workExperiences.filter((e) => e.id !== id) }));
+        if (!isLive()) return {};
+        const serverId = await resolveExperienceId(id);
+        if (!serverId) return {}; // never reached the server
+        return sync(
+          () => trackWrite(api.deleteExperience(serverId)),
+          () =>
+            set((s) =>
+              s.workExperiences.some((e) => e.id === serverId)
+                ? {}
+                : { workExperiences: [...s.workExperiences.slice(0, index), { ...removed, id: serverId }, ...s.workExperiences.slice(index)] },
+            ),
+        );
+      },
 
       setHome: (home, colonia, locationSource) => {
         const prev = pick(get(), ["home", "colonia", "locationSource", "hasHome"]);
@@ -401,7 +500,7 @@ export const useApp = create<State>()(
       name: "chamba-a-lado",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const s = persisted as Record<string, unknown> & { business?: (Record<string, unknown> & { plan?: string }) | null };
         // v0 → v1: the per-hire plan was replaced by per-vacancy-per-month billing.
@@ -420,6 +519,14 @@ export const useApp = create<State>()(
         if (version < 4) {
           if (typeof s.emailAlerts !== "boolean") s.emailAlerts = true;
           if (typeof s.emailUpdates !== "boolean") s.emailUpdates = true;
+        }
+        // v4 → v5: the optional richer profile. Empty defaults; the curated demo (Mariana) gets her
+        // partly-filled profile so the strength meter has something to show.
+        if (version < 5) {
+          const seed = s.mode === "demo" && s.name === "Mariana" ? DEMO_EXTRAS : EMPTY_PROFILE_EXTRAS;
+          for (const [k, v] of Object.entries(seed)) if (s[k] === undefined) s[k] = v;
+          if (!Array.isArray(s.workExperiences)) s.workExperiences = [];
+          for (const k of ["serverStrength", "cvFileName", "demoAvatarUrl"]) if (s[k] === undefined) s[k] = null;
         }
         return s as unknown as State;
       },
@@ -452,9 +559,24 @@ async function sync(run: () => Promise<WriteResult>, undo: () => void): Promise<
 }
 
 // Profile fields are debounced and batched (the name field writes on every keystroke).
-type ProfileKey = "name" | "phone" | "role" | "interests" | "experience" | "radiusKm" | "emailAlerts" | "emailUpdates";
+type ExtraKey = keyof ProfileExtrasPatch;
+type ProfileKey = "name" | "phone" | "role" | "interests" | "experience" | "radiusKm" | "emailAlerts" | "emailUpdates" | ExtraKey;
 type ProfileValues = Pick<UserData, ProfileKey>;
-const PROFILE_KEYS: ProfileKey[] = ["name", "phone", "role", "interests", "experience", "radiusKm", "emailAlerts", "emailUpdates"];
+/** The optional richer-profile fields (debounced like the rest; photo/CV paths are written by profile-files). */
+const EXTRA_KEYS: ExtraKey[] = [
+  "headline",
+  "about",
+  "education",
+  "skills",
+  "certifications",
+  "languages",
+  "shifts",
+  "availableFrom",
+  "transport",
+  "expectedPay",
+  "expectedPeriod",
+];
+const PROFILE_KEYS: ProfileKey[] = ["name", "phone", "role", "interests", "experience", "radiusKm", "emailAlerts", "emailUpdates", ...EXTRA_KEYS];
 /** What onboarding asks for. Email preferences aren't part of it, so it never overwrites them. */
 const ONBOARDING_KEYS = ["name", "phone", "role", "interests", "experience", "radiusKm"] as const satisfies ProfileKey[];
 /** Server-owned until the user changes them here (an unsubscribe link may have turned them off). */
@@ -480,18 +602,60 @@ function toProfilePatch(v: Partial<ProfileValues>): api.ProfilePatch {
   if (v.radiusKm !== undefined) p.radius_km = v.radiusKm;
   if (v.emailAlerts !== undefined) p.email_alerts = v.emailAlerts;
   if (v.emailUpdates !== undefined) p.email_updates = v.emailUpdates;
+  const text = (t: string | null, max: number) => (t ?? "").trim().slice(0, max) || null;
+  const list = (l: readonly string[], max: number) => [...new Set(l.map((x) => x.trim()).filter(Boolean))].slice(0, max);
+  if (v.headline !== undefined) p.headline = text(v.headline, PROFILE_LIMITS.headlineMax);
+  if (v.about !== undefined) p.about = text(v.about, PROFILE_LIMITS.aboutMax);
+  if (v.education !== undefined) p.education = v.education;
+  if (v.skills !== undefined) p.skills = list(v.skills, PROFILE_LIMITS.skillsMax);
+  if (v.certifications !== undefined) p.certifications = list(v.certifications, PROFILE_LIMITS.certificationsMax);
+  if (v.languages !== undefined) p.languages = list(v.languages, PROFILE_LIMITS.languagesMax);
+  if (v.shifts !== undefined) p.shifts = [...new Set(v.shifts)];
+  if (v.availableFrom !== undefined) p.available_from = v.availableFrom;
+  if (v.transport !== undefined) p.transport = [...new Set(v.transport)];
+  if (v.expectedPay !== undefined) {
+    const pay = v.expectedPay === null ? null : Math.round(v.expectedPay);
+    p.expected_pay = pay !== null && pay >= PROFILE_LIMITS.expectedPayMin && pay <= PROFILE_LIMITS.expectedPayMax ? pay : null;
+  }
+  if (v.expectedPeriod !== undefined) p.expected_period = v.expectedPeriod;
   return p;
 }
 
 function writeProfile<K extends ProfileKey>(key: K, value: ProfileValues[K]): Promise<WriteResult> {
+  return writeProfileMany({ [key]: value } as Partial<ProfileValues>);
+}
+
+/** Sets several profile fields at once (one debounced write in live). */
+function writeProfileMany(patch: Partial<ProfileValues>): Promise<WriteResult> {
+  const keys = Object.keys(patch) as ProfileKey[];
+  if (!keys.length) return DONE;
   const live = isLive();
-  if (live && !(key in confirmed)) confirmed = { ...confirmed, [key]: get()[key] };
-  set({ [key]: value } as Partial<UserData>);
+  if (live) for (const k of keys) if (!(k in confirmed)) confirmed = { ...confirmed, [k]: get()[k] };
+  set(patch as Partial<UserData>);
   if (!live) return DONE;
-  pendingProfile = { ...pendingProfile, [key]: value };
+  pendingProfile = { ...pendingProfile, ...patch };
   if (profileTimer) clearTimeout(profileTimer);
   profileTimer = setTimeout(() => void flushProfileWrites(), PROFILE_DEBOUNCE_MS);
   return new Promise((resolve) => profileWaiters.push(resolve));
+}
+
+/** Keeps only editable keys with sane values (lists capped, pay a whole number). */
+function cleanExtrasPatch(patch: ProfileExtrasPatch): Partial<ProfileValues> {
+  const out: Partial<ProfileValues> = {};
+  for (const k of EXTRA_KEYS) if (patch[k] !== undefined) Object.assign(out, { [k]: patch[k] });
+  if (out.skills) out.skills = out.skills.slice(0, PROFILE_LIMITS.skillsMax);
+  if (out.certifications) out.certifications = out.certifications.slice(0, PROFILE_LIMITS.certificationsMax);
+  if (out.languages) out.languages = out.languages.slice(0, PROFILE_LIMITS.languagesMax);
+  if (out.headline != null) out.headline = out.headline.slice(0, PROFILE_LIMITS.headlineMax);
+  if (out.about != null) out.about = out.about.slice(0, PROFILE_LIMITS.aboutMax);
+  if (out.expectedPay != null) out.expectedPay = Number.isFinite(out.expectedPay) ? Math.round(out.expectedPay) : null;
+  return out;
+}
+
+/** A store action's validation failure: toast (like server errors) and return it. */
+function fail(error: string): WriteResult {
+  toast.error(error);
+  return { error };
 }
 
 /** Sends any debounced profile edits now (also called when the page is hidden). */
@@ -652,6 +816,66 @@ async function createLocation(companyId: string, tmp: string, branch: Omit<Branc
   return { id };
 }
 
+// Work history: live rows get a temporary id until the insert answers.
+const pendingExperienceIds = new Map<string, Promise<string | null>>();
+/** Writes that loadSession should wait for (work history, photo/CV path changes). */
+const inFlight = new Set<Promise<unknown>>();
+
+/** Registers a write so waitForPendingWrites() (and so loadSession) waits for it. */
+export function trackWrite<T>(p: Promise<T>): Promise<T> {
+  inFlight.add(p);
+  void p.finally(() => inFlight.delete(p)).catch(() => undefined);
+  return p;
+}
+
+function normalizeExperience(e: WorkExperience): WorkExperience {
+  return {
+    title: e.title.trim(),
+    company: e.company?.trim() || null,
+    category: e.category ?? null,
+    startMonth: e.startMonth || null,
+    endMonth: e.isCurrent ? null : e.endMonth || null,
+    isCurrent: !!e.isCurrent,
+    description: e.description?.trim() || null,
+  };
+}
+
+function stripId(e: StoredExperience): WorkExperience {
+  return normalizeExperience(e);
+}
+
+function patchExperience(id: string, values: WorkExperience) {
+  set((s) => ({ workExperiences: s.workExperiences.map((e) => (e.id === id ? { ...values, id } : e)) }));
+}
+
+async function resolveExperienceId(id: string): Promise<string | null> {
+  return pendingExperienceIds.get(id) ?? id;
+}
+
+async function createExperience(entry: WorkExperience): Promise<WriteResult & { id?: string }> {
+  const gen = generation;
+  const tmp = `tmp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const sort = get().workExperiences.length;
+  set((s) => ({ workExperiences: [...s.workExperiences, { ...entry, id: tmp }] }));
+  const request = trackWrite(api.insertExperience(entry, sort));
+  pendingExperienceIds.set(
+    tmp,
+    request.then((r) => r.data ?? null),
+  );
+  const r = await request;
+  pendingExperienceIds.delete(tmp);
+  if (gen !== generation) return r.error !== undefined ? { error: r.error } : { id: r.data };
+  if (r.error !== undefined) {
+    set((s) => ({ workExperiences: s.workExperiences.filter((e) => e.id !== tmp) }));
+    if (isLive()) toast.error(r.error);
+    return { error: r.error };
+  }
+  const id = r.data;
+  // Keep edits made while saving (updateExperience waits for this id); just swap it in.
+  set((s) => ({ workExperiences: s.workExperiences.map((e) => (e.id === tmp ? { ...e, id } : e)) }));
+  return { id };
+}
+
 /** Drops queued writes and in-flight bookkeeping (the user is changing). */
 function resetLiveWork() {
   generation++;
@@ -662,6 +886,7 @@ function resetLiveWork() {
   pendingProfile = {};
   confirmed = {};
   pendingBranchIds.clear();
+  pendingExperienceIds.clear();
 }
 
 /** Back to a signed-out visitor, with no trace of the previous user (demo or live). */
@@ -695,7 +920,7 @@ export function wipeLiveState() {
 /** Resolves once queued and in-flight writes (profile, business, onboarding) have settled. */
 export async function waitForPendingWrites(): Promise<void> {
   await flushProfileWrites();
-  await Promise.allSettled([creatingBusiness, onboardingFlight].filter(Boolean));
+  await Promise.allSettled([creatingBusiness, onboardingFlight, ...inFlight].filter(Boolean));
 }
 
 /** Applies what the server holds for the signed-in user. Pending local edits win over it. */
@@ -713,6 +938,17 @@ export function applyLiveSnapshot(d: LiveSessionData) {
     radiusKm: p.radiusKm,
     emailAlerts: p.emailAlerts,
     emailUpdates: p.emailUpdates,
+    headline: p.extras.headline,
+    about: p.extras.about,
+    education: p.extras.education,
+    skills: p.extras.skills,
+    certifications: p.extras.certifications,
+    languages: p.extras.languages,
+    shifts: p.extras.shifts,
+    availableFrom: p.extras.availableFrom,
+    transport: p.extras.transport,
+    expectedPay: p.extras.expectedPay,
+    expectedPeriod: p.extras.expectedPeriod,
   };
   const patch: Partial<UserData> = {
     signedIn: true,
@@ -720,7 +956,19 @@ export function applyLiveSnapshot(d: LiveSessionData) {
     applications: d.applications,
     saved: d.saved,
     unlockedJobIds: d.unlockedJobIds,
+    serverStrength: p.strength,
   };
+  // The optional profile isn't part of onboarding: the server holds it in both branches below,
+  // except fields with an edit still queued here. Photo/CV paths and the work history likewise,
+  // unless a write to them is still in flight.
+  for (const k of EXTRA_KEYS) if (!pending.has(k)) Object.assign(patch, { [k]: server[k] });
+  if (inFlight.size === 0) {
+    patch.avatarPath = p.extras.avatarPath;
+    patch.cvPath = p.extras.cvPath;
+    // The file name is only remembered for the CV uploaded from this device.
+    if (p.extras.cvPath !== s.cvPath) patch.cvFileName = null;
+    if (d.experiences) patch.workExperiences = d.experiences;
+  }
   const home = p.home ? { home: p.home, colonia: p.colonia ?? "", locationSource: p.locationSource, hasHome: true } : null;
   if (p.onboarded) {
     patch.onboarded = true;

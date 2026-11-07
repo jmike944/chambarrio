@@ -1,8 +1,9 @@
 /**
  * send-emails: drains public.email_outbox through Resend.
  *
- * Woken by the email_outbox AFTER INSERT trigger and by pg_cron every 10 minutes, both through
- * pg_net with an empty body and no Authorization header (hence verify_jwt = false; see README.md).
+ * Woken by the email_outbox AFTER INSERT trigger and by the pg_cron retry tick (every 10 minutes,
+ * only when rows are waiting), both through pg_net with an empty body and no Authorization header
+ * (hence verify_jwt = false; see README.md).
  * The request body is never read: any call just means "send whatever is pending", and the outbox
  * claim (FOR UPDATE SKIP LOCKED) plus Resend's Idempotency-Key make extra or concurrent calls safe.
  *
@@ -10,10 +11,9 @@
  * names or payloads.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-// @ts-expect-error -- Deno needs the explicit ".ts"; the Next.js tsconfig (which also scans this folder) rejects it.
 import { isEmailKind, renderEmail, unsubscribeKindFor, urls, type EmailKind, type RenderedEmail } from "./templates.ts";
 
-// Minimal ambient types so this file also type-checks under the web app's tsconfig (no Deno libs there).
+// Minimal ambient types (the web app's tsconfig excludes supabase/functions; this keeps editors quiet).
 declare const Deno: {
   env: { get(name: string): string | undefined };
   serve(handler: (req: Request) => Response | Promise<Response>): unknown;
@@ -30,8 +30,11 @@ const PACE_MS = 600;
 const CLAIM_UNTIL_MS = 43_000;
 /** Hard stop: rows not yet tried after this go back to pending. */
 const HARD_STOP_MS = 55_000;
-/** Answer the HTTP call by then; the run keeps going in the background (pg_net times out at 5 s). */
-const RESPOND_WITHIN_MS = 4_000;
+/**
+ * Answer the HTTP call by then; the run keeps going in the background. pg_net times out at 5 s and
+ * a cold start can eat ~4 s of that before the handler even runs, so answer fast.
+ */
+const RESPOND_WITHIN_MS = 1_000;
 /** Another run that claimed rows this recently is treated as active, so this call stands down. */
 const ACTIVE_SENDER_WINDOW_MS = 90_000;
 
@@ -92,6 +95,16 @@ async function finish(db: SupabaseClient, row: OutboxRow, ok: boolean, error: st
   // If this fails the row stays "sending" and is reclaimed after 10 min; the Idempotency-Key keeps
   // Resend from sending it twice within 24 h.
   if (rpcError) log("finish_failed", { id: row.id, code: rpcError.code });
+}
+
+/**
+ * A claimed row this run never tried (time budget, rate limit, prefs lookup failure): back to
+ * pending without spending one of its 5 attempts. Falls back to finish_email (which does spend one)
+ * if release_email isn't there yet (migration 20261107233000 not applied).
+ */
+async function release(db: SupabaseClient, row: OutboxRow, reason: string) {
+  const { error } = await db.rpc("release_email", { p_id: row.id, p_reason: reason });
+  if (error) await finish(db, row, false, reason);
 }
 
 /** Terminal states finish_email can't express: skipped (opted out) or failed (unrenderable). */
@@ -187,9 +200,9 @@ async function sendViaResend(
 // -------------------------------------------------------------------------------------------- drain
 
 async function drain(db: SupabaseClient, apiKey: string, stats: Stats, startedAt: number) {
-  // Every enqueue statement fires its own wake-up, so the daily digest can start dozens of runs at
-  // once. A short random delay plus "is someone already sending?" keeps it to roughly one sender,
-  // which keeps us under Resend's rate limit. A rare overlap is harmless: claims never overlap.
+  // Each enqueue statement that adds rows fires a wake-up, so bursts of applications can start a few
+  // runs at once. A short random delay plus "is someone already sending?" keeps it to roughly one
+  // sender, which keeps us under Resend's rate limit. A rare overlap is harmless: claims never overlap.
   await sleep(Math.floor(Math.random() * 1200));
   if (await anotherSenderActive(db)) {
     stats.note = "another run is sending";
@@ -211,7 +224,7 @@ async function drain(db: SupabaseClient, apiKey: string, stats: Stats, startedAt
 
     const prefs = await loadPrefs(db, rows.map((r) => r.user_id));
     if (!prefs) {
-      for (const row of rows) await finish(db, row, false, "profile lookup failed");
+      for (const row of rows) await release(db, row, "profile lookup failed (not tried)");
       stats.ok = false;
       return;
     }
@@ -219,8 +232,8 @@ async function drain(db: SupabaseClient, apiKey: string, stats: Stats, startedAt
     for (const row of rows) {
       if (stop || Date.now() - startedAt > HARD_STOP_MS) {
         stop = true;
-        // Not tried this run; back to pending (the claim already counted an attempt).
-        await finish(db, row, false, stats.rate_limited ? "rate limited (not tried)" : "time budget (not tried)");
+        // Not tried this run: back to pending, attempt not spent.
+        await release(db, row, stats.rate_limited ? "rate limited (not tried)" : "time budget (not tried)");
         continue;
       }
 
