@@ -20,10 +20,10 @@ import { ThemeToggle } from "@/components/theme";
 import { HeroDemo } from "@/components/landing/hero-demo";
 import { InstallButton } from "@/components/landing/install-button";
 import { DemoShowcase } from "@/components/landing/demo-entry";
+import { CategoryCount } from "@/components/landing/category-count";
 import { ChambitaHello, Squiggle } from "@/components/landing/fx";
 import { HARD, HARD_SM, HazardStripe, PRESSABLE, Rivets, Scatter, StencilNumber, Tape, chunky } from "@/components/landing/decor";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
-import { JOBS } from "@/lib/data/jobs";
 import type { CategoryId } from "@/lib/data/types";
 import { CITY_AVG_KM, monthlySavings } from "@/lib/geo";
 import { formatMXN } from "@/lib/format";
@@ -74,10 +74,6 @@ const PICKS: { id: CategoryId; tone: BlockTone }[] = [
   { id: "almacen", tone: "lila" },
   { id: "mantenimiento", tone: "limon" },
 ];
-const COUNT = JOBS.reduce<Partial<Record<CategoryId, number>>>((acc, j) => {
-  acc[j.category] = (acc[j.category] ?? 0) + 1;
-  return acc;
-}, {});
 
 const HERO_STATS: { value: number; suffix: string; label: string; tone: BlockTone }[] = [
   { value: 0, suffix: "", label: "pesos te cuesta buscar", tone: "sol" },
@@ -304,7 +300,6 @@ export default function LandingPage() {
           </SectionHead>
           <Stagger as="ul" inView gap={0.07} className="grid min-w-0 lg:grid-cols-3 lg:gap-5">
             {PICKS.map((p, i) => {
-              const n = COUNT[p.id] ?? 0;
               const last = i === PICKS.length - 1;
               return (
                 <StaggerItem as="li" key={p.id} className={cn("relative", i > 0 && "-mt-6 lg:mt-0")} style={{ zIndex: i + 1 }}>
@@ -320,7 +315,7 @@ export default function LandingPage() {
                   >
                     <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-50" />
                     <span className="font-display text-[0.78rem] font-extrabold tracking-[0.14em] text-muted-foreground uppercase">
-                      {n} {n === 1 ? "vacante" : "vacantes"} cerca
+                      <CategoryCount category={p.id} />
                     </span>
                     <span className="mt-1 max-w-[62%] font-display text-[1.75rem] leading-[1] font-extrabold tracking-[-0.035em] lg:max-w-none lg:text-[1.6rem]">
                       {CATEGORY_BY_ID[p.id].label}

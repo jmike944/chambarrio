@@ -126,7 +126,7 @@ export function ResendButton({ seconds, onClick, disabled }: { seconds: number; 
       disabled={counting || disabled}
       className={cn(linkBtn, "text-foreground disabled:text-muted-foreground disabled:no-underline tabular-nums")}
     >
-      {counting ? `Reenviar código en 0:${String(seconds).padStart(2, "0")}` : "Reenviar código"}
+      {counting ? `Reenviar código en ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "Reenviar código"}
     </button>
   );
 }

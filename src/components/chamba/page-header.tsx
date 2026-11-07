@@ -53,6 +53,8 @@ export function PageHeader({
   const pathname = usePathname();
   const isEmpresa = pathname === "/empresa" || pathname.startsWith("/empresa/");
   const name = useApp((s) => s.name);
+  // The "2 nuevos" unread dot is demo decoration; live has no notifications table yet.
+  const demo = useApp((s) => s.mode === "demo");
   const first = name.trim().split(/\s+/)[0];
   const line = eyebrow ?? (greeting ? `${greeting}${!isEmpresa && first ? `, ${first}` : ""}` : "");
 
@@ -84,13 +86,13 @@ export function PageHeader({
         {actions}
         <Link
           href="/notificaciones"
-          aria-label="Avisos, 2 nuevos"
+          aria-label={demo ? "Avisos, 2 nuevos" : "Avisos"}
           className="group press relative grid size-12 place-items-center rounded-full border border-border bg-card text-foreground shadow-card outline-none hover:-translate-y-px focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <span className="grid origin-top animate-ring place-items-center group-hover:animate-wiggle">
             <HugeiconsIcon icon={Notification01Icon} className="size-[1.4rem]" strokeWidth={1.8} />
           </span>
-          <span aria-hidden className="absolute top-2.5 right-3 size-2.5 rounded-full bg-chile ring-2 ring-card" />
+          {demo ? <span aria-hidden className="absolute top-2.5 right-3 size-2.5 rounded-full bg-chile ring-2 ring-card" /> : null}
         </Link>
         <AccountMenu />
       </div>

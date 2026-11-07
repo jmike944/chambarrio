@@ -29,12 +29,25 @@ function client() {
 function friendly(message: string | undefined): string {
   if (!message) return "Algo salió mal. Intenta de nuevo.";
   const m = message.toLowerCase();
+  if (/failed to fetch|networkerror|network request failed|load failed|fetch failed/.test(m))
+    return "Sin conexión. Revisa tu internet e intenta de nuevo.";
   if (m.includes("rate limit") || m.includes("too many")) return "Pediste muchos códigos. Espera un minuto y vuelve a intentar.";
+  // "For security purposes, you can only request this after 42 seconds."
+  if (m.includes("security purposes")) {
+    const secs = m.match(/after (\d+) second/)?.[1];
+    return `Espera ${secs ? `${secs} segundos` : "un momento"} antes de pedir otro código.`;
+  }
   if (m.includes("expired") || (m.includes("invalid") && (m.includes("otp") || m.includes("token")))) return "El código no es válido o ya venció. Pide uno nuevo.";
   if (m.includes("invalid login credentials")) return "El correo/teléfono o la contraseña no coinciden.";
+  if (m.includes("not confirmed")) return "Todavía no confirmas tu cuenta. Entra con un código y listo.";
+  if (m.includes("different from the old")) return "Esa ya es tu contraseña. Escribe una nueva.";
   if (m.includes("password") && m.includes("characters")) return "La contraseña debe tener al menos 8 caracteres.";
   if (m.includes("weak") || m.includes("pwned")) return "Esa contraseña es muy fácil de adivinar. Prueba otra.";
-  if (m.includes("phone") && m.includes("provider")) return "Los mensajes SMS todavía no están activados. Entra con tu correo.";
+  // Twilio not configured yet: "Unsupported phone provider", "Phone logins are disabled", "phone_provider_disabled"…
+  if (m.includes("phone") && (m.includes("provider") || m.includes("disabled") || m.includes("unsupported")))
+    return "Los mensajes SMS todavía no están activados. Entra con tu correo.";
+  if (m.includes("signups not allowed") || m.includes("signup is disabled")) return "Por ahora no estamos aceptando cuentas nuevas.";
+  if (m.includes("email") && m.includes("invalid")) return "Revisa tu correo: parece que tiene un error.";
   return "Algo salió mal. Intenta de nuevo.";
 }
 
