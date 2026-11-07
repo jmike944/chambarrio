@@ -152,7 +152,9 @@ export function CandidateFlow() {
   const armExit = useExistingAccountExit("candidato", (s) => s.onboarded);
 
   const phoneDigits = (contactPhone || storePhone.replace(/\D/g, "").replace(/^52(?=\d{10}$)/, "")).slice(0, 10);
-  const needPhone = real;
+  // Live sign-ups may add a celular (optional). Empty is fine; a half-typed number is likely a typo.
+  const askPhone = real;
+  const phoneIncomplete = askPhone && phoneDigits.length > 0 && phoneDigits.length !== 10;
 
   async function askNotifications() {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -294,7 +296,7 @@ export function CandidateFlow() {
             <PrimaryButton
               type="submit"
               form="name-form"
-              disabled={name.trim().length < 2 || (needPhone && phoneDigits.length !== 10)}
+              disabled={name.trim().length < 2 || phoneIncomplete}
             >
               Continuar
             </PrimaryButton>
@@ -305,9 +307,9 @@ export function CandidateFlow() {
             onSubmit={(e) => {
               e.preventDefault();
               if (name.trim().length < 2) return;
-              if (needPhone) {
-                if (phoneDigits.length !== 10) return;
-                if (phoneDigits !== storePhone) void setPhone(phoneDigits);
+              if (askPhone) {
+                if (phoneIncomplete) return;
+                if (phoneDigits.length === 10 && phoneDigits !== storePhone) void setPhone(phoneDigits);
               }
               setName(name.trim());
               next();
@@ -328,11 +330,11 @@ export function CandidateFlow() {
                 className="h-17 rounded-[1.1rem] border-[3px] border-ink bg-white px-5 font-display text-[1.4rem] font-bold text-ink placeholder:text-ink/35 focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/25 md:text-[1.4rem] dark:bg-white"
               />
             </Slab>
-            {needPhone ? (
+            {askPhone ? (
               <Slab tone="menta" index={2} className="mt-5 pt-4">
-                <PhoneField id="contact-phone" value={phoneDigits} onChange={setContactPhone} label="Tu celular" />
+                <PhoneField id="contact-phone" value={phoneDigits} onChange={setContactPhone} label="Tu celular (opcional)" />
                 <p className="mt-3 text-[0.9rem] font-medium text-muted-foreground">
-                  Solo lo ve la empresa cuando te postulas y decide contactarte, por llamada o SMS.
+                  Solo lo ve la empresa cuando te postulas y decide contactarte, por llamada o SMS. Si no lo pones, no podrán llamarte; puedes agregarlo después en tu perfil.
                 </p>
               </Slab>
             ) : null}
