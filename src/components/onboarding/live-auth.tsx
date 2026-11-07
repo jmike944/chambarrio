@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -144,7 +144,8 @@ export function CodeAuth({
   submitLabel = "Enviarme un código",
 }: {
   channel: Channel;
-  role: Role;
+  /** Sign-up only: the side picked for a new account. Sign-in leaves it out. */
+  role?: Role;
   idPrefix: string;
   /** Called once the Supabase session exists (store is already mode "live", signedIn). */
   onVerified: (info: { channel: Channel; to: string }) => void;
@@ -448,28 +449,28 @@ export function PasswordInput({
 }
 
 /**
- * After a live sign-in: wait for the profile to load, then send the person to the right place —
- * onboarding for their role if they never finished it, else their home screen.
- * Returns `start(role)`; call it right after verifyCode / signInWithPassword succeed.
+ * After a live sign-in: wait for the profile to load, then send the person where their account
+ * belongs (each account is one type: candidato or empresa) — onboarding if they never finished
+ * it, else their home screen. Returns `start()`; call it right after verifyCode / signInWithPassword.
  */
 export function useRouteAfterSignIn() {
   const router = useRouter();
   const loaded = useSessionLoaded();
   const live = useApp((s) => s.mode === "live" && s.signedIn);
-  const [target, setTarget] = useState<Role | null>(null);
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
-    if (!target || !live) return;
+    if (!started || !live) return;
     const go = (sure: boolean) => {
       const s = useApp.getState();
+      const empresa = s.role === "empresa";
       if (sure && !s.onboarded) {
-        router.replace(target === "empresa" ? "/bienvenida/empresa" : "/bienvenida");
+        router.replace(empresa ? "/bienvenida/empresa" : "/bienvenida");
         return;
       }
-      if (s.role !== target) void s.setRole(target);
       const first = s.name.trim().split(/\s+/)[0];
-      if (sure) toast.success(target === "empresa" && s.business ? `Hola de nuevo, ${s.business.name}.` : first ? `Hola de nuevo, ${first}.` : "¡Qué gusto verte!");
-      router.replace(target === "empresa" ? "/empresa" : "/inicio");
+      if (sure) toast.success(empresa && s.business ? `Hola de nuevo, ${s.business.name}.` : first ? `Hola de nuevo, ${first}.` : "¡Qué gusto verte!");
+      router.replace(empresa ? "/empresa" : "/inicio");
     };
     if (loaded) {
       go(true);
@@ -478,7 +479,9 @@ export function useRouteAfterSignIn() {
     // Slow network: go to the app anyway; its guard sends unfinished accounts to onboarding.
     const t = setTimeout(() => go(false), 8000);
     return () => clearTimeout(t);
-  }, [target, live, loaded, router]);
+  }, [started, live, loaded, router]);
 
-  return { start: setTarget, pending: target !== null };
+  const start = useCallback(() => setStarted(true), []);
+  const reset = useCallback(() => setStarted(false), []);
+  return { start, reset, pending: started };
 }

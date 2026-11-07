@@ -51,23 +51,25 @@ function friendly(message: string | undefined): string {
   return "Algo salió mal. Intenta de nuevo.";
 }
 
-/** Sends a 6-digit code. New users are created on the fly with their chosen role. */
-export async function sendCode(channel: Channel, to: string, role: Role): Promise<string | null> {
+/**
+ * Sends a 6-digit code. New users are created on the fly: sign-up passes the role they picked;
+ * sign-in (/entrar) passes none, so an existing account keeps its own and the email link lands on
+ * /entrar/listo, which routes by the account's role.
+ */
+export async function sendCode(channel: Channel, to: string, role?: Role): Promise<string | null> {
   const sb = client();
+  const data = role ? { role } : undefined;
   if (channel === "email") {
+    const next = role ? `?next=${role === "empresa" ? "/empresa" : "/inicio"}` : "";
     const { error } = await sb.auth.signInWithOtp({
       email: to.trim().toLowerCase(),
-      options: {
-        shouldCreateUser: true,
-        data: { role },
-        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${role === "empresa" ? "/empresa" : "/inicio"}`,
-      },
+      options: { shouldCreateUser: true, data, emailRedirectTo: `${window.location.origin}/auth/confirm${next}` },
     });
     return error ? friendly(error.message) : null;
   }
   const phone = toE164MX(to);
   if (!phone) return "Escribe tu número de 10 dígitos.";
-  const { error } = await sb.auth.signInWithOtp({ phone, options: { shouldCreateUser: true, data: { role }, channel: "sms" } });
+  const { error } = await sb.auth.signInWithOtp({ phone, options: { shouldCreateUser: true, data, channel: "sms" } });
   return error ? friendly(error.message) : null;
 }
 

@@ -14,17 +14,6 @@ import { cn } from "@/lib/utils";
 import { ChoiceCard, FlowShell, Slab, WORK_CONFETTI, focusRing } from "./flow";
 import { AuthNote, CodeAuth, MethodPicker, PasswordAuth, useRouteAfterSignIn, type Method } from "./live-auth";
 
-const MODE_COPY: Record<Role, { aside: string; hint: string }> = {
-  candidato: {
-    aside: "Qué gusto verte de nuevo.",
-    hint: "Ve tus vacantes cerca y sigue tus postulaciones.",
-  },
-  empresa: {
-    aside: "Tu próxima contratación vive cerca.",
-    hint: "Entra al panel de tu negocio.",
-  },
-};
-
 const METHODS = ["email", "sms", "password"] as const satisfies readonly Method[];
 const METHOD_KEY = "chamba-entrar-metodo";
 
@@ -60,7 +49,7 @@ const linkCls =
   "rounded font-bold text-foreground underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** "¿Solo quieres ver cómo funciona?" → straight into the demo. */
-function DemoOffer({ onPick, role, index = 3 }: { onPick: (r: Role) => void; role?: Role; index?: number }) {
+function DemoOffer({ onPick, index = 3 }: { onPick: (r: Role) => void; index?: number }) {
   const btn = cn(
     "press inline-flex h-12 items-center gap-2 rounded-full border-[2.5px] border-ink bg-white px-4 font-display text-[0.98rem] font-extrabold text-ink transition-[scale,background-color] hover:bg-block-sol",
     focusRing,
@@ -80,28 +69,21 @@ function DemoOffer({ onPick, role, index = 3 }: { onPick: (r: Role) => void; rol
         </span>
       </p>
       <div className="mt-3 flex flex-wrap gap-2.5">
-        {role ? (
-          <button type="button" className={btn} onClick={() => onPick(role)}>
-            Probar la demo
-          </button>
-        ) : (
-          <>
-            <button type="button" className={btn} onClick={() => onPick("candidato")}>
-              Demo: busco chamba
-            </button>
-            <button type="button" className={btn} onClick={() => onPick("empresa")}>
-              Demo: tengo un negocio
-            </button>
-          </>
-        )}
+        <button type="button" className={btn} onClick={() => onPick("candidato")}>
+          Demo: busco chamba
+        </button>
+        <button type="button" className={btn} onClick={() => onPick("empresa")}>
+          Demo: tengo un negocio
+        </button>
       </div>
     </Slab>
   );
 }
 
 /**
- * /entrar. Live: pick your side, then email code (default), SMS code or password.
- * Demo-only build: just the demo entry.
+ * /entrar. Live: one screen — email code (default), SMS code or password. No "which side" step:
+ * each account is one type, so after sign-in it goes to its own home (candidato → /inicio,
+ * empresa → /empresa), or to onboarding if it never finished. Demo-only build: just the demo entry.
  */
 export function SignIn() {
   const router = useRouter();
@@ -114,9 +96,10 @@ export function SignIn() {
   const resumeDemo = useApp((s) => s.signIn);
   const exitDemo = useApp((s) => s.exitDemo);
   const linkError = useLinkError();
-  const [mode, setMode] = useState<Role | null>(null);
-  const [method, setMethodState] = useState<Method>("email");
-  const { start, pending } = useRouteAfterSignIn();
+  const remembered = useSyncExternalStore(subscribeNothing, rememberedMethod, () => "email" as Method);
+  const [picked, setPicked] = useState<Method | null>(null);
+  const method = picked ?? remembered;
+  const { start, reset, pending } = useRouteAfterSignIn();
   const finished = useRef(false);
 
   // Routes stay mounted after navigation; start fresh next time once sign-in completes.
@@ -124,26 +107,22 @@ export function SignIn() {
     return () => {
       if (finished.current) {
         finished.current = false;
-        setMode(null);
+        reset();
       }
     };
-  }, []);
+  }, [reset]);
 
   // Already signed in to a real account (back button, bookmark): straight to the app.
   const liveIn = appMode === "live" && signedIn;
   useEffect(() => {
     if (ready && liveIn && !pending && !finished.current) {
       finished.current = true;
-      start(useApp.getState().role);
+      start();
     }
   }, [ready, liveIn, pending, start]);
 
-  function pickRole(r: Role) {
-    setMode(r);
-    setMethodState(rememberedMethod());
-  }
   function setMethod(m: Method) {
-    setMethodState(m);
+    setPicked(m);
     rememberMethod(m);
   }
 
@@ -154,10 +133,10 @@ export function SignIn() {
     router.push(r === "empresa" ? "/empresa" : "/inicio");
   }
 
-  function signedInLive(r: Role) {
+  function signedInLive() {
     fire({ colors: WORK_CONFETTI });
     finished.current = true;
-    start(r);
+    start();
   }
 
   const pausedDemo = appMode === "demo" && !signedIn;
@@ -216,77 +195,28 @@ export function SignIn() {
     );
   }
 
-  /* ---------------------------------------------------------- 1. which side */
-  if (!mode) {
-    return (
-      <FlowShell
-        tone="uva"
-        art={{ scene: "barrio" }}
-        band
-        title="¿Cómo quieres entrar?"
-        hint="Puedes cambiar de modo después desde tu cuenta."
-        aside="Qué gusto verte de nuevo."
-      >
-        {linkError ? (
-          <AuthNote className="mt-0 mb-5">El enlace venció o ya se usó. Pide un código nuevo para entrar.</AuthNote>
-        ) : null}
-        {pausedNote}
-        <div className="space-y-4">
-          <ChoiceCard
-            tone="sol"
-            index={0}
-            art={<CategoryArt category="construccion" className="size-full" />}
-            title="Busco trabajo"
-            description="Ve vacantes cerca de tu casa y sigue tus postulaciones."
-            badge={appMode === "live" && lastRole === "candidato" ? "Última vez" : undefined}
-            onClick={() => pickRole("candidato")}
-          />
-          <ChoiceCard
-            tone="cielo"
-            index={1}
-            art={<Scene name="negocio" className="w-full" />}
-            title="Soy empresa"
-            description="Publica vacantes y encuentra personal que vive cerca."
-            badge={appMode === "live" && lastRole === "empresa" ? "Última vez" : undefined}
-            onClick={() => pickRole("empresa")}
-          />
-        </div>
-        <p className="mt-7 text-[0.98rem] font-medium">
-          ¿Primera vez?{" "}
-          <Link href="/bienvenida" className={linkCls}>
-            Crea tu cuenta gratis
-          </Link>
-        </p>
-        <DemoOffer onPick={(r) => goDemo(r)} />
-      </FlowShell>
-    );
-  }
-
-  /* ---------------------------------------------------------- 2. how */
-  const copy = MODE_COPY[mode];
+  /* ---------------------------------------------------------- sign in */
   return (
     <FlowShell
       tone="mandarina"
       art={{ scene: "codigo" }}
       title="Entra a tu cuenta"
-      stepKey={`entrar-${mode}`}
-      hint={copy.hint}
-      aside={copy.aside}
-      onBack={() => setMode(null)}
+      hint="Con un código a tu correo o celular, o con tu contraseña."
+      aside="Qué gusto verte de nuevo."
     >
       {linkError ? (
         <AuthNote className="mt-0 mb-5">El enlace venció o ya se usó. Pide un código nuevo para entrar.</AuthNote>
       ) : null}
+      {pausedNote}
       <MethodPicker methods={METHODS} value={method} onChange={setMethod} />
       <div className="mt-6 flex flex-1 flex-col" key={method}>
         {method === "password" ? (
-          <PasswordAuth onSignedIn={() => signedInLive(mode)} onForgot={() => setMethod("email")} />
+          <PasswordAuth onSignedIn={signedInLive} onForgot={() => setMethod("email")} />
         ) : (
           <CodeAuth
             channel={method}
-            role={mode}
             idPrefix="entrar"
-            onVerified={() => signedInLive(mode)}
+            onVerified={signedInLive}
             onUseEmail={() => setMethod("email")}
           />
         )}
@@ -296,7 +226,13 @@ export function SignIn() {
           </p>
         ) : null}
       </div>
-      <DemoOffer role={mode} onPick={(r) => goDemo(r)} index={4} />
+      <p className="mt-7 text-[0.98rem] font-medium">
+        ¿Primera vez?{" "}
+        <Link href="/bienvenida" className={linkCls}>
+          Crea tu cuenta gratis
+        </Link>
+      </p>
+      <DemoOffer onPick={(r) => goDemo(r)} index={4} />
     </FlowShell>
   );
 }
