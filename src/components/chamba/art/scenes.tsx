@@ -921,7 +921,7 @@ function Negocio() {
         [100, 200, WHITE],
         [140, 204, SUN],
       ].map(([x, y, c], i) => (
-        <rect key={i} x={x as number} y={y as number} width={16} height={190 - (y as number) < 20 ? 190 - (y as number) : 20} rx={3} fill={c as string} stroke={INK} strokeWidth={3.5} />
+        <rect key={i} x={x as number} y={y as number} width={16} height={Math.min(((y as number) < 190 ? 190 : 222) - (y as number), 20)} rx={3} fill={c as string} stroke={INK} strokeWidth={3.5} />
       ))}
       <Shine d="M150 164L164 178" />
       {/* door + swinging sign */}

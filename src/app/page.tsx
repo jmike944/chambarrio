@@ -430,42 +430,49 @@ export default function LandingPage() {
           <HazardStripe className="h-4" />
           <div className="relative isolate overflow-hidden">
             <Scatter count={6} seed={5} palette={["var(--block-sol)", "var(--limon)", "var(--block-cielo)"]} className="-z-10 opacity-60" />
-            <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_1.05fr] lg:gap-14 lg:px-10 lg:py-24">
-              <div className="min-w-0">
-                <SectionHead
-                  invert
-                  id="empresas-t"
-                  eyebrow="Para negocios y plantas"
-                  title={
-                    <>
-                      Personal que vive cerca llega a tiempo y <span className="text-limon">se queda.</span>
-                    </>
-                  }
+            {/* Row 1: pitch + crew art at equal height. Row 2: the three benefits as equal cards — no column ends early. */}
+            <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-10 lg:py-24">
+              <div className="grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:items-stretch lg:gap-14">
+                <div className="min-w-0 lg:flex lg:flex-col lg:justify-center">
+                  <SectionHead
+                    invert
+                    id="empresas-t"
+                    eyebrow="Para negocios y plantas"
+                    title={
+                      <>
+                        Personal que vive cerca llega a tiempo y <span className="text-limon">se queda.</span>
+                      </>
+                    }
+                  >
+                    <p className="mt-5 max-w-[34rem] text-lg leading-relaxed text-muted-foreground">
+                      Desde una cafetería hasta una planta industrial: publica tu vacante y ve quién vive a pocos minutos de
+                      tu negocio.
+                    </p>
+                    <Link href="/bienvenida/empresa" className={cn(chunky("lime"), "group mt-7 border-limon")}>
+                      Publicar una vacante gratis
+                      <HugeiconsIcon icon={ArrowRight02Icon} className="size-5 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
+                    </Link>
+                  </SectionHead>
+                </div>
+                <Reveal
+                  inView
+                  index={1}
+                  className="relative flex min-w-0 items-center overflow-hidden rounded-panel border-[3px] border-white/80 bg-block-sol p-3 text-ink lg:p-5"
                 >
-                  <p className="mt-5 max-w-[34rem] text-lg leading-relaxed text-muted-foreground">
-                    Desde una cafetería hasta una planta industrial: publica tu vacante y ve quién vive a pocos minutos de
-                    tu negocio.
-                  </p>
-                  <Link href="/bienvenida/empresa" className={cn(chunky("lime"), "group mt-7 border-limon")}>
-                    Publicar una vacante gratis
-                    <HugeiconsIcon icon={ArrowRight02Icon} className="size-5 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
-                  </Link>
-                </SectionHead>
-                <Reveal inView index={1} className="relative mt-10 overflow-hidden rounded-panel border-[3px] border-white/80 bg-block-sol p-3 text-ink">
                   <Scene name="equipo" className="w-full" title="Un equipo de trabajadores listos para empezar" />
                   <Rivets inset="0.6rem" />
                 </Reveal>
               </div>
-              <Stagger as="ul" inView gap={0.09} className="grid min-w-0 content-start gap-4 lg:pt-8">
+              <Stagger as="ul" inView gap={0.09} className="mt-10 grid min-w-0 gap-4 md:grid-cols-3 lg:mt-14 lg:gap-5">
                 {BENEFITS.map((b, i) => (
                   <StaggerItem
                     as="li"
                     key={b.title}
                     className={cn(
-                      "relative flex gap-4 rounded-panel p-5 sm:p-6",
+                      "relative flex h-full gap-4 rounded-panel p-5 sm:p-6 md:flex-col",
                       BLOCK_CLASS[b.tone],
                       HARD,
-                      i === 1 ? "lg:ml-10" : "lg:mr-10",
+                      i === 1 ? "md:rotate-[0.6deg]" : "md:-rotate-[0.4deg]",
                     )}
                   >
                     <span className="grid size-14 shrink-0 place-items-center rounded-tile bg-ink text-white">
