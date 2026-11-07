@@ -1,0 +1,495 @@
+/*
+ * Chamb-a lado · category icons ("bold workwear stickers").
+ *
+ * Works whether or not this file is compiled as a CSS Module: the project's
+ * Turbopack `*.css` rule currently serves it as global CSS. So class names are
+ * `ci`-prefixed (no clashes when global), and `.dark` / Tailwind `group`
+ * ancestors are matched with attribute selectors, which CSS Modules never hash
+ * (no `:global()` needed). The TSX falls back to the raw class name when the
+ * import isn't a module map.
+ *
+ * Everything lives in the `components` layer so Tailwind utilities passed via
+ * `className` (size-*, rounded-*, …) still win. Animations: transform/opacity only.
+ */
+@layer components {
+  .ciTile {
+    --tile-bg: var(--tile-l);
+    position: relative;
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: var(--s);
+    height: var(--s);
+    border-radius: calc(var(--s) * 0.26);
+    background: var(--tile-bg);
+    box-shadow: inset 0 0 0 1.5px rgb(22 15 51 / 0.1);
+    isolation: isolate;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  [class~="dark"] .ciTile {
+    --tile-bg: var(--tile-d);
+    box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.1);
+  }
+
+  /* Color blocks stay vivid in dark mode, so tiles sitting on one keep their light
+     workwear pastel (a dark tile on a pastel block reads as a muddy hole). */
+  [class~="dark"] [class*="block-"] .ciTile {
+    --tile-bg: var(--tile-l);
+    box-shadow: inset 0 0 0 1.5px rgb(22 15 51 / 0.12);
+  }
+
+  .ciXs {
+    --s: 32px;
+  }
+  .ciSm {
+    --s: 40px;
+  }
+  .ciMd {
+    --s: 48px;
+  }
+  .ciLg {
+    --s: 64px;
+  }
+  .ciXl {
+    --s: 96px;
+  }
+
+  /* Optical sizing: drop hairline details (sparks, 3rd puff) at 32px. */
+  .ciXs .ciFine {
+    display: none;
+  }
+
+  .ciArt {
+    display: block;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  /* Hard offset sticker shadow: the same shapes, flattened to ink. */
+  .ciDrop [fill]:not([fill="none"]) {
+    fill: #160f33;
+  }
+  .ciDrop [stroke]:not([stroke="none"]) {
+    stroke: #160f33;
+  }
+  .ciDrop .ciNoDrop {
+    display: none;
+  }
+  [class~="dark"] .ciDrop {
+    opacity: 0.55;
+  }
+  [class~="dark"] [class*="block-"] .ciDrop {
+    opacity: 1;
+  }
+
+  .ciBeam {
+    opacity: 0.6;
+  }
+
+  /* ---------- animated parts: transform about their own box ---------- */
+  .ciSpin,
+  .ciBob,
+  .ciRise,
+  .ciLift,
+  .ciHop,
+  .ciSlam,
+  .ciPop,
+  .ciPrint,
+  .ciCoin,
+  .ciFlash,
+  .ciBeam,
+  .ciDash,
+  .ciPuff,
+  .ciFlip,
+  .ciFlicker,
+  .ciSpray,
+  .ciWrench,
+  .ciJab,
+  .ciGrow {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .ciHop,
+  .ciSlam,
+  .ciFlicker,
+  .ciGrow {
+    transform-origin: 50% 100%;
+  }
+  .ciPrint {
+    transform-origin: 50% 100%;
+  }
+  .ciDash {
+    transform-origin: 100% 50%;
+  }
+  /* Pivot parts set transform-origin inline in viewBox units. */
+  .ciPivot {
+    transform-box: view-box;
+  }
+
+  /* Plays while: animated prop, the art/tile is hovered, or any Tailwind
+     `group` ancestor is hovered / pressed / keyboard-focused. */
+  :is(
+      .ciAnimated,
+      .ciArt:hover,
+      .ciTile:hover .ciArt,
+      [class~="group"]:hover .ciArt,
+      [class~="group"]:active .ciArt,
+      [class~="group"]:focus-visible .ciArt
+    ) {
+    & .ciSpin {
+      animation: ciKSpin 0.6s linear infinite;
+    }
+    & .ciBob {
+      animation: ciKBob 0.32s ease-in-out infinite;
+    }
+    & .ciRise {
+      animation: ciKRise 1.5s ease-out infinite;
+    }
+    & .ciLift {
+      animation: ciKLift 1.8s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+    }
+    & .ciHop {
+      animation: ciKHop 0.9s cubic-bezier(0.3, 0, 0.3, 1) infinite;
+    }
+    & .ciSlam {
+      animation: ciKSlam 1.2s cubic-bezier(0.5, 0, 0.75, 0) infinite;
+    }
+    & .ciSwing {
+      animation: ciKSwing 1.1s ease-in-out infinite;
+    }
+    & .ciPop {
+      animation: ciKPop 1.2s cubic-bezier(0.3, 1.4, 0.5, 1) infinite;
+    }
+    & .ciPrint {
+      animation: ciKPrint 1.2s steps(4, end) infinite;
+    }
+    & .ciCoin {
+      animation: ciKCoin 1.2s cubic-bezier(0.3, 0, 0.3, 1) infinite;
+    }
+    & .ciFlash {
+      animation: ciKFlash 0.7s steps(2, jump-none) infinite;
+    }
+    & .ciBeam {
+      animation: ciKBeam 1.6s ease-in-out infinite;
+    }
+    & .ciDash {
+      animation: ciKDash 0.45s ease-in-out infinite;
+    }
+    & .ciPuff {
+      animation: ciKPuff 0.9s ease-out infinite;
+    }
+    & .ciNod {
+      animation: ciKNod 1.4s cubic-bezier(0.6, 0, 0.3, 1) infinite;
+    }
+    & .ciFlip {
+      animation: ciKFlip 1.3s cubic-bezier(0.3, 0, 0.4, 1) infinite;
+    }
+    & .ciFlicker {
+      animation: ciKFlicker 0.42s ease-in-out infinite alternate;
+    }
+    & .ciSpray {
+      animation: ciKSpray 1s ease-out infinite;
+    }
+    & .ciWrench {
+      animation: ciKWrench 0.9s ease-in-out infinite;
+    }
+    & .ciJab {
+      animation: ciKJab 0.9s ease-in-out infinite;
+    }
+    & .ciHammer {
+      animation: ciKHammer 0.9s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+    }
+    & .ciGrow {
+      animation: ciKGrow 1.4s cubic-bezier(0.3, 1.4, 0.5, 1) infinite;
+    }
+    & .ciD2 {
+      animation-delay: -0.3s;
+    }
+    & .ciD3 {
+      animation-delay: -0.6s;
+    }
+  }
+
+  /* Whole-icon wiggle when pointed at (one shot, not on `animated`). */
+  .ciArt:hover,
+  .ciTile:hover .ciArt,
+  [class~="group"]:hover .ciArt {
+    animation: ciKWiggle 0.55s ease-in-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ciArt,
+    .ciArt * {
+      animation: none !important;
+    }
+  }
+}
+
+@keyframes ciKSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ciKBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.4px);
+  }
+}
+@keyframes ciKRise {
+  0% {
+    transform: translateY(2px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-7px);
+    opacity: 0;
+  }
+}
+@keyframes ciKLift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40%,
+  65% {
+    transform: translateY(-9px);
+  }
+}
+@keyframes ciKHop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  12% {
+    transform: translateY(0) scale(1.08, 0.88);
+  }
+  40% {
+    transform: translateY(-6px) scale(0.96, 1.05);
+  }
+  68% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  82% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+@keyframes ciKSlam {
+  0% {
+    transform: translateY(-9px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  45% {
+    transform: translateY(0) scale(1, 1);
+    animation-timing-function: ease-out;
+  }
+  52% {
+    transform: translateY(0) scale(1.08, 0.86);
+  }
+  64%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+@keyframes ciKSwing {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  30% {
+    transform: rotate(16deg);
+  }
+  70% {
+    transform: rotate(-12deg);
+  }
+}
+@keyframes ciKPop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  30%,
+  65% {
+    transform: translateY(4px);
+  }
+}
+@keyframes ciKPrint {
+  0% {
+    transform: translateY(5px) scaleY(0.75);
+  }
+  100% {
+    transform: translateY(-2px) scaleY(1.05);
+  }
+}
+@keyframes ciKCoin {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  45% {
+    transform: translateY(-9px) rotate(180deg);
+  }
+  70% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+@keyframes ciKFlash {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes ciKBeam {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(0.94);
+  }
+}
+@keyframes ciKDash {
+  0%,
+  100% {
+    transform: translateX(0) scaleX(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateX(-3px) scaleX(1.4);
+    opacity: 0.35;
+  }
+}
+@keyframes ciKPuff {
+  0% {
+    transform: translate(0, 0) scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-6px, -4px) scale(1.3);
+    opacity: 0;
+  }
+}
+@keyframes ciKNod {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  35%,
+  55% {
+    transform: rotate(-16deg);
+  }
+  70% {
+    transform: rotate(4deg);
+  }
+}
+@keyframes ciKFlip {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  15% {
+    transform: translateY(1px) scale(1.06, 0.9);
+  }
+  50% {
+    transform: translateY(-9px) rotate(-180deg);
+  }
+  85% {
+    transform: translateY(0) rotate(-360deg);
+  }
+}
+@keyframes ciKFlicker {
+  from {
+    transform: scale(1, 1);
+  }
+  to {
+    transform: scale(0.88, 1.18) skewX(-4deg);
+  }
+}
+@keyframes ciKSpray {
+  0% {
+    transform: translate(3px, 3px) scale(0.3);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-2px, -3px) scale(1.2);
+    opacity: 0;
+  }
+}
+@keyframes ciKWrench {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  30% {
+    transform: rotate(-22deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+}
+@keyframes ciKJab {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-3.5px);
+  }
+}
+@keyframes ciKHammer {
+  0%,
+  100% {
+    transform: rotate(14deg);
+  }
+  45% {
+    transform: rotate(14deg);
+  }
+  62% {
+    transform: rotate(-22deg);
+  }
+  70% {
+    transform: rotate(-18deg);
+  }
+}
+@keyframes ciKGrow {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.45);
+  }
+}
+@keyframes ciKWiggle {
+  0%,
+  100% {
+    transform: rotate(0) scale(1);
+  }
+  20% {
+    transform: rotate(-8deg) scale(1.08);
+  }
+  45% {
+    transform: rotate(6deg) scale(1.08);
+  }
+  70% {
+    transform: rotate(-3deg) scale(1.02);
+  }
+}

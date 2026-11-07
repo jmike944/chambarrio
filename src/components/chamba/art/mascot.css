@@ -1,0 +1,438 @@
+/*
+ * Chamb-a lado · "Chambita" (el Chambas) mascot motion.
+ * Served as GLOBAL css by the project's Turbopack *.css rule, so every class is
+ * `msc`-prefixed. Motion is transform/opacity only and runs only when the root
+ * svg has `data-animated`; prefers-reduced-motion switches all of it off.
+ *
+ * Pivot points: `.mscPart` uses transform-box: view-box, and the TSX puts the
+ * pivot (in viewBox units) in an inline transform-origin. Small free-floating
+ * bits (blink, confetti, dust, lens) pivot on their own box (fill-box).
+ */
+@layer components {
+  .mscRoot .mscPart {
+    transform-box: view-box;
+  }
+  .mscRoot .mscBlink,
+  .mscRoot .mscConfetti,
+  .mscRoot .mscDust,
+  .mscRoot .mscBeaconLens {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .mscRoot .mscDust,
+  .mscRoot .mscConfetti {
+    opacity: 0;
+  }
+  .mscRoot:not([data-animated]) .mscDust {
+    display: none;
+  }
+  .mscRoot:not([data-animated]) .mscConfetti {
+    opacity: 1;
+  }
+
+  /* idle — everyone */
+  .mscRoot[data-animated] .mscBreathe {
+    animation: msc-breathe 2.6s ease-in-out infinite;
+  }
+  .mscRoot[data-animated] .mscBlink {
+    animation: msc-blink 4.2s linear infinite;
+  }
+
+  /* feliz */
+  .mscRoot[data-animated] .mscThumb {
+    animation: msc-thumb 1.1s cubic-bezier(0.5, 0, 0.3, 1.4) infinite;
+  }
+  .mscRoot[data-animated] .mscNod {
+    animation: msc-nod 1.1s ease-in-out infinite;
+  }
+
+  /* saluda */
+  .mscRoot[data-animated] .mscWave {
+    animation: msc-wave 1.2s ease-in-out infinite;
+  }
+  .mscRoot[data-animated] .mscWaveFore {
+    animation: msc-wave-fore 0.6s ease-in-out infinite alternate;
+  }
+  .mscRoot[data-animated] .mscTilt {
+    animation: msc-tilt 2.4s ease-in-out infinite;
+  }
+
+  /* festeja */
+  .mscRoot[data-animated] .mscJump {
+    animation: msc-jump 0.9s cubic-bezier(0.3, 0, 0.4, 1) infinite;
+  }
+  .mscRoot[data-animated] .mscPumpA {
+    animation: msc-pump-a 0.45s ease-in-out infinite alternate;
+  }
+  .mscRoot[data-animated] .mscPumpB {
+    animation: msc-pump-b 0.45s ease-in-out infinite alternate-reverse;
+  }
+  .mscRoot[data-animated] .mscShout {
+    animation: msc-shout 0.45s ease-in-out infinite alternate;
+  }
+  .mscRoot[data-animated] .mscConfetti {
+    animation: msc-confetti 1.8s ease-in infinite;
+  }
+  .mscRoot[data-animated] .mscDust {
+    animation: msc-dust 0.9s ease-out infinite;
+  }
+  .mscRoot[data-animated][data-mood="festeja"] .mscGround {
+    animation: msc-ground 0.9s cubic-bezier(0.3, 0, 0.4, 1) infinite;
+  }
+
+  /* piensa */
+  .mscRoot[data-animated] .mscScratch {
+    animation: msc-scratch 0.32s ease-in-out infinite alternate;
+  }
+  .mscRoot[data-animated] .mscQuestion {
+    animation: msc-question 1.6s ease-in-out infinite;
+  }
+
+  /* duerme */
+  .mscRoot[data-animated][data-mood="duerme"] .mscBreathe {
+    animation-duration: 3.6s;
+    animation-name: msc-breathe-deep;
+  }
+  .mscRoot[data-animated] .mscZ {
+    animation: msc-z 2.1s ease-out infinite;
+  }
+  .mscRoot[data-animated] .mscSnore {
+    animation: msc-snore 3.6s ease-in-out infinite;
+  }
+
+  /* wow */
+  .mscRoot[data-animated] .mscHatPop {
+    animation: msc-hat-pop 1.4s cubic-bezier(0.3, 0, 0.3, 1.5) infinite;
+  }
+  .mscRoot[data-animated] .mscJaw {
+    animation: msc-jaw 1.4s ease-in-out infinite;
+  }
+  .mscRoot[data-animated] .mscWhoaA {
+    animation: msc-whoa-a 1.4s ease-in-out infinite;
+  }
+  .mscRoot[data-animated] .mscWhoaB {
+    animation: msc-whoa-b 1.4s ease-in-out infinite;
+  }
+
+  /* props + accents */
+  .mscRoot[data-animated] .mscFlash {
+    animation: msc-flash 0.9s steps(2, jump-none) infinite;
+  }
+  .mscRoot[data-animated] .mscBeacon {
+    animation: msc-flash 0.7s steps(2, jump-none) infinite;
+  }
+  .mscRoot[data-animated] .mscBeaconLens {
+    animation: msc-lens 0.7s steps(2, jump-none) infinite;
+  }
+  .mscRoot[data-animated] .mscScan {
+    animation: msc-scan 2.2s ease-in-out infinite;
+  }
+  .mscRoot[data-animated] .mscBuzz {
+    animation: msc-buzz 2s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mscRoot,
+    .mscRoot * {
+      animation: none !important;
+    }
+    .mscRoot .mscDust {
+      display: none;
+    }
+    .mscRoot .mscConfetti {
+      opacity: 1;
+    }
+  }
+}
+
+@keyframes msc-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.02);
+  }
+}
+@keyframes msc-breathe-deep {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(1.015, 1.035);
+  }
+}
+@keyframes msc-blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  95.5% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes msc-thumb {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  35% {
+    transform: rotate(-9deg) translateY(-2px);
+  }
+  60% {
+    transform: rotate(2deg) translateY(0);
+  }
+}
+@keyframes msc-nod {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-4deg) translateY(1px);
+  }
+  60% {
+    transform: rotate(1deg);
+  }
+}
+@keyframes msc-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-7deg);
+  }
+}
+@keyframes msc-wave-fore {
+  from {
+    transform: rotate(-16deg);
+  }
+  to {
+    transform: rotate(18deg);
+  }
+}
+@keyframes msc-tilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+@keyframes msc-jump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.04, 0.95);
+  }
+  15% {
+    transform: translateY(0) scale(0.97, 1.04);
+  }
+  45% {
+    transform: translateY(-11px) scale(1, 1);
+  }
+  80% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+@keyframes msc-ground {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.18;
+  }
+  45% {
+    transform: scaleX(0.7);
+    opacity: 0.1;
+  }
+}
+@keyframes msc-pump-a {
+  from {
+    transform: rotate(6deg);
+  }
+  to {
+    transform: rotate(-10deg) translateY(-2px);
+  }
+}
+@keyframes msc-pump-b {
+  from {
+    transform: rotate(-6deg);
+  }
+  to {
+    transform: rotate(10deg) translateY(-2px);
+  }
+}
+@keyframes msc-shout {
+  from {
+    transform: scaleY(0.85);
+  }
+  to {
+    transform: scaleY(1.08);
+  }
+}
+@keyframes msc-confetti {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(14px) rotate(320deg);
+  }
+}
+@keyframes msc-dust {
+  0%,
+  70% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4) translateY(-3px);
+  }
+}
+@keyframes msc-scratch {
+  from {
+    transform: rotate(-5deg);
+  }
+  to {
+    transform: rotate(6deg);
+  }
+}
+@keyframes msc-question {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(8deg);
+  }
+}
+@keyframes msc-z {
+  0% {
+    opacity: 0;
+    transform: translate(-4px, 6px) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(4px, -8px) scale(1.1);
+  }
+}
+@keyframes msc-snore {
+  0%,
+  100% {
+    transform: scale(0.7);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+}
+@keyframes msc-hat-pop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  20% {
+    transform: translateY(-11px) rotate(-8deg);
+  }
+  35% {
+    transform: translateY(-11px) rotate(6deg);
+  }
+}
+@keyframes msc-jaw {
+  0%,
+  55%,
+  100% {
+    transform: scaleY(1);
+  }
+  20%,
+  35% {
+    transform: scaleY(1.22);
+  }
+}
+@keyframes msc-whoa-a {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20%,
+  35% {
+    transform: rotate(10deg);
+  }
+}
+@keyframes msc-whoa-b {
+  0%,
+  55%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20%,
+  35% {
+    transform: rotate(-10deg);
+  }
+}
+@keyframes msc-flash {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes msc-lens {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.6);
+  }
+}
+@keyframes msc-scan {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+@keyframes msc-buzz {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0deg);
+  }
+  74%,
+  82%,
+  90% {
+    transform: rotate(-4deg);
+  }
+  78%,
+  86%,
+  94% {
+    transform: rotate(4deg);
+  }
+}
