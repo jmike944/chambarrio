@@ -134,6 +134,8 @@ export type Database = {
           colonia: string | null;
           created_at: string;
           email: string | null;
+          email_alerts: boolean;
+          email_updates: boolean;
           experience: E["experience_level"];
           home: unknown;
           id: string;
@@ -144,12 +146,15 @@ export type Database = {
           phone: string | null;
           radius_km: number;
           role: E["app_role"];
+          unsubscribe_token: string;
           updated_at: string;
         };
         Insert: {
           colonia?: string | null;
           created_at?: string;
           email?: string | null;
+          email_alerts?: boolean;
+          email_updates?: boolean;
           experience?: E["experience_level"];
           home?: unknown;
           id: string;
@@ -160,6 +165,7 @@ export type Database = {
           phone?: string | null;
           radius_km?: number;
           role?: E["app_role"];
+          unsubscribe_token?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
@@ -233,6 +239,7 @@ export type Database = {
           urgent: boolean;
         }[];
       };
+      unsubscribe_email: { Args: { p_token: string; p_kind?: string }; Returns: boolean };
       set_my_home: {
         Args: { lat: number; lng: number; p_colonia: string; p_source?: E["location_source"] };
         Returns: undefined;
