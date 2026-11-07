@@ -16,7 +16,16 @@ const bricolage = Bricolage_Grotesque({
   axes: ["opsz"],
 });
 
+/**
+ * Absolute base for Open Graph / Twitter image URLs. NEXT_PUBLIC_SITE_URL wins (set it when a custom
+ * domain goes live); on Vercel it falls back to the project's production domain; locally, localhost.
+ */
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: { default: "Chambarrio · El trabajo que buscas, cerca de ti", template: "%s · Chambarrio" },
   description:
     "Encuentra vacantes cerca de tu casa en Saltillo. Elige 2, 5, 10 o 15 km y ahorra tiempo y dinero en traslados.",
