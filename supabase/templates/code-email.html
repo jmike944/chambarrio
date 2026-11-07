@@ -1,0 +1,30 @@
+<!-- Chambarrio sign-in email (Supabase "Magic link or OTP" and "Confirm sign up" templates).
+     Subject: Tu código de Chambarrio: {{ .Token }}
+     Supabase Auth settings that go with it: Email OTP length = 6 (the app's code boxes are 6 wide),
+     sender no-reply@chambarrio.com via Resend SMTP, Site URL https://chambarrio.com.
+     The link goes straight to /auth/confirm with a token hash, so it works on any device and doesn't
+     depend on the redirect allow-list. Keep inline styles: most email clients strip <style>. -->
+<div style="margin:0;padding:24px 12px;background-color:#f4f2ff;font-family:Arial,Helvetica,sans-serif;color:#160f33;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;margin:0 auto;background-color:#ffffff;border:3px solid #160f33;border-radius:20px;border-collapse:separate;overflow:hidden;">
+    <tr>
+      <td style="background-color:#4318e0;padding:20px 24px;color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px;">
+        chambarri<span style="color:#ddf78a;">o</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px 24px 8px 24px;">
+        <h1 style="margin:0 0 8px 0;font-size:24px;line-height:1.2;color:#160f33;">Tu código para entrar</h1>
+        <p style="margin:0 0 20px 0;font-size:16px;line-height:1.5;color:#4b4568;">Escríbelo en Chambarrio para continuar. Por seguridad, vence pronto.</p>
+        <div style="background-color:#ddf78a;border:3px solid #160f33;border-radius:16px;padding:18px 12px;text-align:center;font-size:36px;font-weight:800;letter-spacing:8px;font-family:'Courier New',Courier,monospace;color:#160f33;">{{ .Token }}</div>
+        <p style="margin:24px 0 12px 0;font-size:15px;line-height:1.5;color:#4b4568;">¿Abriste este correo en el mismo celular? También puedes entrar con un toque:</p>
+        <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email" style="display:inline-block;background-color:#160f33;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 24px;border-radius:999px;">Entrar a Chambarrio</a>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:24px;font-size:13px;line-height:1.5;color:#6b6590;">
+        Si tú no pediste este código, ignora este correo: nadie puede entrar a tu cuenta sin él.<br />
+        Chambarrio · El trabajo que buscas, cerca de ti · Saltillo, Coahuila
+      </td>
+    </tr>
+  </table>
+</div>
