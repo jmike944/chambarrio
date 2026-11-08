@@ -34,6 +34,7 @@ import { useApplicantProfiles, type ApplicantProfile } from "@/lib/live/applican
 import { stepOf, useApplicationPipeline, useNow, usePipelineSummary } from "@/lib/pipeline";
 import { formatKm } from "@/lib/geo";
 import { useApp, useIsUnlocked, usePaymentsEnabled } from "@/lib/store";
+import { useCan } from "@/lib/team";
 import { cn } from "@/lib/utils";
 import { PipelineCard } from "./pipeline-card";
 import { NotesPanel, TimelinePanel } from "./notes-timeline";
@@ -121,10 +122,15 @@ function ApplicantView({
   const label = personLabel(profile);
   const payments = usePaymentsEnabled();
   const isUnlocked = useIsUnlocked();
+  const can = useCan();
   const [unlockOpen, setUnlockOpen] = useState(false);
   // Locked = unlocking exists (payments on) and this vacancy isn't unlocked yet. Without payments
   // (live today) nothing is gated: the header says "Desbloquear llega muy pronto".
   const locked = payments && !!job && !(profile ? profile.unlocked : isUnlocked(job.id));
+  /** Locked, and paying to unlock is someone else's (the dueño's): say so instead of offering it. */
+  const askOwner = locked && !can.unlockApplicants;
+  /** I'm this application's candidate (a member who applied to their own company): read-only, no notes. */
+  const own = pipeline.isOwn;
   /** What the person wanted to do when the unlock dialog opened (interview / hire); runs once unlocked. */
   const afterUnlock = useRef<(() => void) | null>(null);
   const openUnlock = (then?: () => void) => {
@@ -146,10 +152,10 @@ function ApplicantView({
   const { markSeen } = pipeline.actions;
   const seenFor = useRef<string | null>(null);
   useEffect(() => {
-    if (data.status !== "enviada" || data.pending || seenFor.current === data.id) return;
+    if (own || data.status !== "enviada" || data.pending || seenFor.current === data.id) return;
     seenFor.current = data.id;
     void markSeen();
-  }, [data.id, data.status, data.pending, markSeen]);
+  }, [own, data.id, data.status, data.pending, markSeen]);
   const businessPhone = useApp((s) => s.business?.phone ?? null);
   const noPhone = !!job && !job.phone?.trim() && !businessPhone?.trim();
 
@@ -165,7 +171,8 @@ function ApplicantView({
   const pos = ids.indexOf(data.id);
   const prev = pos > 0 ? ids[pos - 1] : null;
   const nextId = pos >= 0 && pos < ids.length - 1 ? ids[pos + 1] : null;
-  const timelineLeft = timelineGoesLeft(profile, data, pipeline.notes);
+  // My own application has no notes panel: the timeline stays on the right and stretches.
+  const timelineLeft = !own && timelineGoesLeft(profile, data, pipeline.notes);
 
   return (
     <>
@@ -196,7 +203,8 @@ function ApplicantView({
             label={label}
             first={first}
             now={now}
-            onUnlock={payments ? () => openUnlock() : null}
+            onUnlock={payments && can.unlockApplicants ? () => openUnlock() : null}
+            askOwner={askOwner}
           />
           <ProfilePanel className="order-3 lg:flex-1" profile={profile} first={first} job={job} />
           {timelineLeft ? <TimelinePanel className="order-4" data={data} first={first} now={now} /> : null}
@@ -211,22 +219,28 @@ function ApplicantView({
             companyName={companyName}
             actions={pipeline.actions}
             now={now}
-            onLocked={locked ? openUnlock : null}
+            onLocked={locked && can.unlockApplicants ? openUnlock : null}
+            askOwner={askOwner}
+            readOnly={own}
             noPhone={noPhone}
           />
-          {timelineLeft ? null : <TimelinePanel className="order-4" data={data} first={first} now={now} />}
-          <NotesPanel
-            className="order-5 lg:flex-1"
-            notes={pipeline.notes}
-            error={pipeline.notesError}
-            onRetry={() => void pipeline.refresh()}
-            actions={pipeline.actions}
-            now={now}
-          />
+          {timelineLeft ? null : <TimelinePanel className={cn("order-4", own && "lg:flex-1")} data={data} first={first} now={now} />}
+          {own ? null : (
+            <NotesPanel
+              className="order-5 lg:flex-1"
+              notes={pipeline.notes}
+              error={pipeline.notesError}
+              onRetry={() => void pipeline.refresh()}
+              actions={pipeline.actions}
+              now={now}
+            />
+          )}
         </div>
       </div>
 
-      {payments && job ? <UnlockDialog job={job} count={order.length} open={unlockOpen} onOpenChange={setUnlockOpen} /> : null}
+      {payments && job && can.unlockApplicants ? (
+        <UnlockDialog job={job} count={order.length} open={unlockOpen} onOpenChange={setUnlockOpen} />
+      ) : null}
     </>
   );
 }
@@ -332,6 +346,7 @@ function HeaderCard({
   first,
   now,
   onUnlock,
+  askOwner,
   className,
 }: {
   data: ApplicationPipeline;
@@ -340,8 +355,10 @@ function HeaderCard({
   label: string;
   first: string;
   now: number;
-  /** Opens the unlock dialog (demo); null = payments not available yet. */
+  /** Opens the unlock dialog (demo); null = payments not available yet (or not mine to pay). */
   onUnlock: (() => void) | null;
+  /** Locked and unlocking is the dueño's: "Pide al dueño…" instead of the button. */
+  askOwner: boolean;
   className?: string;
 }) {
   const step = stepOf(data);
@@ -420,9 +437,16 @@ function HeaderCard({
         ) : a ? (
           <LockedReveal applicant={a} className="bg-white/55">
             <p className="mt-2.5 text-[0.88rem] leading-snug">
-              Ya ves su experiencia, licencias y disponibilidad. Desbloquea la vacante para ver quién es y llamarle o mandarle SMS.
+              {askOwner
+                ? "Ya ves su experiencia, licencias y disponibilidad. Su nombre y teléfono aparecen cuando el dueño desbloquee la vacante."
+                : "Ya ves su experiencia, licencias y disponibilidad. Desbloquea la vacante para ver quién es y llamarle o mandarle SMS."}
             </p>
-            {onUnlock ? (
+            {askOwner ? (
+              <p className="mt-2.5 inline-flex items-start gap-2 rounded-lg border-2 border-ink bg-white px-2.5 py-1.5 text-[0.85rem] leading-snug font-semibold text-ink">
+                <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-4 shrink-0" strokeWidth={2.2} />
+                Pide al dueño que desbloquee esta vacante.
+              </p>
+            ) : onUnlock ? (
               <Button size="lg" className={cn("mt-3 h-12 w-full px-4 font-bold sm:w-auto", INK_BUTTON, HARD_SM)} onClick={onUnlock}>
                 <HugeiconsIcon icon={SquareUnlock02Icon} className="size-5" strokeWidth={2.2} />
                 Desbloquear contacto

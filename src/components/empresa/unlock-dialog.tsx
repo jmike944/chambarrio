@@ -64,14 +64,15 @@ export function UnlockDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {/* Header strip and footer stay put; only the middle scrolls (phones: the pay button is always on screen). */}
       <AlertDialogContent
-        className={cn("gap-0 overflow-hidden rounded-panel p-0 ring-0 sm:max-w-md", OUTLINE, HARD, "dark:border-white/25")}
+        className={cn("flex flex-col gap-0 rounded-panel p-0 ring-0 sm:max-w-md", OUTLINE, HARD, "dark:border-white/25")}
       >
         {/* Saturated header strip with the padlock */}
-        <div className="block-mandarina relative isolate flex items-center gap-4 overflow-hidden border-b-2 border-ink px-6 pt-6 pb-5">
+        <div className="block-mandarina relative isolate flex shrink-0 items-center gap-4 overflow-hidden border-b-2 border-ink px-6 pt-6 pb-5 max-sm:pt-5 max-sm:pb-4">
           <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-70" />
           <div ref={lockRef} className="shrink-0">
-            <Padlock open={unlocking} className="size-16" />
+            <Padlock open={unlocking} className="size-16 max-sm:size-12" />
           </div>
           <AlertDialogHeader className="min-w-0 place-items-start text-left">
             <AlertDialogTitle className="font-display text-[1.25rem] leading-[1.08] font-extrabold tracking-[-0.03em] text-ink">
@@ -80,7 +81,7 @@ export function UnlockDialog({
           </AlertDialogHeader>
         </div>
 
-        <div className="grid gap-4 p-6">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain p-6 pb-5 max-sm:pt-5 max-sm:pb-4">
           <AlertDialogDescription className="text-left text-[0.98rem] leading-relaxed text-pretty text-muted-foreground">
             {count === 1 ? "1 persona se postuló" : `${count} personas se postularon`}. Al desbloquear ves sus nombres, su
             experiencia y su teléfono para contactarlas, incluidas las que se postulen durante el mes.
@@ -110,13 +111,23 @@ export function UnlockDialog({
             </Link>
             .
           </p>
-          <AlertDialogFooter className="mt-1 gap-2.5">
+        </div>
+
+        {/* Desktop spacing as before; phones get the divider over the pinned buttons. */}
+        <div className="shrink-0 px-6 pb-6 max-sm:border-t-2 max-sm:border-dashed max-sm:border-border max-sm:pt-3 max-sm:pb-5">
+          <AlertDialogFooter className="gap-2.5">
             <AlertDialogCancel size="lg" className={cn("h-12", WHITE_BUTTON, "bg-white! text-ink!")} disabled={unlocking}>
               Ahora no
             </AlertDialogCancel>
+            {/* Ink on light; lime on the dark popover (ink would vanish into it). */}
             <AlertDialogAction
               size="lg"
-              className={cn("h-12 font-bold", INK_BUTTON, "bg-ink! text-white!", HARD_SM)}
+              className={cn(
+                "h-12 font-bold",
+                INK_BUTTON,
+                "bg-ink! text-white! dark:border-ink dark:bg-limon! dark:text-ink! dark:hover:bg-limon/90!",
+                HARD_SM,
+              )}
               aria-disabled={unlocking || undefined}
               onClick={confirm}
             >

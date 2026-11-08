@@ -112,16 +112,17 @@ function Shell({
           back.focus();
         }}
         className={cn(
-          "flex max-h-[min(92dvh,52rem)] flex-col gap-0 overflow-hidden rounded-panel p-0 ring-0 sm:max-w-lg [&>[data-slot=dialog-close]]:top-3.5 [&>[data-slot=dialog-close]]:right-3.5 [&>[data-slot=dialog-close]]:text-ink [&>[data-slot=dialog-close]]:hover:bg-white/60",
+          "flex max-h-[min(calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom)),52rem)] flex-col gap-0 overflow-hidden rounded-panel p-0 ring-0 sm:max-w-lg [&>[data-slot=dialog-close]]:top-3.5 [&>[data-slot=dialog-close]]:right-3.5 [&>[data-slot=dialog-close]]:text-ink [&>[data-slot=dialog-close]]:hover:bg-white/60",
           OUTLINE,
           HARD,
           "dark:border-white/25",
         )}
       >
-        <div className={cn("relative isolate flex shrink-0 items-center gap-3.5 border-b-2 border-ink px-5 pt-5 pb-4 pr-14 sm:px-6", BLOCK_CLASS[tone])}>
+        {/* Phones: a smaller tile and tighter padding leave more of the screen to the fields. */}
+        <div className={cn("relative isolate flex shrink-0 items-center gap-3.5 border-b-2 border-ink px-5 pt-5 pb-4 pr-14 sm:px-6 max-sm:gap-3 max-sm:pt-4 max-sm:pb-3.5", BLOCK_CLASS[tone])}>
           <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-60" />
-          <span className="grid size-12 shrink-0 -rotate-6 place-items-center rounded-[0.9rem] border-2 border-ink bg-white text-ink">
-            <HugeiconsIcon icon={icon} className="size-6" strokeWidth={2} />
+          <span className="grid size-12 shrink-0 -rotate-6 place-items-center rounded-[0.9rem] border-2 border-ink bg-white text-ink max-sm:size-10 max-sm:rounded-[0.8rem]">
+            <HugeiconsIcon icon={icon} className="size-6 max-sm:size-5" strokeWidth={2} />
           </span>
           <div className="min-w-0">
             <DialogTitle className="font-display text-[1.35rem] leading-[1.08] font-extrabold tracking-[-0.03em]">{title}</DialogTitle>
@@ -139,7 +140,7 @@ function Form({ onSubmit, children, footer }: { onSubmit: (e: React.FormEvent) =
   return (
     <form onSubmit={onSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-5 sm:px-6">{children}</div>
-      <div className="shrink-0 border-t-2 border-dashed border-border px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">{footer}</div>
+      <div className="shrink-0 border-t-2 border-dashed border-border px-5 pt-3 pb-4 sm:px-6">{footer}</div>
     </form>
   );
 }
@@ -153,7 +154,7 @@ function TemplateChips({ items, onPick, label }: { items: readonly string[]; onP
           key={t}
           type="button"
           onClick={() => onPick(t)}
-          className="press inline-flex min-h-10 max-w-[15rem] shrink-0 items-center rounded-full border-2 border-dashed border-ink/50 px-3 text-left text-[0.85rem] leading-tight font-semibold outline-none hover:bg-tile focus-visible:ring-3 focus-visible:ring-ring/50 dark:border-white/40"
+          className="press inline-flex min-h-10 max-w-[15rem] shrink-0 items-center rounded-full border-2 border-dashed border-ink/50 px-3 text-left text-[0.85rem] leading-tight font-semibold outline-none hover:bg-tile focus-visible:ring-3 focus-visible:ring-ring/50 max-sm:min-h-11 dark:border-white/40"
         >
           <span className="line-clamp-2">{t}</span>
         </button>
@@ -399,7 +400,7 @@ function InterviewForm({ applicationId, first, interview, defaultPlace, again, n
                 disabled={past}
                 onClick={() => setTime(t)}
                 className={cn(
-                  "press inline-flex h-10 items-center rounded-full border-2 border-ink px-3 text-[0.88rem] font-bold tabular-nums outline-none focus-visible:ring-4 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-35",
+                  "press inline-flex h-10 items-center rounded-full border-2 border-ink px-3 text-[0.88rem] font-bold tabular-nums outline-none focus-visible:ring-4 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-35 max-sm:h-11",
                   on ? CHIP_ON : "bg-white text-ink",
                 )}
               >

@@ -201,14 +201,19 @@ export function PrimaryButton({
         )}
         {...props}
       >
-        {children}
+        {/* arrow={false} passes children through alone, so asChild (a link) gets the single child Slot needs. */}
         {arrow ? (
-          <HugeiconsIcon
-            icon={ArrowRight02Icon}
-            className="size-6 transition-[translate] duration-200 group-hover/cta:translate-x-1"
-            strokeWidth={2.6}
-          />
-        ) : null}
+          <>
+            {children}
+            <HugeiconsIcon
+              icon={ArrowRight02Icon}
+              className="size-6 transition-[translate] duration-200 group-hover/cta:translate-x-1"
+              strokeWidth={2.6}
+            />
+          </>
+        ) : (
+          children
+        )}
       </Button>
     </span>
   );

@@ -54,6 +54,7 @@ import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
 import { formatKm } from "@/lib/geo";
 import { UNLOCK_PRICE, useEmployerLocations, useIsLive, useIsUnlocked, usePaymentsEnabled } from "@/lib/store";
 import { branchIdOf, coloniaText } from "@/app/empresa/sucursales/branch-kit";
+import { useCan } from "@/lib/team";
 import { cn } from "@/lib/utils";
 import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 
@@ -89,6 +90,7 @@ export function VacancyApplicants({ jobId }: { jobId: string }) {
 }
 
 function VacancyNotFound() {
+  const can = useCan();
   return (
     <>
       <BackLink />
@@ -105,7 +107,9 @@ function VacancyNotFound() {
           No encontramos esta vacante
         </h1>
         <p className="mt-1.5 max-w-sm text-muted-foreground">
-          Puede que el enlace esté mal o que no sea de tu negocio. Revisa tu lista de vacantes.
+          {can.allBranches
+            ? "Puede que el enlace esté mal o que no sea de tu negocio. Revisa tu lista de vacantes."
+            : "Puede que el enlace esté mal o que sea de una sucursal que no te toca. Revisa tu lista de vacantes."}
         </p>
         <Button asChild size="lg" className={cn("mt-5", INK_BUTTON, HARD_SM)}>
           <Link href="/empresa/vacantes">Ver mis vacantes</Link>
@@ -116,6 +120,7 @@ function VacancyNotFound() {
 }
 
 function VacancyApplicantsBody({ job }: { job: MyJob }) {
+  const can = useCan();
   const jobId = job.id;
   const live = useIsLive();
   const payments = usePaymentsEnabled();
@@ -202,18 +207,21 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
               {CATEGORY_BY_ID[job.category].label}
             </span>
             {branch ? (
-              <Link
-                href="/empresa/sucursales"
-                aria-label={`Sucursal: ${branch.name}, ${coloniaText(branch)}. Ver sucursales`}
-                className="press relative inline-flex min-h-8 max-w-full after:absolute after:inset-x-0 after:-inset-y-1.5 items-center gap-1.5 rounded-full border-2 border-ink bg-ink py-0.5 pr-3 pl-2 text-[0.82rem] font-bold text-white outline-none focus-visible:ring-4 focus-visible:ring-ring/60"
-              >
-                <HugeiconsIcon
-                  icon={multi ? Store01Icon : Location01Icon}
-                  className="size-4 shrink-0 text-limon"
-                  strokeWidth={2.2}
-                />
-                <span className="truncate">{multi ? `${branch.name} · ${coloniaText(branch, false)}` : coloniaText(branch)}</span>
-              </Link>
+              can.manageBranches ? (
+                <Link
+                  href="/empresa/sucursales"
+                  aria-label={`Sucursal: ${branch.name}, ${coloniaText(branch)}. Ver sucursales`}
+                  className="press relative inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border-2 border-ink bg-ink py-0.5 pr-3 pl-2 text-[0.82rem] font-bold text-white outline-none after:absolute after:inset-x-0 after:-inset-y-1.5 focus-visible:ring-4 focus-visible:ring-ring/60"
+                >
+                  <HugeiconsIcon icon={multi ? Store01Icon : Location01Icon} className="size-4 shrink-0 text-limon" strokeWidth={2.2} />
+                  <span className="truncate">{multi ? `${branch.name} · ${coloniaText(branch, false)}` : coloniaText(branch)}</span>
+                </Link>
+              ) : (
+                <span className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border-2 border-ink bg-ink py-0.5 pr-3 pl-2 text-[0.82rem] font-bold text-white">
+                  <HugeiconsIcon icon={Store01Icon} className="size-4 shrink-0 text-limon" strokeWidth={2.2} />
+                  <span className="truncate">{`${branch.name} · ${coloniaText(branch, false)}`}</span>
+                </span>
+              )
             ) : null}
           </span>
           <h1 className="mt-6 max-w-[11ch] sm:mt-4 font-display text-[2.3rem] leading-[0.98] font-extrabold tracking-[-0.04em] sm:max-w-[14ch] sm:text-[2.9rem]">
@@ -285,7 +293,7 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
               >
                 {job.status === "abierta" ? "Publicada" : job.status === "pausada" ? "En pausa" : "Cerrada"}
               </span>
-              {job.status === "abierta" ? (
+              {!can.manageVacancies ? null : job.status === "abierta" ? (
                 <Button
                   size="lg"
                   className={cn("h-11", WHITE_BUTTON)}
@@ -306,7 +314,7 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
                   {busy === "abierta" ? "Activando…" : job.status === "cerrada" ? "Volver a publicar" : "Reanudar"}
                 </Button>
               )}
-              {job.status !== "cerrada" ? (
+              {job.status !== "cerrada" && can.manageVacancies ? (
                 <Button size="lg" className={cn("h-11", WHITE_BUTTON)} onClick={() => setCloseOpen(true)}>
                   <HugeiconsIcon icon={CancelCircleIcon} className="text-destructive" strokeWidth={2.2} />
                   Cerrar
@@ -356,15 +364,17 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
                   ? "Todavía nadie se postula. Te avisamos en cuanto alguien cerca lo haga; ya puedes ver de qué colonia es y a qué distancia vive."
                   : `${people(total, "persona quiere", "personas quieren")} este trabajo y ${within5 === 1 ? "1 vive" : `${within5} viven`} a menos de 5 km${
                       complete > 0 ? `; ${complete === 1 ? "1 tiene" : `${complete} tienen`} el perfil completo` : ""
-                    }. Desbloquea la vacante para ver quiénes son y contactarlas.`}
+                    }. ${can.unlockApplicants ? "Desbloquea la vacante para ver quiénes son y contactarlas." : "Ya ves su experiencia, sus licencias y a qué distancia viven."}`}
               </p>
-              <p className="mt-5 flex items-baseline gap-2">
-                <span className="font-display text-[2.6rem] leading-none font-extrabold tracking-[-0.045em] tabular-nums">
-                  {formatMXN(UNLOCK_PRICE)}
-                </span>
-                <span className="text-[0.95rem] font-medium text-muted-foreground">MXN al mes por esta vacante</span>
-              </p>
-              {payments ? null : (
+              {can.unlockApplicants ? (
+                <p className="mt-5 flex items-baseline gap-2">
+                  <span className="font-display text-[2.6rem] leading-none font-extrabold tracking-[-0.045em] tabular-nums">
+                    {formatMXN(UNLOCK_PRICE)}
+                  </span>
+                  <span className="text-[0.95rem] font-medium text-muted-foreground">MXN al mes por esta vacante</span>
+                </p>
+              ) : null}
+              {payments || !can.unlockApplicants ? null : (
                 <p
                   id="pagos-pronto"
                   className="mt-3 inline-flex items-start gap-2 rounded-tile border-2 border-ink bg-white px-3 py-2 text-[0.9rem] leading-snug font-semibold text-ink"
@@ -390,6 +400,12 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
                 <HugeiconsIcon icon={UserGroupIcon} className="size-5" strokeWidth={2.2} />
                 Ver postulantes
               </a>
+            ) : !can.unlockApplicants ? (
+              // Paying to unlock is the dueño's: say so, instead of a button this member can't use.
+              <p className="flex flex-1 items-start gap-2.5 rounded-tile border-2 border-ink bg-white px-3.5 py-3 text-[0.95rem] leading-snug font-semibold text-ink">
+                <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-4.5 shrink-0" strokeWidth={2.2} />
+                Pide al dueño que desbloquee esta vacante para ver nombres y teléfonos.
+              </p>
             ) : payments ? (
               <Button
                 size="xl"
@@ -475,7 +491,9 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
         </section>
       </div>
 
-      {payments ? <UnlockDialog job={job} count={applicants.length} open={dialogOpen} onOpenChange={setDialogOpen} /> : null}
+      {payments && can.unlockApplicants ? (
+        <UnlockDialog job={job} count={applicants.length} open={dialogOpen} onOpenChange={setDialogOpen} />
+      ) : null}
 
       <AlertDialog open={closeOpen} onOpenChange={(o) => (busy ? undefined : setCloseOpen(o))}>
         <AlertDialogContent>

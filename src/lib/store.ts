@@ -12,6 +12,8 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import * as api from "@/lib/live/api";
 import type { LiveCompany, LiveSessionData, WriteResult } from "@/lib/live/api";
 import { emitLive } from "@/lib/live/events";
+import { demoMembership, useDemoTeam, type DemoTeamState } from "@/lib/team/demo";
+import type { Membership } from "@/lib/team/types";
 import {
   EMPTY_PROFILE_EXTRAS,
   PROFILE_LIMITS,
@@ -87,6 +89,14 @@ type UserData = {
   applications: Application[];
   /** Vacancies whose applicants the business unlocked (demo: paid in the fake flow; live: job_unlocks). */
   unlockedJobIds: string[];
+  /**
+   * Live: my place in `business` (role dueño / admin / reclutador, branch scope), from the session
+   * (my_membership). null = not in any team. Demo: always null here (the demo team lives in
+   * @/lib/team/demo); read either through useMyMembership() / useCan() from @/lib/team.
+   */
+  membership: Membership | null;
+  /** Live: false while the database doesn't have team accounts yet (then `membership` = owner as dueño). */
+  teamsEnabled: boolean;
   /** Email: the daily digest of new vacancies nearby (live: profiles.email_alerts). */
   emailAlerts: boolean;
   /**
@@ -198,6 +208,8 @@ const BLANK: UserData = {
   saved: [],
   applications: [],
   unlockedJobIds: [],
+  membership: null,
+  teamsEnabled: true,
   emailAlerts: true,
   emailUpdates: true,
   ...EMPTY_PROFILE_EXTRAS,
@@ -400,11 +412,15 @@ export const useApp = create<State>()(
         if (prev?.id) {
           const companyId = prev.id;
           const next: Business = { ...prev, name: business.name, kind: business.kind, size: business.size, phone: business.phone };
-          set({ business: next });
+          const prevMembership = get().membership;
+          set({
+            business: next,
+            membership: prevMembership?.companyId === companyId ? { ...prevMembership, companyName: next.name } : prevMembership,
+          });
           return sync(
             () => api.updateCompany(companyId, { name: next.name, kind: next.kind, size: next.size, phone: next.phone }),
             () => {
-              if (get().business === next) set({ business: prev });
+              if (get().business === next) set({ business: prev, membership: prevMembership });
             },
           );
         }
@@ -538,7 +554,7 @@ export const useApp = create<State>()(
       name: "chamba-a-lado",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      version: 6,
+      version: 7,
       migrate: (persisted, version) => {
         const s = persisted as Record<string, unknown> & { business?: (Record<string, unknown> & { plan?: string }) | null };
         // v0 → v1: the per-hire plan was replaced by per-vacancy-per-month billing.
@@ -576,6 +592,12 @@ export const useApp = create<State>()(
                 : null;
           if (typeof s.avatarSaved !== "boolean") s.avatarSaved = false;
           if (typeof s.avatarLocalOnly !== "boolean") s.avatarLocalOnly = false;
+        }
+        // v6 → v7: team accounts. The membership arrives with the next session load (until then the
+        // screens wait for it rather than guessing a role).
+        if (version < 7) {
+          s.membership = null;
+          s.teamsEnabled = true;
         }
         return s as unknown as State;
       },
@@ -787,7 +809,12 @@ function ensureBusiness(): Promise<WriteResult> {
       toast.error(r.error);
       return { error: r.error };
     }
-    set({ business: toBusiness(r.data) });
+    // Whoever creates a company is its dueño (trigger add_company_creator).
+    set({
+      business: toBusiness(r.data),
+      membership: { companyId: r.data.id, companyName: r.data.name, plan: r.data.plan, role: "dueno", branchIds: null, joinedAt: new Date().toISOString() },
+    });
+    membershipSyncedAt = Date.now();
     emitLive("catalog", "myCompany");
     return {};
   })().finally(() => {
@@ -1003,6 +1030,27 @@ export async function waitForPendingWrites(): Promise<void> {
   await Promise.allSettled([creatingBusiness, onboardingFlight, ...inFlight].filter(Boolean));
 }
 
+/** When the session (or a team refetch) last told us the membership; the team hooks skip a refetch before STALE. */
+let membershipSyncedAt = 0;
+export const lastMembershipSync = () => membershipSyncedAt;
+
+/**
+ * A fresher my_membership() answer (team hooks, after a team write or on "myCompany"). Only the
+ * membership changes: when it no longer matches `business` (removed from the team) the screens say so
+ * and reload the session (EmployerGate). `teamsEnabled` false: the owner fallback, kept as is.
+ */
+export function applyMembership(userId: string, membership: Membership | null, teamsEnabled: boolean) {
+  const s = get();
+  if (s.mode !== "live" || s.userId !== userId) return;
+  membershipSyncedAt = Date.now();
+  if (!teamsEnabled) {
+    if (s.teamsEnabled) set({ teamsEnabled: false });
+    return;
+  }
+  const next = membership && s.business?.id === membership.companyId ? { ...membership, companyName: s.business.name, plan: s.business.plan } : membership;
+  if (!same(next, s.membership) || !s.teamsEnabled) set({ membership: next, teamsEnabled: true });
+}
+
 /** Applies what the server holds for the signed-in user. Pending local edits win over it. */
 export function applyLiveSnapshot(d: LiveSessionData) {
   const s = get();
@@ -1037,6 +1085,7 @@ export function applyLiveSnapshot(d: LiveSessionData) {
     saved: d.saved,
     unlockedJobIds: d.unlockedJobIds,
     serverStrength: p.strength,
+    teamsEnabled: d.teamsEnabled,
   };
   // The optional profile isn't part of onboarding: the server holds it in both branches below,
   // except fields with an edit still queued here. Photo/CV paths and the work history likewise,
@@ -1055,13 +1104,17 @@ export function applyLiveSnapshot(d: LiveSessionData) {
     for (const k of PROFILE_KEYS) if (!pending.has(k)) Object.assign(patch, { [k]: server[k] });
     Object.assign(patch, home ?? { hasHome: false, home: SALTILLO_CENTER, colonia: BLANK.colonia });
     patch.business = d.company ? toBusiness(d.company) : null;
+    patch.membership = d.company ? d.membership : null;
   } else {
     // Still onboarding: keep what they typed here; the server only knows the role picked at sign-up.
     if (!s.onboarded && !pending.has("role")) patch.role = p.role;
     for (const k of EMAIL_KEYS) if (!pending.has(k)) patch[k] = server[k];
     if (home && !s.hasHome) Object.assign(patch, home);
     if (d.company) patch.business = toBusiness(d.company);
+    // A local draft business (no id yet) has no membership until it's created.
+    patch.membership = d.company ? d.membership : null;
   }
+  membershipSyncedAt = Date.now();
   // Avatar: the server's copy, unless a save is still on its way. While the database can't store it
   // (migration pending) the device copy stays; a copy saved only here is uploaded once it can.
   let uploadAvatar: AvatarConfig | null = null;
@@ -1129,14 +1182,83 @@ function demoBusiness(): Business {
 
 const NO_BRANCHES: Branch[] = [];
 
-/** The employer's locations: their own business, or (demo only) the demo company's branches. */
-export function useEmployerLocations(): Branch[] {
+/**
+ * Who I am in my company, as the store knows it: live = the session's membership (my_membership, or the
+ * owner fallback); demo empresa = the demo team member being viewed (the dueño unless "Ver como");
+ * otherwise null. No loading state: screens use useMyMembership() / useCan() from @/lib/team.
+ */
+function membershipOf(
+  s: Pick<UserData, "mode" | "role" | "membership" | "business">,
+  team: DemoTeamState,
+): Membership | null {
+  if (s.mode === "demo") {
+    if (s.role !== "empresa") return null;
+    return demoMembership(team, s.business?.name ?? COMPANY_BY_ID[DEMO_COMPANY_ID].name, s.business?.plan ?? DEMO_PLAN);
+  }
+  return s.mode === "live" ? s.membership : null;
+}
+
+/** The current membership outside React (actions). See useStoredMembership(). */
+export function getStoredMembership(): Membership | null {
+  return membershipOf(get(), useDemoTeam.getState());
+}
+
+/** The current membership (both modes, no loading state). Stable while nothing it depends on changes. */
+export function useStoredMembership(): Membership | null {
+  const mode = useApp((s) => s.mode);
+  const role = useApp((s) => s.role);
+  const membership = useApp((s) => s.membership);
+  const business = useApp((s) => s.business);
+  const team = useDemoTeam();
+  return useMemo(() => membershipOf({ mode, role, membership, business }, team), [mode, role, membership, business, team]);
+}
+
+/** A branch-limited reclutador's branch ids; null = every branch (or no membership: nothing to filter). */
+export function scopeOf(m: Pick<Membership, "role" | "branchIds"> | null | undefined): string[] | null {
+  return m && m.role === "reclutador" && m.branchIds !== null ? m.branchIds : null;
+}
+
+/** Keeps the items of the branches this member works (everything when they aren't branch-limited). */
+export function inScope<T extends { branchId: string }>(m: Pick<Membership, "role" | "branchIds"> | null | undefined, items: T[]): T[] {
+  const ids = scopeOf(m);
+  return ids === null ? items : items.filter((i) => ids.includes(i.branchId));
+}
+
+/** Every location of the employer's business, whatever my branch scope (labels of a known branch id). */
+export function useAllEmployerLocations(): Branch[] {
   // Visitors in a live-capable build (and the first render before hydration) never get the mock branches.
   return useApp(
     (s) =>
       s.business?.locations ??
       (s.mode === "demo" || (s.mode === null && !isLiveAvailable) ? COMPANY_BY_ID[DEMO_COMPANY_ID].locations : NO_BRANCHES),
   );
+}
+
+/**
+ * The employer's locations that I work: their own business, or (demo only) the demo company's branches,
+ * limited to my branches when I'm a branch-limited reclutador (pickers, filters, "Solo: …" chips).
+ */
+export function useEmployerLocations(): Branch[] {
+  const all = useAllEmployerLocations();
+  const m = useStoredMembership();
+  const ids = scopeOf(m);
+  return useMemo(() => (ids === null ? all : all.filter((b) => ids.includes(b.id))), [all, ids]);
+}
+
+const NO_IDS: string[] = [];
+
+/** Live: ids of my own applications as a candidate (a member never works their own application). */
+export function useOwnApplicationIds(): string[] {
+  const apps = useApp((s) => s.applications);
+  return useMemo(() => {
+    const ids = apps.flatMap((a) => (a.id ? [a.id] : []));
+    return ids.length ? ids : NO_IDS;
+  }, [apps]);
+}
+
+/** Outside React: is this application my own (I'm its candidate)? */
+export function isOwnApplication(applicationId: string | null | undefined): boolean {
+  return !!applicationId && get().applications.some((a) => a.id === applicationId);
 }
 
 export function useEmployerPlan(): PlanId {

@@ -6,21 +6,15 @@ import { useEffect, useState } from "react";
 import { ChambarrioPulse } from "@/components/brand/chambarrio-logo";
 import { useSessionLoaded } from "@/lib/live/session";
 import { useApp, useHydrated } from "@/lib/store";
+import { isInvitePath, readNextParam } from "./next-path";
 
 /** How long to wait for Supabase to report the session before offering a way out. */
 const GIVE_UP_MS = 12_000;
 
-/** Same-site path from ?next= (already validated by /auth/confirm, re-checked here). */
-function readNext(): string | null {
-  if (typeof window === "undefined") return null;
-  const next = new URLSearchParams(window.location.search).get("next");
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return null;
-  try {
-    const url = new URL(next, window.location.origin);
-    return url.origin === window.location.origin ? url.pathname + url.search : null;
-  } catch {
-    return null;
-  }
+/** "Ir a Entrar" keeps a team invite, so signing in with a code still lands on it (client only). */
+function entrarHref(): string {
+  const next = readNextParam();
+  return isInvitePath(next) ? `/entrar?next=${encodeURIComponent(next)}` : "/entrar";
 }
 
 /**
@@ -48,11 +42,18 @@ export function EmailLinkLanding() {
     if (!live || !loaded) return;
     const s = useApp.getState();
     const empresa = s.role === "empresa";
+    // Same-site ?next= (already validated by /auth/confirm, re-checked here).
+    const next = readNextParam();
+    // A team invite (/unirse?t=…): back to it, onboarded or not (joining replaces business onboarding).
+    if (isInvitePath(next)) {
+      router.replace(next);
+      return;
+    }
     if (!s.onboarded) {
       router.replace(empresa ? "/bienvenida/empresa" : "/bienvenida");
       return;
     }
-    router.replace(readNext() ?? (empresa ? "/empresa" : "/inicio"));
+    router.replace(next ?? (empresa ? "/empresa" : "/inicio"));
   }, [live, loaded, router]);
 
   // 3. No session showed up (link opened elsewhere, cookies blocked…): offer a way forward.
@@ -75,7 +76,7 @@ export function EmailLinkLanding() {
         </p>
         {stuck ? (
           <Link
-            href="/entrar"
+            href={entrarHref()}
             className="press mt-8 inline-flex h-14 items-center justify-center rounded-full bg-limon px-8 font-bold text-ink outline-none focus-visible:ring-4 focus-visible:ring-white/50"
           >
             Ir a Entrar

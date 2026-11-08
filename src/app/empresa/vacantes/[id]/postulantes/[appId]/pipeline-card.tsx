@@ -64,6 +64,8 @@ export function PipelineCard({
   actions,
   now,
   onLocked,
+  askOwner,
+  readOnly,
   noPhone,
   className,
 }: {
@@ -80,6 +82,13 @@ export function PipelineCard({
    * interview / hire dialog, with what to open once it's unlocked.
    */
   onLocked?: ((then: () => void) => void) | null;
+  /**
+   * Locked, and unlocking is the dueño's (I'm an admin or reclutador): interview / hire aren't offered,
+   * the note says who unlocks. Marcar como vista and descartar stay.
+   */
+  askOwner?: boolean;
+  /** My own application (I'm its candidate): status only, no actions. */
+  readOnly?: boolean;
   /** Neither the vacancy nor the company has a phone (the interview dialog warns). */
   noPhone?: boolean;
   className?: string;
@@ -88,6 +97,8 @@ export function PipelineCard({
   const [busy, setBusy] = useState<"seen" | "reopen" | null>(null);
   const step = stepOf(data);
   const can = recruiterCan(data);
+  /** Interview / hire can be offered (not waiting on the dueño to unlock). */
+  const paid = !askOwner;
   const reached = trackIndex(data);
   const closed = step === "descartada" || step === "retirada";
   const interview = data.interview;
@@ -230,7 +241,13 @@ export function PipelineCard({
         </p>
       ) : null}
 
-      {step === "retirada" ? null : <p className="mt-4 text-[1rem] leading-snug text-primary-foreground/85">{next}</p>}
+      {readOnly ? (
+        <p className="mt-4 rounded-tile border-2 border-dashed border-white/40 px-3.5 py-3 text-[1rem] leading-snug text-primary-foreground/90">
+          Esta es tu propia postulación: la revisa alguien más del equipo. Aquí solo ves en qué va.
+        </p>
+      ) : step === "retirada" ? null : (
+        <p className="mt-4 text-[1rem] leading-snug text-primary-foreground/85">{next}</p>
+      )}
 
       {/* ------------------------------------------------ interview */}
       {interview ? (
@@ -276,7 +293,7 @@ export function PipelineCard({
               <span className="min-w-0 whitespace-pre-line">{interview.note}</span>
             </p>
           ) : null}
-          {can.reschedule ? (
+          {can.reschedule && !readOnly ? (
             <Button size="lg" className={cn("mt-3 h-11 w-full px-4", INK_BUTTON)} onClick={() => setDialog("interview")}>
               <HugeiconsIcon icon={done ? CalendarAdd01Icon : Edit02Icon} className="size-4.5 text-limon" strokeWidth={2.2} />
               {done ? "Agendar otra entrevista" : "Cambiar fecha, hora o lugar"}
@@ -293,7 +310,7 @@ export function PipelineCard({
             Tu mensaje para {first === "esta persona" ? "la persona" : first}
           </p>
           <p className="mt-1.5 text-[0.98rem] leading-snug whitespace-pre-line">{data.companyMessage}</p>
-          {step === "contratada" || step === "descartada" ? (
+          {(step === "contratada" || step === "descartada") && !readOnly ? (
             <button
               type="button"
               onClick={() => setDialog(step === "contratada" ? "hire" : "decline")}
@@ -328,13 +345,15 @@ export function PipelineCard({
       ) : null}
 
       {/* ------------------------------------------------ actions */}
-      {onLocked && (step === "enviada" || step === "vista" || step === "entrevista") ? (
+      {!readOnly && (onLocked || askOwner) && (step === "enviada" || step === "vista" || step === "entrevista") ? (
         <p className="mt-4 flex items-start gap-2 rounded-tile border-2 border-dashed border-white/40 px-3 py-2.5 text-[0.9rem] leading-snug text-primary-foreground/90">
           <HugeiconsIcon icon={SquareLock02Icon} className="mt-0.5 size-4 shrink-0 text-limon" strokeWidth={2.4} />
-          Para agendar la entrevista o contratar, desbloquea la vacante. Marcar como vista y descartar son gratis.
+          {askOwner
+            ? "Para agendar la entrevista o contratar, pide al dueño que desbloquee esta vacante. Marcar como vista y descartar sí puedes."
+            : "Para agendar la entrevista o contratar, desbloquea la vacante. Marcar como vista y descartar son gratis."}
         </p>
       ) : null}
-      {step !== "retirada" ? (
+      {step !== "retirada" && !readOnly ? (
         <div className="mt-5 grid gap-2.5">
           {step === "enviada" ? (
             <Button
@@ -349,7 +368,7 @@ export function PipelineCard({
             </Button>
           ) : null}
 
-          {step === "vista" || (step === "entrevista" && !interview) ? (
+          {paid && (step === "vista" || (step === "entrevista" && !interview)) ? (
             <Button
               size="xl"
               variant="lime"
@@ -361,7 +380,7 @@ export function PipelineCard({
             </Button>
           ) : null}
 
-          {step === "entrevista" && interview ? (
+          {paid && step === "entrevista" && interview ? (
             <Button
               size="xl"
               variant="lime"
@@ -388,26 +407,32 @@ export function PipelineCard({
 
           {step === "enviada" ? (
             <>
+              {paid ? (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <Button size="lg" className={secondary} onClick={() => openPaid("interview")}>
+                    <HugeiconsIcon icon={onLocked ? SquareLock02Icon : CalendarAdd01Icon} className="size-5" strokeWidth={2.2} />
+                    <span className="truncate">Entrevista</span>
+                  </Button>
+                  <Button size="lg" className={secondary} onClick={() => openPaid("hire")}>
+                    <HugeiconsIcon icon={onLocked ? SquareLock02Icon : Tick02Icon} className="size-5" strokeWidth={2.4} />
+                    Contratar
+                  </Button>
+                </div>
+              ) : null}
+              {declineBtn}
+            </>
+          ) : step === "vista" ? (
+            paid ? (
               <div className="grid grid-cols-2 gap-2.5">
-                <Button size="lg" className={secondary} onClick={() => openPaid("interview")}>
-                  <HugeiconsIcon icon={onLocked ? SquareLock02Icon : CalendarAdd01Icon} className="size-5" strokeWidth={2.2} />
-                  <span className="truncate">Entrevista</span>
-                </Button>
                 <Button size="lg" className={secondary} onClick={() => openPaid("hire")}>
                   <HugeiconsIcon icon={onLocked ? SquareLock02Icon : Tick02Icon} className="size-5" strokeWidth={2.4} />
                   Contratar
                 </Button>
+                {declineBtn}
               </div>
-              {declineBtn}
-            </>
-          ) : step === "vista" ? (
-            <div className="grid grid-cols-2 gap-2.5">
-              <Button size="lg" className={secondary} onClick={() => openPaid("hire")}>
-                <HugeiconsIcon icon={onLocked ? SquareLock02Icon : Tick02Icon} className="size-5" strokeWidth={2.4} />
-                Contratar
-              </Button>
-              {declineBtn}
-            </div>
+            ) : (
+              declineBtn
+            )
           ) : step === "entrevista" ? (
             declineBtn
           ) : step === "contratada" ? (

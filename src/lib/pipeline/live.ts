@@ -32,7 +32,11 @@ type DbError = { message?: string; code?: string; details?: string | null; hint?
 
 const APP_COLS =
   "id, job_id, status, created_at, seen_at, interview_at, interview_place, interview_note, company_message, hired_at, closed_by, closed_at";
-/** change / message come with 20261108041400_pipeline_notify_v3.sql; until it's applied, the legacy columns. */
+/**
+ * change / message come with 20261108041400_pipeline_notify_v3.sql; until it's applied, the legacy columns.
+ * Never add actor_user_id here: `authenticated` can't select it (column grants keep member ids from
+ * candidates) and the whole query would fail. The company side asks application_event_actors().
+ */
 const EVENT_COLS_V3 = "id, status, actor, interview_at, created_at, change, message";
 const EVENT_COLS_V2 = "id, status, actor, interview_at, created_at";
 let eventColsV3 = true;
@@ -85,7 +89,7 @@ function toEvents(rows: EventRow[] | null | undefined, r: AppRow): PipelineEvent
   return rows
     .toSorted((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id)
     .map((e): PipelineEvent => {
-      const base: PipelineEvent = { status: e.status, actor: asActor(e.actor) ?? "empresa", at: e.created_at };
+      const base: PipelineEvent = { id: e.id, status: e.status, actor: asActor(e.actor) ?? "empresa", at: e.created_at };
       if (e.status === "entrevista") base.interviewAt = e.interview_at;
       if (e.change) base.change = e.change;
       if (e.message) base.message = e.message;
@@ -206,7 +210,7 @@ export async function fetchSummaries(jobIds: string[]): Promise<Result<PipelineS
   }
 }
 
-/** Private notes on an application (company). Newest first. */
+/** Private notes on an application (the team's; never on my own application). Newest first. */
 export async function fetchNotes(applicationId: string, myId: string | null): Promise<Result<RecruiterNote[]>> {
   const sb = getSupabase();
   if (!sb) return { error: MSG.unavailable };
@@ -218,7 +222,9 @@ export async function fetchNotes(applicationId: string, myId: string | null): Pr
       .eq("application_id", applicationId)
       .order("created_at", { ascending: false });
     if (error) return { error: pipelineError(error, MSG.load) };
-    return { data: (data ?? []).map((n) => ({ id: n.id, body: n.body, at: n.created_at, mine: !!myId && n.author_id === myId })) };
+    return {
+      data: (data ?? []).map((n) => ({ id: n.id, body: n.body, at: n.created_at, mine: !!myId && n.author_id === myId, authorId: n.author_id })),
+    };
   } catch (e) {
     return { error: pipelineError(e as DbError, MSG.load) };
   }
@@ -264,14 +270,14 @@ export async function insertNote(
     const { data, error } = await sb
       .from("application_notes")
       .insert({ application_id: applicationId, body, ...(restore ? { id: restore.id, created_at: restore.at } : {}) })
-      .select("id, body, created_at")
+      .select("id, body, created_at, author_id")
       .single();
     if (error) {
-      if (error.code === "42501" || /row-level security/i.test(error.message)) return { error: "Solo la empresa de esta vacante puede escribir notas." };
+      if (error.code === "42501" || /row-level security/i.test(error.message)) return { error: "Solo el equipo de esta vacante puede escribir notas." };
       if (error.code === "23503") return { error: PIPELINE_MSG.notFound };
       return { error: pipelineError(error) };
     }
-    return { data: { id: data.id, body: data.body, at: data.created_at, mine: true } };
+    return { data: { id: data.id, body: data.body, at: data.created_at, mine: true, authorId: data.author_id } };
   } catch (e) {
     return { error: pipelineError(e as DbError) };
   }

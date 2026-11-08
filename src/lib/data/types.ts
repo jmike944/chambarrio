@@ -82,6 +82,8 @@ export type Job = {
 export type ApplicationStatus = "enviada" | "vista" | "entrevista" | "contratada" | "cerrada";
 
 export type Application = {
+  /** Live: the application's id (from the session load; absent until then, and in the demo). */
+  id?: string;
   jobId: string;
   status: ApplicationStatus;
   /** minutes since applying, for seeded demo data */
@@ -112,10 +114,25 @@ export type InterviewDetails = {
  */
 export type PipelineEventChange = "hora" | "lugar" | "indicaciones" | "mensaje" | "reabierta";
 
+/**
+ * Company side only: the team member behind a step or a note. `name` is null when unknown (someone
+ * whose profile has no name and who left); show "Tú" / "ti" when `isMe`. Candidates never get this.
+ */
+export type TeamActor = { userId: string; name: string | null; isMe: boolean };
+
 export type PipelineEvent = {
+  /** Live: application_events.id (absent on timelines made up from the row's stamps). */
+  id?: number;
   status: ApplicationStatus;
   actor: PipelineActor;
   at: string;
+  /** Company side only: which member made this company step (live: application_event_actors()). */
+  actorUserId?: string | null;
+  /**
+   * Company side only, filled by useApplicationPipeline(): that member resolved to a name. null/absent =
+   * no name to show (candidate steps, older rows, the candidate's own view): say nothing, or "La empresa".
+   */
+  by?: TeamActor | null;
   /** For "entrevista" events: the interview time set (a reschedule logs a new event). */
   interviewAt?: string | null;
   change?: PipelineEventChange | null;
@@ -163,6 +180,10 @@ export type RecruiterNote = {
   at: string;
   /** Written by the signed-in user (only own notes can be deleted). */
   mine: boolean;
+  /** application_notes.author_id (demo: the demo member who wrote it). */
+  authorId?: string | null;
+  /** Filled by useApplicationPipeline(): the author resolved to a name ("Tú" when isMe). */
+  by?: TeamActor | null;
   /** Optimistic: not saved yet. */
   pending?: boolean;
 };

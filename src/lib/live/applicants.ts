@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { APPLICANTS, applicantsFor } from "@/lib/data/applicants";
 import type { ApplicationStatus } from "@/lib/data/types";
 import { useMyCompany, type CatalogStatus } from "@/lib/data/catalog";
-import { useApp, useIsUnlocked } from "@/lib/store";
+import { scopeOf, useApp, useIsUnlocked, useStoredMembership } from "@/lib/store";
 import * as api from "./api";
 import type { LiveApplicant, WriteResult } from "./api";
 import { emitLive, onLive } from "./events";
@@ -92,17 +92,25 @@ export type ApplicantsResult = {
   setStatus: (applicationId: string, status: ApplicationStatus) => Promise<WriteResult>;
 };
 
+const NO_APPLICANTS: ApplicantView[] = [];
+
 /**
- * Applicants to one of my vacancies, or (no jobId) to all of them. Live data is cached per key and
- * refetched after status changes; demo data is the mock list.
+ * Applicants to one of my vacancies, or (no jobId) to all of them: only the vacancies I work (a
+ * branch-limited reclutador's branches; the database answers "No autorizado" for the others, so they're
+ * never asked for). Live data is cached per key and refetched after status changes; demo data is the
+ * mock list.
  */
 export function useApplicants(jobId?: string): ApplicantsResult {
   const live = useApp((s) => s.mode === "live");
   const isUnlocked = useIsUnlocked();
   const my = useMyCompany();
   const demoStatus = useApplicantCache((s) => s.demoStatus);
+  const limited = scopeOf(useStoredMembership()) !== null;
 
-  const jobIds = useMemo(() => (jobId ? [jobId] : my.jobs.map((j) => j.id)), [jobId, my.jobs]);
+  // A branch-limited member: a vacancy that isn't one of mine (once they're known) has no applicants
+  // for me. Everyone else may ask for a vacancy id right away (e.g. one published a moment ago).
+  const outOfScope = !!jobId && limited && (my.status !== "ready" || !my.jobs.some((j) => j.id === jobId));
+  const jobIds = useMemo(() => (outOfScope ? [] : jobId ? [jobId] : my.jobs.map((j) => j.id)), [outOfScope, jobId, my.jobs]);
   const key = jobIds.join(",");
   const entry = useApplicantCache((s) => s.entries[key]);
   const ready = live && (jobId ? true : my.status === "ready");
@@ -113,7 +121,12 @@ export function useApplicants(jobId?: string): ApplicantsResult {
 
   return useMemo((): ApplicantsResult => {
     if (!live) {
-      const list = (jobId ? applicantsFor(jobId) : APPLICANTS.toSorted((a, b) => a.minutesAgo - b.minutesAgo)).map(
+      const mine = new Set(my.jobs.map((j) => j.id));
+      if (jobId && !mine.has(jobId)) {
+        return { status: "ready", applicants: NO_APPLICANTS, reload: () => {}, setStatus: async () => ({}) };
+      }
+      const rows = jobId ? applicantsFor(jobId) : APPLICANTS.filter((a) => mine.has(a.jobId)).toSorted((a, b) => a.minutesAgo - b.minutesAgo);
+      const list = rows.map(
         (a): ApplicantView => ({
           id: a.id,
           jobId: a.jobId,
@@ -139,8 +152,9 @@ export function useApplicants(jobId?: string): ApplicantsResult {
       };
     }
     if (!key) {
-      // No vacancies yet (or still loading them).
-      return { status: my.status, error: my.error, applicants: [], reload: () => void my.reload(), setStatus: setStatusLive };
+      // No vacancies yet (or still loading them), or a vacancy outside my branches.
+      if (outOfScope && my.status === "ready") return { status: "ready", applicants: NO_APPLICANTS, reload: () => {}, setStatus: setStatusLive };
+      return { status: my.status, error: my.error, applicants: NO_APPLICANTS, reload: () => void my.reload(), setStatus: setStatusLive };
     }
     return {
       status: entry?.status ?? "loading",
@@ -149,5 +163,5 @@ export function useApplicants(jobId?: string): ApplicantsResult {
       reload: () => void load(key, key.split(","), true),
       setStatus: setStatusLive,
     };
-  }, [live, jobId, demoStatus, isUnlocked, key, entry, my]);
+  }, [live, jobId, demoStatus, isUnlocked, key, entry, my, outOfScope]);
 }

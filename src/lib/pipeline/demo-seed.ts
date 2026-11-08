@@ -7,6 +7,7 @@
 import { APPLICANTS } from "@/lib/data/applicants";
 import { BRANCH_BY_ID, COMPANY_BY_ID, JOB_BY_ID } from "@/lib/data/jobs";
 import type { Application, ApplicationPipeline, ApplicationStatus, PipelineEvent, RecruiterNote } from "@/lib/data/types";
+import { DEMO_OWNER_ID, DEMO_RECRUITER_ID } from "@/lib/team/demo";
 import { defaultInterviewPlace } from "./places";
 import { DEFAULT_DECLINE_MESSAGE } from "./steps";
 import { nextWorkdayAt } from "./time";
@@ -36,6 +37,22 @@ type Seed = {
   closedBy?: "empresa" | "candidato";
   message?: string | null;
 };
+
+/**
+ * Who did each company step in the demo team (company side only; the candidate's own view never gets
+ * actors): the reclutador schedules the interviews, the dueño does the rest.
+ */
+const DEMO_ACTOR: Partial<Record<ApplicationStatus, string>> = {
+  vista: DEMO_OWNER_ID,
+  entrevista: DEMO_RECRUITER_ID,
+  contratada: DEMO_OWNER_ID,
+  cerrada: DEMO_OWNER_ID,
+};
+
+/** The company side of the demo: tag every company step with the demo member who made it. */
+function withDemoActors(p: ApplicationPipeline): ApplicationPipeline {
+  return { ...p, events: p.events.map((e) => (e.actor === "empresa" ? { ...e, actorUserId: DEMO_ACTOR[e.status] ?? DEMO_OWNER_ID } : e)) };
+}
 
 /** Builds a consistent pipeline (stamps + timeline) from a seed. */
 function build(id: string, jobId: string, s: Seed, t0: number): ApplicationPipeline {
@@ -214,23 +231,28 @@ const RECRUITER_CACHE = new Map<number, Record<string, ApplicationPipeline>>();
 export function seedRecruiterPipelines(t0: number): Record<string, ApplicationPipeline> {
   let out = RECRUITER_CACHE.get(t0);
   if (!out) {
-    out = Object.fromEntries(APPLICANTS.map((a) => [a.id, build(a.id, a.jobId, recruiterSeed(a.id, Math.max(1, a.minutesAgo), t0), t0)]));
+    out = Object.fromEntries(
+      APPLICANTS.map((a) => [a.id, withDemoActors(build(a.id, a.jobId, recruiterSeed(a.id, Math.max(1, a.minutesAgo), t0), t0))]),
+    );
     RECRUITER_CACHE.clear();
     RECRUITER_CACHE.set(t0, out);
   }
   return out;
 }
 
-/** A few private notes so the notes panel isn't empty in the demo. */
+/**
+ * A few private notes so the notes panel isn't empty in the demo, by both demo team members. `mine` is
+ * recomputed for whoever the demo is acting as (useApplicationPipeline); here it's the dueño's view.
+ */
 export function seedRecruiterNotes(t0: number): Record<string, RecruiterNote[]> {
+  const owner = { mine: true, authorId: DEMO_OWNER_ID };
+  const recruiter = { mine: false, authorId: DEMO_RECRUITER_ID };
   return {
-    a3: [
-      { id: "n-a3-1", body: "Tiene licencia federal vigente. Preguntar si puede rolar turno nocturno.", at: iso(t0 - 3 * HOUR), mine: true },
-    ],
+    a3: [{ id: "n-a3-1", body: "Tiene licencia federal vigente. Preguntar si puede rolar turno nocturno.", at: iso(t0 - 3 * HOUR), ...owner }],
     a6: [
-      { id: "n-a6-2", body: "Muy buena entrevista. Ya manejó Crown y Yale.", at: iso(t0 - 5 * HOUR), mine: true },
-      { id: "n-a6-1", body: "Llegó puntual y con papeles completos.", at: iso(t0 - 6 * HOUR), mine: true },
+      { id: "n-a6-2", body: "Muy buena entrevista. Ya manejó Crown y Yale.", at: iso(t0 - 5 * HOUR), ...recruiter },
+      { id: "n-a6-1", body: "Llegó puntual y con papeles completos.", at: iso(t0 - 6 * HOUR), ...owner },
     ],
-    a9: [{ id: "n-a9-1", body: "Experiencia en inventarios cíclicos con escáner.", at: iso(t0 - 1 * HOUR), mine: true }],
+    a9: [{ id: "n-a9-1", body: "Experiencia en inventarios cíclicos con escáner.", at: iso(t0 - 1 * HOUR), ...owner }],
   };
 }

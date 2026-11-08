@@ -1,12 +1,15 @@
 "use client";
 
 /*
- * The company's side of the pipeline. Both modes, one shape:
+ * The company's side of the pipeline (the whole team's). Both modes, one shape:
  *  - live: public.applications (+ application_events, application_notes) under RLS. Actions update
  *    the row; the guard trigger stamps seen/hired/closed, logs the timeline and queues the candidate's
- *    email. Optimistic everywhere (detail + lists), rolled back + toast.error on failure.
+ *    email. Optimistic everywhere (detail + lists), rolled back + toast.error on failure. Who did each
+ *    company step comes from application_event_actors() (never a column of the events select).
  *  - demo: ./demo-store seeded from the 16 mock applicants (every step represented), fully
- *    interactive, same rules (./transitions mirrors the trigger). Never touches Supabase.
+ *    interactive, same rules (./transitions mirrors the trigger). Steps and notes are attributed to the
+ *    demo team member the demo is acting as ("Ver como"). Never touches Supabase.
+ * A member never works their own application (they applied to their own company): no notes, no moves.
  *
  * Actions never throw; they resolve { error?: string } and have already toasted the error.
  */
@@ -15,9 +18,13 @@ import { create } from "zustand";
 import { toast } from "sonner";
 import { APPLICANTS } from "@/lib/data/applicants";
 import { useMyCompany, type MyJob } from "@/lib/data/catalog";
-import type { ApplicationPipeline, ApplicationStatus, PipelineSummary, RecruiterNote } from "@/lib/data/types";
+import { JOB_BY_ID } from "@/lib/data/jobs";
+import type { ApplicationPipeline, ApplicationStatus, PipelineEvent, PipelineSummary, RecruiterNote, TeamActor } from "@/lib/data/types";
 import { onLive } from "@/lib/live/events";
-import { useApp, useHydrated, type WriteResult } from "@/lib/store";
+import { getStoredMembership, isOwnApplication, scopeOf, useApp, useHydrated, useOwnApplicationIds, useStoredMembership, type WriteResult } from "@/lib/store";
+import { fetchEventActors, useTeamPeople } from "@/lib/team/hooks";
+import { DEMO_OWNER_ID, meId, useDemoTeam } from "@/lib/team/demo";
+import { canSeeBranch } from "@/lib/team/permissions";
 import { demoRecruiterNotes, demoRecruiterPipeline, patchDemo, useDemoPipeline } from "./demo-store";
 import { deleteNote as deleteNoteLive, fetchNotes, fetchPipeline, fetchSummaries, insertNote, updateApplication } from "./live";
 import { stepOf, type PipelineStep } from "./steps";
@@ -31,6 +38,8 @@ type AppEntry = {
   status: "loading" | "ready" | "error";
   /** Null + ready = not found / not one of my vacancies. */
   data: ApplicationPipeline | null;
+  /** Event id → the member who made that company step (application_event_actors). */
+  actors?: Record<number, string>;
   notes: RecruiterNote[];
   notesError?: string;
   error?: string;
@@ -73,7 +82,8 @@ function loadApp(id: string, force = false): Promise<void> {
   const rs = resetSeq;
   setApp(id, e?.status === "ready" ? { ...e, refreshing: true } : { status: "loading", data: null, notes: [], fetchedAt: 0, refreshing: false });
   const p = (async () => {
-    const [pipe, notes] = await Promise.all([fetchPipeline(id), fetchNotes(id, useApp.getState().userId)]);
+    // Who did what: a failed lookup only means no names on the timeline.
+    const [pipe, notes, actors] = await Promise.all([fetchPipeline(id), fetchNotes(id, useApp.getState().userId), fetchEventActors([id])]);
     if (rs !== resetSeq || appToken.get(id) !== token) return;
     const cur = cache().apps[id];
     if ((appMut.get(id) ?? 0) !== mut) {
@@ -89,6 +99,7 @@ function loadApp(id: string, force = false): Promise<void> {
     setApp(id, {
       status: "ready",
       data: pipe.data,
+      actors: actors.data ? Object.fromEntries(actors.data) : (cur?.actors ?? {}),
       notes: notes.error !== undefined ? (cur?.notes ?? []) : notes.data,
       notesError: notes.error,
       fetchedAt: Date.now(),
@@ -234,15 +245,42 @@ function fail(error: string): { error: string } {
 
 const isLive = () => useApp.getState().mode === "live";
 
+/** A member's own application (they applied to their own company): the team's notes and moves are off. */
+const OWN_MSG = "Esta es tu propia postulación: la revisa alguien más del equipo.";
+
+/** Demo: the demo member the app is acting as (the dueño unless "Ver como"). */
+const demoMe = () => meId(useDemoTeam.getState());
+
+/** Demo: the applicant's vacancy is in the viewed member's branch scope ("Ver como" a reclutador). */
+function demoInScope(applicationId: string): boolean {
+  const app = APPLICANTS.find((a) => a.id === applicationId);
+  const job = app ? JOB_BY_ID[app.jobId] : undefined;
+  return !!job && canSeeBranch(getStoredMembership(), job.branchId);
+}
+
+/** Demo: the steps a change added, tagged with who made them (as live's actor_user_id). */
+function tagNewEvents(before: ApplicationPipeline, next: ApplicationPipeline): ApplicationPipeline {
+  if (next.events.length <= before.events.length) return next;
+  const me = demoMe();
+  return {
+    ...next,
+    events: next.events.map((e, i) => (i >= before.events.length && e.actor === "empresa" ? { ...e, actorUserId: me } : e)),
+  };
+}
+
 // ------------------------------------------------------------------ actions
 
 async function run(applicationId: string, change: PipelineChange): Promise<WriteResult> {
+  if (isOwnApplication(applicationId)) {
+    // "Seen" runs by itself when the page opens: nothing to say there.
+    return change.kind === "seen" ? { error: OWN_MSG } : fail(OWN_MSG);
+  }
   if (!isLive()) {
-    const current = demoRecruiterPipeline(useDemoPipeline.getState(), applicationId);
-    if (!current) return fail(PIPELINE_MSG.notFound);
+    const current = demoInScope(applicationId) ? demoRecruiterPipeline(useDemoPipeline.getState(), applicationId) : null;
+    if (!current) return change.kind === "seen" ? { error: PIPELINE_MSG.notFound } : fail(PIPELINE_MSG.notFound);
     const t = transition(current, change);
     if (t.error !== undefined) return fail(t.error);
-    if (t.patch) patchDemo((d) => ({ apps: { ...d.apps, [applicationId]: t.next } }));
+    if (t.patch) patchDemo((d) => ({ apps: { ...d.apps, [applicationId]: tagNewEvents(current, t.next) } }));
     return {};
   }
 
@@ -315,15 +353,24 @@ const tmpId = (p: string) => `${p}-${Date.now().toString(36)}${Math.random().toS
 
 /** Adds a private note (newest first). Resolves the saved note. */
 export async function addNote(applicationId: string, body: string): Promise<WriteResult & { note?: RecruiterNote }> {
+  if (isOwnApplication(applicationId)) return fail(OWN_MSG);
   const invalid = validateNote(body);
   if (invalid) return fail(invalid);
   const text = body.trim();
   if (!isLive()) {
-    const note: RecruiterNote = { id: tmpId("n"), body: text, at: new Date().toISOString(), mine: true };
+    if (!demoInScope(applicationId)) return fail(PIPELINE_MSG.notFound);
+    const note: RecruiterNote = { id: tmpId("n"), body: text, at: new Date().toISOString(), mine: true, authorId: demoMe() };
     patchDemo((d) => ({ notes: { ...d.notes, [applicationId]: [note, ...demoRecruiterNotes(d, applicationId)] } }));
     return { note };
   }
-  const temp: RecruiterNote = { id: tmpId("tmp"), body: text, at: new Date().toISOString(), mine: true, pending: true };
+  const temp: RecruiterNote = {
+    id: tmpId("tmp"),
+    body: text,
+    at: new Date().toISOString(),
+    mine: true,
+    authorId: useApp.getState().userId,
+    pending: true,
+  };
   bump(applicationId);
   setNotesLocal(applicationId, (ns) => [temp, ...ns]);
   const r = await insertNote(applicationId, text);
@@ -339,6 +386,9 @@ export async function addNote(applicationId: string, body: string): Promise<Writ
 /** Deletes one of my notes. */
 export async function deleteNote(applicationId: string, noteId: string): Promise<WriteResult> {
   if (!isLive()) {
+    const note = demoRecruiterNotes(useDemoPipeline.getState(), applicationId).find((n) => n.id === noteId);
+    // Each person deletes only their own notes (as live's RLS).
+    if (note && (note.authorId ?? DEMO_OWNER_ID) !== demoMe()) return fail("Solo puedes borrar tus propias notas.");
     patchDemo((d) => ({ notes: { ...d.notes, [applicationId]: demoRecruiterNotes(d, applicationId).filter((n) => n.id !== noteId) } }));
     return {};
   }
@@ -359,7 +409,7 @@ export async function deleteNote(applicationId: string, noteId: string): Promise
 
 /** Puts back a note deleted a moment ago ("Deshacer"): same id, text and time, so it returns to its place. */
 export async function restoreNote(applicationId: string, note: RecruiterNote): Promise<WriteResult> {
-  const back: RecruiterNote = { id: note.id, body: note.body, at: note.at, mine: note.mine };
+  const back: RecruiterNote = { id: note.id, body: note.body, at: note.at, mine: note.mine, authorId: note.authorId };
   // Newest first, like every notes list.
   const insertSorted = (ns: RecruiterNote[], n: RecruiterNote) =>
     ns.some((x) => x.id === n.id) ? ns : [...ns, n].toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -436,22 +486,51 @@ function useFocusRefresh(enabled: boolean, cb: () => void) {
 }
 
 export type ApplicationPipelineResult = {
+  /**
+   * Company side: each company step's `by` names the team member who made it (null/absent when unknown:
+   * show nothing or "La empresa"). Notes carry `by` too ("Tú" when isMe).
+   */
   data: ApplicationPipeline | null;
   /** The vacancy (any status) from useMyCompany(); null while it loads or if it isn't mine. */
   job: MyJob | null;
-  /** Newest first. */
+  /** Newest first. Always [] on my own application (the team's notes about me aren't mine to read). */
   notes: RecruiterNote[];
   notesError?: string;
   loading: boolean;
   error?: string;
-  /** Loaded, and there's no such application among my vacancies. */
+  /** Loaded, and there's no such application among my vacancies (or my branches). */
   notFound: boolean;
+  /**
+   * I'm this application's candidate (a member who applied to their own company). Show it read-only:
+   * hide the notes panel and the action bar (the actions refuse anyway).
+   */
+  isOwn: boolean;
   refreshing: boolean;
   refresh: () => Promise<void>;
   actions: PipelineActions;
 };
 
-/** One applicant's full pipeline for the company's applicant page (+ its vacancy and my notes). */
+/** Company-side names on the timeline and the notes. */
+function withPeople(
+  data: ApplicationPipeline | null,
+  notes: RecruiterNote[],
+  actors: Record<number, string> | undefined,
+  people: { nameOf: (id: string | null | undefined) => string | null; isMe: (id: string | null | undefined) => boolean },
+): { data: ApplicationPipeline | null; notes: RecruiterNote[] } {
+  const actor = (userId: string | null | undefined): TeamActor | null =>
+    userId ? { userId, name: people.nameOf(userId), isMe: people.isMe(userId) } : null;
+  const events = data?.events.map((e): PipelineEvent => {
+    if (e.actor !== "empresa") return e;
+    const userId = e.actorUserId ?? (e.id !== undefined ? actors?.[e.id] : undefined) ?? null;
+    return userId ? { ...e, actorUserId: userId, by: actor(userId) } : e;
+  });
+  return {
+    data: data && events ? { ...data, events } : data,
+    notes: notes.map((n) => (n.authorId ? { ...n, by: actor(n.authorId) } : n)),
+  };
+}
+
+/** One applicant's full pipeline for the company's applicant page (+ its vacancy and the team's notes). */
 export function useApplicationPipeline(applicationId: string | null | undefined): ApplicationPipelineResult {
   const hydrated = useHydrated();
   const live = useApp((s) => s.mode === "live");
@@ -459,7 +538,11 @@ export function useApplicationPipeline(applicationId: string | null | undefined)
   const entry = useLiveCache((s) => (applicationId ? s.apps[applicationId] : undefined));
   const demoApps = useDemoPipeline((s) => s.apps);
   const demoNotes = useDemoPipeline((s) => s.notes);
+  const people = useTeamPeople();
+  const demoViewer = useDemoTeam((s) => meId(s));
+  const ownIds = useOwnApplicationIds();
   const id = applicationId ?? null;
+  const isOwn = !!id && ownIds.includes(id);
 
   useEffect(() => {
     if (!live || !id) return;
@@ -479,35 +562,44 @@ export function useApplicationPipeline(applicationId: string | null | undefined)
     const refresh = () => (live && id ? loadApp(id, true) : Promise.resolve());
     const jobOf = (p: ApplicationPipeline | null) => (p ? (my.jobs.find((j) => j.id === p.jobId) ?? null) : null);
     if (!hydrated || !id) {
-      return { data: null, job: null, notes: [], loading: !hydrated, notFound: hydrated && !id, refreshing: false, refresh, actions };
+      return { data: null, job: null, notes: [], loading: !hydrated, notFound: hydrated && !id, isOwn: false, refreshing: false, refresh, actions };
     }
     if (!live) {
-      const data = demoRecruiterPipeline({ apps: demoApps }, id);
+      const seeded = demoRecruiterPipeline({ apps: demoApps }, id);
+      // "Ver como" a branch-limited reclutador: another branch's applicant isn't there for them.
+      const data = seeded && my.jobs.some((j) => j.id === seeded.jobId) ? seeded : null;
+      const notes = data
+        ? demoRecruiterNotes({ notes: demoNotes }, id).map((n) => ({ ...n, authorId: n.authorId ?? DEMO_OWNER_ID, mine: (n.authorId ?? DEMO_OWNER_ID) === demoViewer }))
+        : [];
+      const named = withPeople(data, notes, undefined, people);
       return {
-        data,
+        data: named.data,
         job: jobOf(data),
-        notes: data ? demoRecruiterNotes({ notes: demoNotes }, id) : [],
+        notes: named.notes,
         loading: false,
         notFound: !data,
+        isOwn: false,
         refreshing: false,
         refresh,
         actions,
       };
     }
     const status = entry?.status ?? "loading";
+    const named = withPeople(entry?.data ?? null, isOwn ? [] : (entry?.notes ?? []), entry?.actors, people);
     return {
-      data: entry?.data ?? null,
+      data: named.data,
       job: jobOf(entry?.data ?? null),
-      notes: entry?.notes ?? [],
-      notesError: entry?.notesError,
+      notes: named.notes,
+      notesError: isOwn ? undefined : entry?.notesError,
       loading: status === "loading",
       error: entry?.error,
       notFound: status === "ready" && !entry?.data,
+      isOwn,
       refreshing: entry?.refreshing ?? false,
       refresh,
       actions,
     };
-  }, [hydrated, live, id, entry, demoApps, demoNotes, my.jobs]);
+  }, [hydrated, live, id, entry, demoApps, demoNotes, my.jobs, people, demoViewer, isOwn]);
 }
 
 export type PipelineCounts = Record<PipelineStep, number> & { total: number; active: number };
@@ -560,7 +652,13 @@ export function usePipelineSummary(jobId?: string | null): PipelineSummaryResult
   const live = useApp((s) => s.mode === "live");
   const my = useMyCompany();
   const demoApps = useDemoPipeline((s) => s.apps);
-  const jobIds = useMemo(() => (jobId ? [jobId] : my.jobs.map((j) => j.id).toSorted()), [jobId, my.jobs]);
+  const limited = scopeOf(useStoredMembership()) !== null;
+  // A branch-limited member never asks for another branch's vacancy (RLS would just return nothing).
+  const outOfScope = !!jobId && limited && (my.status !== "ready" || !my.jobs.some((j) => j.id === jobId));
+  const jobIds = useMemo(
+    () => (outOfScope ? [] : jobId ? [jobId] : my.jobs.map((j) => j.id).toSorted()),
+    [outOfScope, jobId, my.jobs],
+  );
   const key = jobIds.join(",");
   const ready = live && (jobId ? true : my.status === "ready");
   const entry = useLiveCache((s) => s.lists[key]);
@@ -595,16 +693,17 @@ export function usePipelineSummary(jobId?: string | null): PipelineSummaryResult
     });
     if (!hydrated) return done(EMPTY_LIST, { loading: true });
     if (!live) {
-      const rows = APPLICANTS.filter((a) => !jobId || a.jobId === jobId)
+      const mine = new Set(my.jobs.map((j) => j.id));
+      const rows = APPLICANTS.filter((a) => mine.has(a.jobId) && (!jobId || a.jobId === jobId))
         .map((a) => demoRecruiterPipeline({ apps: demoApps }, a.id))
         .filter((p): p is ApplicationPipeline => !!p)
         .map(toSummary)
         .toSorted((a, b) => Date.parse(b.appliedAt) - Date.parse(a.appliedAt));
       return done(rows);
     }
-    if (!jobId && my.status !== "ready") return done(EMPTY_LIST, { loading: my.status === "loading", error: my.error });
+    if ((!jobId || outOfScope) && my.status !== "ready") return done(EMPTY_LIST, { loading: my.status === "loading", error: my.error });
     if (!key) return done(EMPTY_LIST);
     const status = entry?.status ?? "loading";
     return done(entry?.list ?? EMPTY_LIST, { loading: status === "loading", error: entry?.error, refreshing: entry?.refreshing ?? false });
-  }, [hydrated, live, jobId, my.status, my.error, key, ready, entry, demoApps]);
+  }, [hydrated, live, jobId, outOfScope, my.status, my.error, my.jobs, key, ready, entry, demoApps]);
 }

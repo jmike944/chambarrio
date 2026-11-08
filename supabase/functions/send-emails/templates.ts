@@ -1,5 +1,5 @@
 /**
- * Chambarrio notification emails: new_applicant, application_status and job_digest.
+ * Chambarrio notification emails: new_applicant, application_status, job_digest and team_invite.
  *
  * Pure string functions with no Deno or Node APIs, so the Edge Function imports them and a local
  * script can render samples. Every payload value is HTML-escaped. Styles are inline and the layout is
@@ -7,7 +7,7 @@
  * supabase/templates/code-email.html (lavender page, white card with ink border, violet header).
  */
 
-export type EmailKind = "new_applicant" | "application_status" | "job_digest";
+export type EmailKind = "new_applicant" | "application_status" | "job_digest" | "team_invite";
 export type UnsubscribeKind = "alerts" | "updates";
 
 export interface RenderedEmail {
@@ -31,14 +31,23 @@ export const urls = {
   unsubscribe: (token: string, k: UnsubscribeKind) => `${SITE_URL}/avisos/baja?t=${enc(token)}&k=${k}`,
   oneClickUnsubscribe: (token: string, k: UnsubscribeKind) =>
     `${SITE_URL}/avisos/baja/un-clic?t=${enc(token)}&k=${k}`,
+  /** Team invite link: a contract with the web app's /unirse page (and invite_member's token). */
+  joinTeam: (token: string) => `${SITE_URL}/unirse?t=${enc(token)}`,
 };
 
-/** job_digest is governed by profiles.email_alerts; the other kinds by profiles.email_updates. */
+/**
+ * job_digest is governed by profiles.email_alerts; new_applicant and application_status by
+ * profiles.email_updates. team_invite is a one-off the dueño asked for, sent to someone who may have
+ * no account: no preferences and no unsubscribe link (see isTransactional).
+ */
 export const unsubscribeKindFor = (kind: EmailKind): UnsubscribeKind =>
   kind === "job_digest" ? "alerts" : "updates";
 
+/** Kinds sent regardless of notification preferences, without List-Unsubscribe. */
+export const isTransactional = (kind: EmailKind): boolean => kind === "team_invite";
+
 export function isEmailKind(kind: unknown): kind is EmailKind {
-  return kind === "new_applicant" || kind === "application_status" || kind === "job_digest";
+  return kind === "new_applicant" || kind === "application_status" || kind === "job_digest" || kind === "team_invite";
 }
 
 /** Renders one outbox row. Throws on an unknown kind or application status. */
@@ -51,6 +60,8 @@ export function renderEmail(kind: EmailKind, payload: unknown, unsubscribeToken:
       return renderApplicationStatus(p, unsubscribeToken);
     case "job_digest":
       return renderJobDigest(p, unsubscribeToken);
+    case "team_invite":
+      return renderTeamInvite(p);
     default:
       throw new Error(`unknown kind ${String(kind)}`);
   }
@@ -215,19 +226,19 @@ const link = (href: string, label: string, color = VIOLET) =>
 interface FooterInfo {
   reason: string;
   unsubscribeUrl: string | null;
-  prefsUrl: string;
+  /** null: the recipient has no notification settings to adjust (team_invite). */
+  prefsUrl: string | null;
 }
 
 function footerHtml(f: FooterInfo): string {
   const links = [
     f.unsubscribeUrl ? link(f.unsubscribeUrl, "Dejar de recibir estos correos", MUTED) : "",
-    link(f.prefsUrl, "Ajustar mis avisos", MUTED),
+    f.prefsUrl ? link(f.prefsUrl, "Ajustar mis avisos", MUTED) : "",
   ]
     .filter(Boolean)
     .join(`&nbsp;&nbsp;·&nbsp;&nbsp;`);
   return `<p style="margin:0 0 10px 0;">${esc(f.reason)}</p>
-<p style="margin:0 0 14px 0;">${links}</p>
-<p style="margin:0;"><span style="font-weight:800;color:${INK};">chambarri<span style="color:${VIOLET};">o</span></span> · El trabajo que buscas, cerca de ti · Saltillo, Coahuila</p>`;
+${links ? `<p style="margin:0 0 14px 0;">${links}</p>\n` : ""}<p style="margin:0;"><span style="font-weight:800;color:${INK};">chambarri<span style="color:${VIOLET};">o</span></span> · El trabajo que buscas, cerca de ti · Saltillo, Coahuila</p>`;
 }
 
 function footerText(f: FooterInfo): string {
@@ -235,7 +246,7 @@ function footerText(f: FooterInfo): string {
     "—",
     f.reason,
     f.unsubscribeUrl ? `Dejar de recibir estos correos: ${f.unsubscribeUrl}` : "",
-    `Ajustar mis avisos: ${f.prefsUrl}`,
+    f.prefsUrl ? `Ajustar mis avisos: ${f.prefsUrl}` : "",
     "Chambarrio · El trabajo que buscas, cerca de ti · Saltillo, Coahuila",
   ]
     .filter(Boolean)
@@ -349,8 +360,14 @@ function renderNewApplicant(p: Obj, token: string | null): RenderedEmail {
   const privacy =
     "Por privacidad, su nombre y teléfono aparecen cuando desbloqueas la vacante en Chambarrio.";
 
+  // Team accounts: admins and reclutadores get this too (recipient_role); the dueño keeps the old line.
+  const recipientRole = str(p.recipient_role);
+  const companyName = str(p.company_name);
   const footer: FooterInfo = {
-    reason: "Te llegó este correo porque publicaste vacantes en Chambarrio y tienes activados los avisos de postulaciones.",
+    reason:
+      recipientRole === "admin" || recipientRole === "reclutador"
+        ? `Te llegó este correo porque eres parte del equipo de ${companyName || "este negocio"} en Chambarrio y tienes activados los avisos de postulaciones.`
+        : "Te llegó este correo porque publicaste vacantes en Chambarrio y tienes activados los avisos de postulaciones.",
     unsubscribeUrl: unsubscribeUrlFor(token, "updates"),
     prefsUrl: urls.employerPrefs,
   };
@@ -821,6 +838,84 @@ function renderJobDigest(p: Obj, token: string | null): RenderedEmail {
       ...jobLines,
       more > 0 ? `Y ${moreText} en Chambarrio.` : null,
       `Ver todas: ${urls.home}`,
+      "",
+      footerText(footer),
+    ),
+  };
+}
+
+// -------------------------------------------------------------------------------------- team_invite
+
+/** Mirrors public.team_role and the app's ROLE_META (src/lib/team/types.ts). */
+const TEAM_ROLE: Record<string, { name: string; can: string }> = {
+  dueno: { name: "Dueño", can: "Todo: el plan, el equipo, los datos del negocio, vacantes, sucursales y postulantes." },
+  admin: { name: "Administrador", can: "Datos del negocio, vacantes, sucursales, postulantes, entrevistas y notas." },
+  reclutador: { name: "Reclutador", can: "Postulantes, entrevistas y notas privadas del equipo." },
+};
+
+/**
+ * payload (invite_member): invite_id, company_id, company_name, inviter_name, email, role,
+ * branch_names (null = every branch), expires_at, token. Throws without a token (nothing to link to).
+ */
+function renderTeamInvite(p: Obj): RenderedEmail {
+  const token = str(p.token);
+  if (!token) throw new Error("team_invite without token");
+  const href = urls.joinTeam(token);
+  const company = str(p.company_name) || "un negocio";
+  const inviter = str(p.inviter_name);
+  const email = str(p.email);
+  const role = TEAM_ROLE[str(p.role)] ?? TEAM_ROLE.reclutador;
+  const branches = Array.isArray(p.branch_names) ? p.branch_names.map(str).filter(Boolean) : [];
+  const scoped = str(p.role) === "reclutador" && branches.length > 0;
+  const expires = formatWhen(p.expires_at);
+
+  const who = inviter || "Alguien";
+  const subject = subjectLine(inviter ? `${inviter} te invitó al equipo de ${company}` : `Te invitaron al equipo de ${company}`);
+  const sentenceHtml = `${inviter ? b(inviter) : "Alguien"} te invitó a ayudar con las contrataciones de ${b(company)} en Chambarrio.`;
+  const sentenceText = `${who} te invitó a ayudar con las contrataciones de ${company} en Chambarrio.`;
+
+  const rows: [string, string][] = [];
+  if (scoped) rows.push(["Sucursales", esc(branches.join(", "))]);
+  else if (str(p.role) === "reclutador") rows.push(["Sucursales", "Todas"]);
+  if (email) rows.push(["Entra con", esc(email)]);
+
+  const how = `Toca el botón y entra con ${email ? `este correo (${email})` : "tu correo"}: te mandamos un código para confirmar que eres tú. No tienes que registrar ningún negocio.`;
+  const expiry = expires ? `La invitación vence el ${expires.day}.` : "";
+
+  const footer: FooterInfo = {
+    reason: `Te llegó este correo porque ${inviter ? `${inviter}, de ${company},` : `alguien de ${company}`} te invitó a su equipo en Chambarrio. Si no esperabas esta invitación, ignórala: nadie puede entrar a tu cuenta sin tu código.`,
+    unsubscribeUrl: null,
+    prefsUrl: null,
+  };
+
+  const content = [
+    h1(`Únete al equipo de ${esc(company)}`),
+    para(sentenceHtml),
+    limeBox(eyebrow("Tu rol") + boxTitle(role.name) + boxSub(role.can) + facts(rows)),
+    button(href, "Unirme al equipo"),
+    note(`${esc(how)}${expiry ? ` <strong style="color:${INK};">${esc(expiry)}</strong>` : ""}`),
+    `<p style="margin:0 0 18px 0;font-family:${FONT};font-size:13px;line-height:1.5;color:${MUTED};word-break:break-all;">¿El botón no abre? Copia este enlace en tu navegador:<br>${link(href, href, VIOLET)}</p>`,
+  ].join("");
+
+  const preheader = `${role.name} en ${company}. ${expiry || "Únete con tu correo."}`;
+
+  return {
+    subject,
+    html: layout({ subject, preheader, label: "Invitación", content, footer }),
+    text: lines(
+      `Únete al equipo de ${company}`,
+      "",
+      sentenceText,
+      "",
+      `Tu rol: ${role.name}`,
+      role.can,
+      scoped ? `Sucursales: ${branches.join(", ")}` : str(p.role) === "reclutador" ? "Sucursales: todas" : null,
+      email ? `Entra con: ${email}` : null,
+      "",
+      `Unirme al equipo: ${href}`,
+      "",
+      how,
+      expiry || null,
       "",
       footerText(footer),
     ),

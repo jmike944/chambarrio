@@ -27,6 +27,8 @@ import { stepOf, usePipelineSummary, withPipelineStatus } from "@/lib/pipeline";
 import { isProfileComplete } from "@/lib/profile-strength";
 import type { RadiusKm } from "@/lib/geo";
 import { usePaymentsEnabled } from "@/lib/store";
+import { MyScopeChip } from "@/components/team/team-kit";
+import { useCan } from "@/lib/team";
 import { cn } from "@/lib/utils";
 import { RadiusChips } from "../wait-ring";
 
@@ -55,6 +57,9 @@ type Group = {
 };
 
 function AllApplicants({ jobs }: { jobs: MyJob[] }) {
+  const can = useCan();
+  // No membership yet = an owner registering the business.
+  const publisher = can.createVacancy || !can.role;
   const { status, error, detailError, applicants: rows, reload } = useApplicantProfiles();
   // Same steps as the vacancy pages and the applicant page (demo rows are always "enviada").
   const pipe = usePipelineSummary();
@@ -134,6 +139,7 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
           ) : null}
           Solo ves a quien se postuló a tus vacantes, con su colonia y la distancia a tu sucursal.
         </p>
+        <MyScopeChip className="mt-3" />
         <RadiusChips
           value={radius}
           onChange={setRadius}
@@ -170,16 +176,22 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
         ) : jobs.length === 0 ? (
           <Panel tone="sol" className={cn("flex flex-col items-center text-center", RUG)}>
             <Scene name="negocio" className="w-52" />
-            <h2 className="mt-2 font-display text-[1.4rem] font-extrabold">Publica tu primera vacante</h2>
+            <h2 className="mt-2 font-display text-[1.4rem] font-extrabold">
+              {publisher ? "Publica tu primera vacante" : "Todavía no hay vacantes"}
+            </h2>
             <p className="mt-1 max-w-xs text-muted-foreground">
-              Aquí verás a cada persona que se postule: su experiencia, licencias, disponibilidad y a qué distancia vive.
+              {publisher
+                ? "Aquí verás a cada persona que se postule: su experiencia, licencias, disponibilidad y a qué distancia vive."
+                : `Las publica el dueño o un administrador. En cuanto haya una${can.allBranches ? "" : " en tu sucursal"}, aquí verás a quien se postule.`}
             </p>
-            <Button asChild size="lg" className={cn("mt-4", INK_BUTTON, HARD_SM)}>
-              <Link href="/empresa/vacantes/nueva">
-                <HugeiconsIcon icon={Add01Icon} strokeWidth={2.4} />
-                Publicar gratis
-              </Link>
-            </Button>
+            {publisher ? (
+              <Button asChild size="lg" className={cn("mt-4", INK_BUTTON, HARD_SM)}>
+                <Link href="/empresa/vacantes/nueva">
+                  <HugeiconsIcon icon={Add01Icon} strokeWidth={2.4} />
+                  Publicar gratis
+                </Link>
+              </Button>
+            ) : null}
           </Panel>
         ) : applicants.length === 0 || inRadius.length === 0 ? (
           <Panel tone="lila" className={cn("flex flex-col items-center text-center", RUG)}>
@@ -261,9 +273,11 @@ function VacancyGroup({
   cardProps: ReturnType<typeof usePipelineCardProps>;
 }) {
   const payments = usePaymentsEnabled();
+  const { unlockApplicants } = useCan();
   const unlocked = all.length > 0 && all.every((a) => a.unlocked);
-  // Demo: the fake unlock lives on the vacancy page. Live: payments are "Próximamente" there.
-  const locked = !unlocked && payments;
+  // Demo: the fake unlock lives on the vacancy page. Live: payments are "Próximamente" there. Only the
+  // dueño unlocks: everyone else gets "Ver vacante".
+  const locked = !unlocked && payments && unlockApplicants;
   const complete = completeCount(all);
   const title = job?.title ?? "Otras vacantes";
   const headingId = `vacante-${job?.id ?? "otras"}`;

@@ -34,7 +34,9 @@ import { HARD, HARD_SM, INK_BUTTON, OUTLINE, WHITE_BUTTON, WORK_CONFETTI } from 
 import { EmployerGate } from "@/components/empresa/employer-gate";
 import type { Branch } from "@/lib/data/types";
 import { updateJob } from "@/lib/live/backend";
-import { useApp, useIsLive } from "@/lib/store";
+import { useApp, useEmployerLocations, useIsLive } from "@/lib/store";
+import { useCan } from "@/lib/team";
+import { NotForRole } from "@/components/team/not-for-role";
 import { cn } from "@/lib/utils";
 import { BranchDrawer, type BranchDraft } from "./branch-drawer";
 import { BranchMapArt, CityPins, branchTone, coloniaText, useBranchSummaries } from "./branch-kit";
@@ -44,7 +46,24 @@ type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 type DrawerState = { key: number; branch?: Branch } | null;
 
 export function BranchManager() {
-  return <EmployerGate shape="cards">{() => <BranchManagerBody />}</EmployerGate>;
+  return <EmployerGate shape="cards">{() => <BranchManagerGate />}</EmployerGate>;
+}
+
+/** Adding, editing and removing branches is for the dueño and admins; anyone else gets who does it. */
+function BranchManagerGate() {
+  const can = useCan();
+  const mine = useEmployerLocations();
+  if (can.role && !can.manageBranches) {
+    const where = can.allBranches ? "todas las sucursales" : mine.map((b) => b.name).join(", ") || "tus sucursales";
+    return (
+      <NotForRole
+        title="Las sucursales las maneja el dueño"
+        body={`Tú ves las vacantes y postulantes de ${where}. Para agregar o cambiar una sucursal, pídeselo al dueño o a un administrador.`}
+        back={{ href: "/empresa/vacantes", label: "Ver mis vacantes" }}
+      />
+    );
+  }
+  return <BranchManagerBody />;
 }
 
 function BranchManagerBody() {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "motion/react";
@@ -18,17 +18,30 @@ import {
   UserGroupIcon,
   UserIcon,
   UserCheck01Icon,
+  UserMultiple02Icon,
   Building06Icon,
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { springs } from "./motion";
 import { ThemeToggle } from "@/components/theme";
-import { isLiveAvailable, useApp } from "@/lib/store";
+import { isLiveAvailable, useApp, useEmployerLocations } from "@/lib/store";
 import { useSessionLoaded, useSessionReady } from "@/lib/live/session";
+import { DEMO_RECRUITER_ID, ROLE_META, setDemoViewAs, useMyMembership, useTeam, type TeamPermissions } from "@/lib/team";
+import { INVITE_PATH } from "@/lib/team/types";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export type NavItem = { href: string; label: string; icon: IconSvgElement; badge?: "applications" | number; exact?: boolean };
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: IconSvgElement;
+  badge?: "applications" | number;
+  exact?: boolean;
+  /** Employer nav: shown only to members whose role allows it (team accounts). */
+  need?: keyof TeamPermissions;
+  /** Left out of the phone's bottom bar when it would hold more than 5 (still on the desktop rail). */
+  mobileOptional?: boolean;
+};
 
 export const CANDIDATE_NAV: NavItem[] = [
   { href: "/inicio", label: "Cerca", icon: Location06Icon, exact: true },
@@ -38,13 +51,43 @@ export const CANDIDATE_NAV: NavItem[] = [
   { href: "/perfil", label: "Perfil", icon: UserIcon },
 ];
 
+/**
+ * Every employer destination; AppShell keeps the ones the member's role allows (useEmployerNav):
+ * dueño: all · admin: no Plan · reclutador: no Sucursales, no Plan. On a phone the dueño's six don't
+ * fit the bottom bar: Sucursales stays on the desktop rail (the Panel and the vacancy pages link it).
+ */
 export const EMPLOYER_NAV: NavItem[] = [
   { href: "/empresa", label: "Panel", icon: DashboardSquare01Icon, exact: true },
   { href: "/empresa/vacantes", label: "Vacantes", icon: Briefcase01Icon },
-  { href: "/empresa/sucursales", label: "Sucursales", icon: Store01Icon },
+  { href: "/empresa/sucursales", label: "Sucursales", icon: Store01Icon, need: "manageBranches", mobileOptional: true },
   { href: "/empresa/candidatos", label: "Candidatos", icon: UserGroupIcon, badge: 7 },
-  { href: "/empresa/plan", label: "Plan", icon: Invoice01Icon },
+  { href: "/empresa/equipo", label: "Equipo", icon: UserMultiple02Icon, need: "viewTeam" },
+  { href: "/empresa/plan", label: "Plan", icon: Invoice01Icon, need: "managePlan" },
 ];
+
+/** /unirse (accepting a team invite) is public: signed out, mid-onboarding or onboarded, no redirects. */
+export const isPublicAppRoute = (pathname: string) => pathname === INVITE_PATH || pathname.startsWith(`${INVITE_PATH}/`);
+
+/**
+ * The employer nav for my role. Until the membership is known (server render, first load on a device)
+ * the dueño's, the usual case, so the bar doesn't change under them; a returning member's role is
+ * saved on the device and applies right after hydration. No team yet (registering a business): as
+ * before, minus Equipo.
+ */
+function useEmployerNav(nav: NavItem[], employer: boolean): { rail: NavItem[]; bottom: NavItem[] } {
+  const my = useMyMembership();
+  return useMemo(() => {
+    const allowed = !employer
+      ? nav
+      : my.status !== "ready"
+        ? nav
+        : !my.membership
+          ? nav.filter((i) => i.need !== "viewTeam")
+          : nav.filter((i) => !i.need || my.can[i.need]);
+    const bottom = allowed.length > 5 ? allowed.filter((i) => !i.mobileOptional).slice(0, 5) : allowed;
+    return { rail: allowed, bottom };
+  }, [nav, employer, my.status, my.membership, my.can]);
+}
 
 const MotionLink = motion.create(Link);
 
@@ -222,6 +265,50 @@ function leaveDemoTo(href: string) {
   window.location.href = href;
 }
 
+/**
+ * Dev builds: /empresa/…?ver=reclutador shows the demo company as its branch-limited reclutador
+ * (?ver=dueno goes back), so role-aware screens can be checked by URL. The choice lives in memory
+ * (client navigation keeps it; a reload without the parameter is the dueño again).
+ */
+function useDevDemoViewAs(enabled: boolean) {
+  const pathname = usePathname();
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" || !enabled) return;
+    const ver = new URLSearchParams(window.location.search).get("ver");
+    if (ver === "reclutador") setDemoViewAs(DEMO_RECRUITER_ID);
+    else if (ver === "dueno") setDemoViewAs(null);
+  }, [enabled, pathname]);
+}
+
+/** Demo "Ver como": whose view this is, and the way back. */
+function DemoViewAsBand() {
+  const my = useMyMembership();
+  const { me } = useTeam();
+  const branches = useEmployerLocations();
+  if (!my.viewingAs || !my.role) return null;
+  const scope = my.branchIds === null ? "Todas las sucursales" : `Solo ${branches.map((b) => b.name).join(", ") || "ninguna sucursal"}`;
+  return (
+    <div role="status" className="relative z-40 border-b-[3px] border-ink bg-ink text-white">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-1.5 sm:px-6">
+        <span className="min-w-0 truncate text-[0.82rem] leading-tight font-semibold sm:text-[0.9rem]">
+          Viendo como <span className="font-extrabold text-limon">{me?.name || ROLE_META[my.role].long}</span>
+          <span className="hidden sm:inline">
+            {" "}
+            · {ROLE_META[my.role].long} · {scope}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={() => setDemoViewAs(null)}
+          className="press ml-auto inline-flex h-9 shrink-0 items-center rounded-full bg-limon px-3.5 font-display text-[0.85rem] font-extrabold text-ink outline-none focus-visible:ring-3 focus-visible:ring-white/60"
+        >
+          Volver a mi vista
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Slim caution-tape band: you're looking at example data. */
 function DemoRibbon() {
   const role = useApp((s) => s.role);
@@ -294,10 +381,15 @@ export function AppShell({
   const onboarded = useApp((s) => s.onboarded);
   const role = useApp((s) => s.role);
   const setRole = useApp((s) => s.setRole);
-  const signedOut = ready && !signedIn;
+  // /unirse is public: never bounced to /entrar or to onboarding (an invitee signs in and joins there).
+  const open = isPublicAppRoute(pathname);
+  const signedOut = ready && !signedIn && !open;
   // A real account that never finished onboarding (signed up from /entrar or the email link).
-  const unfinished = ready && signedIn && appMode === "live" && sessionLoaded && !onboarded;
+  const unfinished = ready && signedIn && appMode === "live" && sessionLoaded && !onboarded && !open;
   const kit = useDevKit();
+  const employer = mode === "empresa";
+  const items = useEmployerNav(nav, employer);
+  useDevDemoViewAs(employer && ready && appMode === "demo");
 
   useEffect(() => {
     if (signedOut) router.replace("/entrar");
@@ -306,6 +398,8 @@ export function AppShell({
 
   // Signed out: render nothing while redirecting so account data never flashes.
   if (signedOut || unfinished) return <div className="min-h-dvh" aria-busy="true" />;
+  // A focused, public flow: no app chrome (and no account data) around it.
+  if (open) return <>{children}</>;
 
   const candidate = mode === "candidato";
   const demo = ready && appMode === "demo";
@@ -313,6 +407,7 @@ export function AppShell({
   return (
     <>
       {demo ? <DemoRibbon /> : null}
+      {demo && employer ? <DemoViewAsBand /> : null}
       <div className="min-h-dvh lg:grid lg:grid-cols-[17rem_1fr]">
         {/* Desktop rail */}
         <aside className="sticky top-0 hidden h-dvh flex-col gap-8 px-5 py-7 lg:flex">
@@ -324,7 +419,7 @@ export function AppShell({
             <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
           </Link>
           <nav aria-label="Principal" className="flex flex-col gap-1">
-            {nav.map((item) => (
+            {items.rail.map((item) => (
               <SideItem key={item.href} item={item} active={isActive(pathname, item)} />
             ))}
           </nav>
@@ -392,7 +487,7 @@ export function AppShell({
           className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
         >
           <ul className="mx-auto flex max-w-md items-center gap-0.5 rounded-full border border-border bg-card p-1.5 shadow-nav">
-            {nav.map((item) => (
+            {items.bottom.map((item) => (
               <BottomItem key={item.href} item={item} active={isActive(pathname, item)} />
             ))}
           </ul>

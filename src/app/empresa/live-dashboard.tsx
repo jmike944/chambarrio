@@ -10,7 +10,6 @@ import {
   Invoice01Icon,
   Location01Icon,
   Mail01Icon,
-  Store01Icon,
   Tick02Icon,
   UserMultipleIcon,
 } from "@hugeicons/core-free-icons";
@@ -28,7 +27,10 @@ import { useLiveUser } from "@/lib/live/session";
 import { formatPay } from "@/lib/format";
 import { useApp, useEmployerPlan, type PlanId } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { BranchMapArt, coloniaText, placeText, useBranchSummaries } from "./sucursales/branch-kit";
+import { useBranchSummaries } from "./sucursales/branch-kit";
+import { BranchesPanel, HeroPlaceChip, PublishButton, RUG } from "./dashboard-kit";
+import { TeamSummaryCard } from "@/components/team/team-summary-card";
+import { useCan } from "@/lib/team";
 import { ReviewChip, TodayPanel, useDashboardPipeline } from "@/components/empresa/pipeline/today-panel";
 
 /*
@@ -40,13 +42,11 @@ type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
 const PLAN_LABEL: Record<PlanId, string> = { "por-vacante": "Por vacante", pyme: "Pyme", industrial: "Industrial" };
 
-/** Rugged workwear edge: ink outline + hard offset shadow (no blur). */
-const RUG = "border-2 border-ink shadow-[4px_5px_0_0_var(--ink)] dark:border-black/70 dark:shadow-[4px_5px_0_0_rgb(0_0_0/0.55)]";
-
 const inkCta =
   "press lift inline-flex h-14 items-center justify-center gap-2.5 rounded-full bg-ink px-7 text-[1.05rem] font-semibold text-white shadow-[0_10px_22px_-12px_var(--ink)] outline-none focus-visible:ring-4 focus-visible:ring-white/70";
 
 export function LiveDashboard() {
+  const can = useCan();
   const my = useMyCompany();
   const planId = useEmployerPlan();
   // Applicant numbers come from the hiring pipeline (same as the lists and the applicant page).
@@ -72,7 +72,7 @@ export function LiveDashboard() {
         className={cn("flex animate-rise flex-col overflow-visible pb-0 sm:pb-0 lg:col-span-7", RUG)}
         title={
           noJobs ? (
-            "Publica tu primera vacante"
+            can.createVacancy ? "Publica tu primera vacante" : "Todavía no hay vacantes"
           ) : appsReady && toReview > 0 ? (
             <>
               Tienes <CountUp value={toReview} from={0} className="inline-block" /> postulante{toReview === 1 ? "" : "s"} por revisar
@@ -97,26 +97,24 @@ export function LiveDashboard() {
         </span>
         <p className="mt-3 max-w-md text-[1.05rem] leading-snug font-medium text-muted-foreground">
           {noJobs
-            ? "Es gratis. Le aparece a la gente que vive cerca de tu sucursal y te llegan sus postulaciones."
+            ? can.createVacancy
+              ? "Es gratis. Le aparece a la gente que vive cerca de tu sucursal y te llegan sus postulaciones."
+              : `Cuando el dueño o un administrador publique una vacante${can.allBranches ? "" : " en tu sucursal"}, aquí verás a quien se postule.`
             : appsReady && toReview > 0
               ? "Revísalos hoy y agenda entrevistas: gánale a la competencia."
               : appsReady && dash.counts.total > 0
                 ? "Ya revisaste a todos. Te avisamos en cuanto alguien más se postule."
                 : "Le aparecen a la gente que vive cerca. Te avisamos aquí en cuanto alguien se postule."}
         </p>
-        <Link
-          href="/empresa/sucursales"
-          className="press mt-3 inline-flex min-h-11 items-center gap-2 self-start rounded-full border-2 border-ink bg-white/85 py-1 pr-3 pl-1.5 text-[0.92rem] font-bold text-ink outline-none hover:bg-white focus-visible:ring-4 focus-visible:ring-white/70"
-        >
-          <span className="grid size-8 place-items-center rounded-full bg-ink text-limon">
-            <HugeiconsIcon icon={Store01Icon} className="size-4.5" strokeWidth={2} />
-          </span>
-          {placeText(locations)}
-          <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" strokeWidth={2.4} />
-        </Link>
+        <HeroPlaceChip locations={locations} />
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Link href={noJobs ? "/empresa/vacantes/nueva" : "/empresa/candidatos"} className={inkCta}>
-            {noJobs ? (
+          <Link href={noJobs ? (can.createVacancy ? "/empresa/vacantes/nueva" : "/empresa/equipo") : "/empresa/candidatos"} className={inkCta}>
+            {noJobs && !can.createVacancy ? (
+              <>
+                Ver mi equipo
+                <HugeiconsIcon icon={ArrowRight01Icon} className="size-5" strokeWidth={2.2} />
+              </>
+            ) : noJobs ? (
               <>
                 <HugeiconsIcon icon={Add01Icon} className="size-5" strokeWidth={2.4} />
                 Publicar vacante
@@ -191,16 +189,19 @@ export function LiveDashboard() {
           className="mb-3"
           title={<span id="tus-vacantes">Tus vacantes</span>}
           count={active.length}
-          action={
-            <Button asChild size="lg" className="h-11">
-              <Link href="/empresa/vacantes/nueva">
-                <HugeiconsIcon icon={Add01Icon} strokeWidth={2.2} />
-                Publicar
-              </Link>
-            </Button>
-          }
+          action={<PublishButton />}
         />
-        {active.length === 0 ? (
+        {active.length === 0 && !can.createVacancy ? (
+          <div className={cn("flex flex-1 items-center gap-4 rounded-panel bg-card p-5", RUG)}>
+            <Scene name="negocio" className="w-28 shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-display text-[1.35rem] leading-tight font-extrabold">Sin vacantes activas</span>
+              <span className="mt-1 block text-[0.95rem] text-muted-foreground">
+                Las publica el dueño o un administrador. En cuanto haya una{can.allBranches ? "" : " en tu sucursal"}, la ves aquí.
+              </span>
+            </span>
+          </div>
+        ) : active.length === 0 ? (
           <Link
             href="/empresa/vacantes/nueva"
             className={cn(
@@ -265,101 +266,38 @@ export function LiveDashboard() {
         )}
       </section>
 
-      {/* ------------------------------------------------ Plan (durazno): payments coming */}
-      <Panel tone="durazno" className={cn("flex min-w-0 flex-col overflow-hidden lg:col-span-5", RUG)}>
-        <PanelHeader icon={Invoice01Icon} title="Plan y uso" />
-        <p className="font-display text-[1.7rem] leading-tight font-extrabold tracking-[-0.03em]">
-          {PLAN_LABEL[planId]} <span className="text-[1.1rem] font-semibold text-muted-foreground">· publicar es gratis</span>
-        </p>
-        <div className="mt-5 flex items-start gap-3 rounded-tile border-2 border-ink bg-white/55 p-4 dark:bg-white/35">
-          <HugeiconsIcon icon={ComingSoon01Icon} className="mt-0.5 size-5 shrink-0" strokeWidth={2} />
-          <p className="text-[0.95rem] leading-snug">
-            <strong className="font-bold">Pagos: próximamente.</strong> Ya puedes publicar y recibir postulaciones. Muy pronto
-            podrás desbloquear nombres y teléfonos, o elegir un plan.
+      {/* ------------------------------------------------ Plan (durazno): payments coming; members who don't manage the plan: their team */}
+      {can.managePlan ? (
+        <Panel tone="durazno" className={cn("flex min-w-0 flex-col overflow-hidden lg:col-span-5", RUG)}>
+          <PanelHeader icon={Invoice01Icon} title="Plan y uso" />
+          <p className="font-display text-[1.7rem] leading-tight font-extrabold tracking-[-0.03em]">
+            {PLAN_LABEL[planId]} <span className="text-[1.1rem] font-semibold text-muted-foreground">· publicar es gratis</span>
           </p>
-        </div>
-        <div className="mt-5 flex items-end gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="lg">
-                <Link href="/empresa/plan">Ver planes</Link>
-              </Button>
-            </div>
+          <div className="mt-5 flex items-start gap-3 rounded-tile border-2 border-ink bg-white/55 p-4 dark:bg-white/35">
+            <HugeiconsIcon icon={ComingSoon01Icon} className="mt-0.5 size-5 shrink-0" strokeWidth={2} />
+            <p className="text-[0.95rem] leading-snug">
+              <strong className="font-bold">Pagos: próximamente.</strong> Ya puedes publicar y recibir postulaciones. Muy pronto
+              podrás desbloquear nombres y teléfonos, o elegir un plan.
+            </p>
           </div>
-          {/* Chambarrio's own support / plans: the brand mascot, not the user. */}
-          <Mascot mood="saluda" prop="telefono" size={78} className="-mr-2 -mb-6 shrink-0" />
-        </div>
-      </Panel>
+          <div className="mt-5 flex items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="lg">
+                  <Link href="/empresa/plan">Ver planes</Link>
+                </Button>
+              </div>
+            </div>
+            {/* Chambarrio's own support / plans: the brand mascot, not the user. */}
+            <Mascot mood="saluda" prop="telefono" size={78} className="-mr-2 -mb-6 shrink-0" />
+          </div>
+        </Panel>
+      ) : (
+        <TeamSummaryCard className={cn("lg:col-span-5", RUG)} />
+      )}
 
       {/* ------------------------------------------------ Sucursales (lila) */}
-      <Panel tone="lila" className={cn("min-w-0 overflow-hidden lg:col-span-12", RUG)}>
-        <PanelHeader
-          icon={Store01Icon}
-          title={multi ? "Tus sucursales" : "Tu sucursal"}
-          count={locations.length}
-          action={
-            <Button
-              asChild
-              variant="white"
-              size="lg"
-              className="h-11 border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink"
-            >
-              <Link href="/empresa/sucursales" aria-label="Administrar sucursales">
-                <span className="hidden sm:inline">Administrar</span>
-                <span className="sm:hidden">Ver</span>
-                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2.2} />
-              </Link>
-            </Button>
-          }
-        />
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {branches.map(({ branch, index, jobs: bj, applicants: n }) => (
-            <li key={branch.id} className="min-w-0 animate-rise" style={{ "--i": Math.min(index + 2, 8) } as CSSVars}>
-              <Link
-                href="/empresa/sucursales"
-                className="group press lift flex items-center gap-3 rounded-tile border-2 border-ink bg-white/75 p-2.5 pr-3.5 text-ink outline-none hover:bg-white focus-visible:ring-4 focus-visible:ring-ring/60 dark:bg-white/85"
-              >
-                <BranchMapArt seed={branch.id} principal={index === 0} className="w-16 shrink-0" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-[1.1rem] leading-tight font-extrabold tracking-[-0.02em]">
-                    {branch.name}
-                  </span>
-                  <span className="block truncate text-[0.85rem] text-ink/65">
-                    {index === 0 ? "Principal · " : ""}
-                    {coloniaText(branch, false)}
-                  </span>
-                  <span className="mt-1.5 flex flex-wrap gap-1.5 text-[0.8rem] font-bold">
-                    <span className="rounded-full bg-ink px-2 py-0.5 text-white tabular-nums">
-                      {bj.length} vacante{bj.length === 1 ? "" : "s"}
-                    </span>
-                    <span className="rounded-full border-2 border-ink px-2 py-px tabular-nums">
-                      {n} postulante{n === 1 ? "" : "s"}
-                    </span>
-                  </span>
-                </span>
-              </Link>
-            </li>
-          ))}
-          {multi ? null : (
-            <li className="min-w-0">
-              <Link
-                href="/empresa/sucursales"
-                className="group press flex min-h-[5.25rem] items-center gap-3 rounded-tile border-2 border-dashed border-ink/60 px-3.5 py-2.5 outline-none hover:bg-white/40 focus-visible:ring-4 focus-visible:ring-ring/60"
-              >
-                <span className="grid size-11 shrink-0 place-items-center rounded-full border-2 border-ink bg-limon text-ink transition-transform duration-300 group-hover:rotate-90">
-                  <HugeiconsIcon icon={Add01Icon} className="size-5" strokeWidth={2.4} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-display text-[1.05rem] leading-tight font-extrabold">
-                    ¿Tienes otra planta o bodega?
-                  </span>
-                  <span className="block text-[0.85rem] text-muted-foreground">Agrégala y contrata cerca de cada una.</span>
-                </span>
-              </Link>
-            </li>
-          )}
-        </ul>
-      </Panel>
+      <BranchesPanel className="lg:col-span-12" />
 
       <EmailAlertsCard />
     </div>
@@ -367,10 +305,14 @@ export function LiveDashboard() {
 }
 
 /**
- * "Avisos por correo" for the business owner: one switch for "someone applied" emails. It's the
- * owner's profile flag (email_updates), the same one that sends candidate updates. Live and demo.
+ * "Avisos por correo": one switch for "someone applied" emails. It's the person's own profile flag
+ * (email_updates), the same one that sends candidate updates; every dueño and admin gets them, and each
+ * reclutador for their branches. Live and demo.
  */
 export function EmailAlertsCard({ className }: { className?: string }) {
+  const can = useCan();
+  // Members get the emails of the vacancies they work (dueños and admins: all; a reclutador: theirs).
+  const member = !!can.role && can.role !== "dueno";
   const live = useApp((s) => s.mode === "live");
   const storeEmail = useApp((s) => s.email);
   const on = useApp((s) => s.emailUpdates);
@@ -380,7 +322,7 @@ export function EmailAlertsCard({ className }: { className?: string }) {
   const hint = !live
     ? "En la demo no se mandan correos."
     : email
-      ? `Te escribimos a ${email} con la colonia y la distancia de cada postulante.`
+      ? `Te escribimos a ${email} con la colonia y la distancia de cada postulante${can.allBranches ? "" : " de tus sucursales"}.`
       : "Tu cuenta entró con celular y no tiene correo, así que por ahora no te llegan.";
 
   return (
@@ -406,7 +348,7 @@ export function EmailAlertsCard({ className }: { className?: string }) {
         htmlFor="avisos-correo-postulantes"
         className="flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-tile border-2 border-ink bg-white/75 px-4 text-[0.95rem] font-semibold text-ink sm:shrink-0 dark:bg-white/85"
       >
-        Avisarme cuando alguien se postule
+        {member ? "Avisos de postulaciones de tu equipo" : "Avisarme cuando alguien se postule"}
         <Switch
           id="avisos-correo-postulantes"
           checked={on}

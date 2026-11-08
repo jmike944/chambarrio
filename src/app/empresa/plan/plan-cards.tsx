@@ -2,7 +2,7 @@
 
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { CheckmarkBadge01Icon, ComingSoon01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { CheckmarkBadge01Icon, ComingSoon01Icon, LockIcon, Tick02Icon, UserMultiple02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { BLOCK_CLASS, Eyebrow, type BlockTone } from "@/components/chamba/primitives";
 import { Sticker, useConfetti } from "@/components/chamba/motion";
@@ -12,6 +12,7 @@ import { Doodle, HazardTape, Marquee } from "@/components/chamba/art/doodles";
 import type { CategoryId } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
 import { useEmployerPlan, usePaymentsEnabled } from "@/lib/store";
+import { ROLE_META, teamLimit, useCan } from "@/lib/team";
 
 /** Rugged workwear edge: ink outline + hard offset shadow (no blur). */
 const RUG =
@@ -39,6 +40,7 @@ const PLANS: {
       "Publica vacantes sin costo",
       "Ve cuántos se postulan y a qué distancia viven",
       "Desbloquea nombres y teléfonos por $500 al mes por vacante",
+      `Equipo de hasta ${teamLimit("por-vacante")} personas`,
     ],
     tone: "sol",
     scene: "negocio",
@@ -50,7 +52,12 @@ const PLANS: {
     price: "$1,500",
     unit: "MXN al mes",
     who: "Para negocios que contratan seguido.",
-    features: ["Hasta 5 vacantes con postulaciones desbloqueadas", "Contacto directo por llamada o SMS", "Factura CFDI"],
+    features: [
+      "Hasta 5 vacantes con postulaciones desbloqueadas",
+      "Contacto directo por llamada o SMS",
+      `Equipo de hasta ${teamLimit("pyme")} personas`,
+      "Factura CFDI",
+    ],
     tone: "mandarina",
     scene: "reparto",
     icons: ["chofer", "almacen"],
@@ -65,6 +72,7 @@ const PLANS: {
     features: [
       "Postulaciones desbloqueadas en todas tus vacantes",
       "Varias plantas o sucursales",
+      "Equipo sin límite de personas",
       "Reportes de distancia y permanencia",
       "Asesor dedicado",
     ],
@@ -77,11 +85,32 @@ const PLANS: {
 export function PlanCards() {
   const currentPlan = useEmployerPlan();
   const payments = usePaymentsEnabled();
+  const can = useCan();
+  // Admins and reclutadores see the plan read-only: choosing it is the dueño's (no membership yet =
+  // an owner registering the business).
+  const chooses = can.managePlan || !can.role;
   const fire = useConfetti();
   const plans = PLANS.map((p) => ({ ...p, current: p.id === currentPlan }));
   return (
     <div className="space-y-6">
-      {payments ? null : (
+      {chooses ? null : (
+        <section
+          aria-label="Quién elige el plan"
+          className={cn("relative flex items-start gap-3.5 overflow-hidden rounded-panel p-5 sm:items-center sm:p-6", BLOCK_CLASS.cielo, RUG)}
+        >
+          <span className="grid size-12 shrink-0 -rotate-6 place-items-center rounded-[0.9rem] border-2 border-ink bg-white text-ink">
+            <HugeiconsIcon icon={UserMultiple02Icon} className="size-6" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <Eyebrow>{can.role ? `Tu rol: ${ROLE_META[can.role].long}` : "Tu equipo"}</Eyebrow>
+            <p className="mt-1 font-display text-[1.25rem] leading-tight font-extrabold tracking-[-0.02em]">El plan lo elige el dueño</p>
+            <p className="mt-1 text-[0.95rem] leading-snug text-muted-foreground">
+              Aquí ves qué incluye el de tu negocio. Si necesitas algo de otro plan, coméntalo con el dueño.
+            </p>
+          </div>
+        </section>
+      )}
+      {payments || !chooses ? null : (
         <section
           id="planes-pronto"
           aria-label="Pagos próximamente"
@@ -166,25 +195,36 @@ export function PlanCards() {
                   </li>
                 ))}
               </ul>
-              <Button
-                disabled={p.current || !payments}
-                aria-describedby={!payments && !p.current ? "planes-pronto" : undefined}
-                className={cn(
-                  "mt-auto h-14 w-full border-2 border-ink text-[1.05rem] font-bold",
-                  p.current
-                    ? "bg-white/50 text-ink disabled:opacity-100"
-                    : !payments
-                      ? "bg-white/60 text-ink disabled:opacity-100"
-                    : "bg-ink text-white shadow-[3px_4px_0_0_rgb(255_255_255/0.6)] hover:bg-ink/90 dark:border-black/70",
-                )}
-                style={{ marginTop: "1.75rem" }}
-                onClick={(e) => {
-                  fire({ origin: e.currentTarget });
-                  toast.success("¡Ándale! Te contactaremos para activar tu plan");
-                }}
-              >
-                {p.current ? "Plan actual" : payments ? `Elegir ${p.name}` : "Próximamente"}
-              </Button>
+              {chooses ? (
+                <Button
+                  disabled={p.current || !payments}
+                  aria-describedby={!payments && !p.current ? "planes-pronto" : undefined}
+                  className={cn(
+                    "mt-auto h-14 w-full border-2 border-ink text-[1.05rem] font-bold",
+                    p.current
+                      ? "bg-white/50 text-ink disabled:opacity-100"
+                      : !payments
+                        ? "bg-white/60 text-ink disabled:opacity-100"
+                      : "bg-ink text-white shadow-[3px_4px_0_0_rgb(255_255_255/0.6)] hover:bg-ink/90 dark:border-black/70",
+                  )}
+                  style={{ marginTop: "1.75rem" }}
+                  onClick={(e) => {
+                    fire({ origin: e.currentTarget });
+                    toast.success("¡Ándale! Te contactaremos para activar tu plan");
+                  }}
+                >
+                  {p.current ? "Plan actual" : payments ? `Elegir ${p.name}` : "Próximamente"}
+                </Button>
+              ) : (
+                // Read-only: a plain line, not something that looks tappable.
+                <p
+                  className="mt-auto flex min-h-14 items-center justify-center gap-2 rounded-full bg-ink/[0.07] px-4 text-center text-[0.98rem] leading-tight font-semibold"
+                  style={{ marginTop: "1.75rem" }}
+                >
+                  <HugeiconsIcon icon={p.current ? CheckmarkBadge01Icon : LockIcon} className="size-5 shrink-0" strokeWidth={2} />
+                  {p.current ? "Es el plan de tu negocio" : "Lo elige el dueño"}
+                </p>
+              )}
             </section>
           );
         })}

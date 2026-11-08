@@ -8,10 +8,19 @@
  * claim (FOR UPDATE SKIP LOCKED) plus Resend's Idempotency-Key make extra or concurrent calls safe.
  *
  * Privacy: logs carry outbox ids, kinds, HTTP statuses and error codes only — never addresses,
- * names or payloads.
+ * names or payloads (a team_invite payload carries the invite link's token until the row settles;
+ * the email_outbox_scrub_invite trigger then drops it).
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { isEmailKind, renderEmail, unsubscribeKindFor, urls, type EmailKind, type RenderedEmail } from "./templates.ts";
+import {
+  isEmailKind,
+  isTransactional,
+  renderEmail,
+  unsubscribeKindFor,
+  urls,
+  type EmailKind,
+  type RenderedEmail,
+} from "./templates.ts";
 
 // Minimal ambient types (the web app's tsconfig excludes supabase/functions; this keeps editors quiet).
 declare const Deno: {
@@ -41,7 +50,8 @@ const ACTIVE_SENDER_WINDOW_MS = 90_000;
 interface OutboxRow {
   id: string;
   kind: string;
-  user_id: string;
+  /** null only for team_invite (the invitee may not have an account yet). */
+  user_id: string | null;
   to_email: string;
   payload: unknown;
   attempts: number;
@@ -126,11 +136,13 @@ async function anotherSenderActive(db: SupabaseClient): Promise<boolean> {
   return !error && (count ?? 0) > 0;
 }
 
-async function loadPrefs(db: SupabaseClient, userIds: string[]): Promise<Map<string, ProfilePrefs> | null> {
+async function loadPrefs(db: SupabaseClient, userIds: (string | null)[]): Promise<Map<string, ProfilePrefs> | null> {
+  const ids = [...new Set(userIds.filter((id): id is string => !!id))];
+  if (ids.length === 0) return new Map();
   const { data, error } = await db
     .from("profiles")
     .select("id, unsubscribe_token, email_alerts, email_updates")
-    .in("id", [...new Set(userIds)]);
+    .in("id", ids);
   if (error) {
     log("prefs_failed", { code: error.code });
     return null;
@@ -244,7 +256,9 @@ async function drain(db: SupabaseClient, apiKey: string, stats: Stats, startedAt
         continue;
       }
       const kind = row.kind;
-      const profile = prefs.get(row.user_id);
+      // team_invite: no recipient account / preferences, and no unsubscribe link (a one-off the dueño asked for).
+      const transactional = isTransactional(kind);
+      const profile = !transactional && row.user_id ? prefs.get(row.user_id) : undefined;
 
       // Preferences can change between enqueue and send (and retries can lag): re-check them.
       if (profile && !(kind === "job_digest" ? profile.email_alerts : profile.email_updates)) {
@@ -254,7 +268,7 @@ async function drain(db: SupabaseClient, apiKey: string, stats: Stats, startedAt
         continue;
       }
 
-      const token = profile?.unsubscribe_token ?? null;
+      const token = transactional ? null : (profile?.unsubscribe_token ?? null);
       let email: RenderedEmail;
       try {
         email = renderEmail(kind, row.payload, token);

@@ -104,10 +104,20 @@ export function BranchDrawer({
               size="xl"
               disabled={!place}
               aria-disabled={saving || undefined}
-              className={cn("w-full text-[1.05rem] font-bold", INK_BUTTON, HARD_SM, saving && "opacity-80")}
+              className={cn(
+                "w-full min-w-0 text-[1.05rem] font-bold",
+                INK_BUTTON,
+                HARD_SM,
+                // Lime on the dark sheet (ink would vanish into it), like the other workwear sheets.
+                "dark:border-ink dark:bg-limon dark:text-ink dark:hover:bg-limon/90 dark:[&_svg]:text-ink",
+                saving && "opacity-80",
+              )}
             >
               <HugeiconsIcon icon={Tick02Icon} className="size-5" strokeWidth={2.6} />
-              {saving ? "Guardando…" : editing ? "Guardar cambios" : place ? `Agregar ${name.trim() || suggested}` : "Elige dónde está"}
+              {/* A long name ends in "…" instead of running off both sides of the button. */}
+              <span className="min-w-0 truncate">
+                {saving ? "Guardando…" : editing ? "Guardar cambios" : place ? `Agregar ${name.trim() || suggested}` : "Elige dónde está"}
+              </span>
             </Button>
           </div>
         </form>

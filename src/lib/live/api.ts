@@ -16,6 +16,7 @@ import type {
   Shift,
 } from "@/lib/data/types";
 import { RADIUS_STOPS, type LatLng, type RadiusKm } from "@/lib/geo";
+import type { Membership, TeamRole } from "@/lib/team/types";
 import { sanitizeAvatar, type AvatarConfig } from "@/components/avatar/config";
 import {
   EDUCATION_LEVELS,
@@ -98,10 +99,19 @@ export type LiveSessionData = {
   profile: LiveProfile;
   /** The candidate's work history (ordered by `sort`); null when it couldn't be loaded. */
   experiences: LiveExperience[] | null;
+  /** My own applications (as a candidate), with their ids. */
   applications: Application[];
   saved: string[];
+  /** The company I'm a member of (any role), with every branch. */
   company: LiveCompany | null;
-  /** Vacancies of my company whose applicants are unlocked right now. */
+  /** My place in that company (role, branch scope); null = not in any team. */
+  membership: Membership | null;
+  /**
+   * false: the database doesn't have team accounts yet (migration 20261108172838 not applied): the
+   * company is the one I own and `membership` is that owner as its dueño.
+   */
+  teamsEnabled: boolean;
+  /** Vacancies of my company whose applicants are unlocked right now (RLS: only in my branch scope). */
   unlockedJobIds: string[];
 };
 
@@ -201,11 +211,14 @@ export const MSG = {
   experienceLimit: `Puedes guardar hasta ${PROFILE_LIMITS.experiencesMax} experiencias. Borra una para agregar otra.`,
 } as const;
 
-type DbError = { message?: string; code?: string; details?: string | null } | null | undefined;
+type DbError = { message?: string; code?: string; details?: string | null; hint?: string | null } | null | undefined;
 
 /** Maps a Postgrest/Postgres/network error to friendly Spanish. `fallback` covers the unknown. */
 export function friendlyError(e: DbError, fallback: string = MSG.save): string {
   if (!e) return fallback;
+  // Team rules (hint "team:<code>") already speak Spanish to the user, e.g. creating a business while
+  // in another team: "Ya perteneces al equipo de otro negocio…". Show them as they are.
+  if (e.hint?.startsWith("team:") && e.message?.trim()) return e.message;
   const m = `${e.message ?? ""} ${e.details ?? ""}`.toLowerCase();
   const code = e.code ?? "";
   if (/failed to fetch|networkerror|network request failed|load failed|fetch failed|err_internet/.test(m)) return MSG.offline;
@@ -220,6 +233,10 @@ export function friendlyError(e: DbError, fallback: string = MSG.save): string {
 function client() {
   return getSupabase();
 }
+
+/** The RPC isn't there (a migration not applied yet / stale schema cache). */
+export const isMissingRpc = (e: DbError): boolean =>
+  !!e && (e.code === "PGRST202" || e.code === "42883" || /could not find the function|schema cache/i.test(e.message ?? ""));
 
 async function currentUserId(): Promise<string | null> {
   const sb = client();
@@ -547,31 +564,65 @@ async function fetchCompanyWithBranches(
   return { data: { ...company, branches } };
 }
 
-/** Everything the signed-in user owns: profile, applications, saved vacancies, company. */
+const COMPANY_COLUMNS = "id, name, kind, size, verified, about, employees, phone, plan";
+const asTeamRole = (v: unknown): TeamRole => (v === "dueno" || v === "admin" || v === "reclutador" ? v : "reclutador");
+
+type MembershipLookup = { membership: Membership | null; teamsEnabled: boolean; companyId: string | null };
+
+/**
+ * Which company I belong to: my_membership() (any role: dueño, admin or reclutador). While the database
+ * doesn't have team accounts (the RPC is missing), the company I own is mine as its dueño: without that
+ * fallback an owner would see "Registra tu negocio" and could create a second business, which the team
+ * migration's pre-check then refuses.
+ */
+async function lookupMembership(userId: string): Promise<Result<MembershipLookup>> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  const mine = await sb.rpc("my_membership");
+  if (!mine.error) {
+    const r = mine.data?.[0];
+    if (!r) return { data: { membership: null, teamsEnabled: true, companyId: null } };
+    return {
+      data: {
+        teamsEnabled: true,
+        companyId: r.company_id,
+        membership: {
+          companyId: r.company_id,
+          companyName: r.company_name ?? "",
+          plan: r.plan,
+          role: asTeamRole(r.role),
+          branchIds: Array.isArray(r.branch_ids) ? r.branch_ids : null,
+          joinedAt: r.joined_at ?? "",
+        },
+      },
+    };
+  }
+  if (!isMissingRpc(mine.error)) return { error: friendlyError(mine.error, MSG.load) };
+  const owned = await sb.from("companies").select("id").eq("owner_id", userId).order("created_at").limit(1).maybeSingle();
+  if (owned.error) return { error: friendlyError(owned.error, MSG.load) };
+  return { data: { membership: null, teamsEnabled: false, companyId: owned.data?.id ?? null } };
+}
+
+/** Everything the signed-in user has: profile, applications, saved vacancies, and the company they're in. */
 export async function fetchSessionData(userId: string): Promise<Result<LiveSessionData>> {
   const sb = client();
   if (!sb) return { error: MSG.unavailable };
   try {
-    const [profileTry, apps, saved, company, experiences] = await Promise.all([
+    const [profileTry, apps, saved, member, experiences] = await Promise.all([
       // profile_strength is a computed column (a SQL function over the row).
       sb.from("profiles").select("*, profile_strength").eq("id", userId).maybeSingle(),
-      sb.from("applications").select("job_id, status, created_at").eq("candidate_id", userId).order("created_at", { ascending: false }),
+      sb.from("applications").select("id, job_id, status, created_at").eq("candidate_id", userId).order("created_at", { ascending: false }),
       sb.from("saved_jobs").select("job_id, created_at").eq("candidate_id", userId).order("created_at"),
-      sb
-        .from("companies")
-        .select("id, name, kind, size, verified, about, employees, phone, plan")
-        .eq("owner_id", userId)
-        .order("created_at")
-        .limit(1)
-        .maybeSingle(),
+      lookupMembership(userId),
       sb.from("work_experiences").select(EXPERIENCE_COLUMNS).eq("profile_id", userId).order("sort").order("created_at"),
     ]);
     // A schema cache without the computed column must not lock the user out: retry plain.
     const profile = profileTry.error
       ? await sb.from("profiles").select("*").eq("id", userId).maybeSingle()
       : { data: profileTry.data as unknown as ProfileRow | null, error: null };
-    const err = profile.error ?? apps.error ?? saved.error ?? company.error;
+    const err = profile.error ?? apps.error ?? saved.error;
     if (err) return { error: friendlyError(err, MSG.load) };
+    if (member.error !== undefined) return { error: member.error };
 
     const now = Date.now();
     const p = profile.data as ProfileRow | null;
@@ -598,15 +649,27 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
       : BLANK_PROFILE;
 
     let myCompany: LiveCompany | null = null;
+    let membership = member.data.membership;
     let unlockedJobIds: string[] = [];
-    if (company.data) {
-      const [full, unlocks] = await Promise.all([
-        fetchCompanyWithBranches(company.data),
-        sb.from("job_unlocks").select("job_id").eq("company_id", company.data.id).gt("unlocked_until", new Date().toISOString()),
-      ]);
-      if (full.error !== undefined) return { error: full.error };
-      myCompany = full.data;
-      unlockedJobIds = (unlocks.data ?? []).map((u) => u.job_id);
+    const companyId = member.data.companyId;
+    if (companyId) {
+      const row = await sb.from("companies").select(COMPANY_COLUMNS).eq("id", companyId).maybeSingle();
+      if (row.error) return { error: friendlyError(row.error, MSG.load) };
+      if (row.data) {
+        const [full, unlocks] = await Promise.all([
+          fetchCompanyWithBranches(row.data),
+          sb.from("job_unlocks").select("job_id").eq("company_id", companyId).gt("unlocked_until", new Date().toISOString()),
+        ]);
+        if (full.error !== undefined) return { error: full.error };
+        myCompany = full.data;
+        unlockedJobIds = (unlocks.data ?? []).map((u) => u.job_id);
+        // The membership's copy of name / plan is as of the RPC; the company row is the truth.
+        membership = membership
+          ? { ...membership, companyName: full.data.name, plan: full.data.plan }
+          : member.data.teamsEnabled
+            ? null
+            : { companyId, companyName: full.data.name, plan: full.data.plan, role: "dueno", branchIds: null, joinedAt: "" };
+      } else membership = null;
     }
 
     return {
@@ -614,9 +677,11 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
         profile: live,
         // Work history is optional: if it fails to load, keep what's on screen instead of failing the session.
         experiences: experiences.error ? null : (experiences.data ?? []).map(experienceFromRow),
-        applications: (apps.data ?? []).map((a) => ({ jobId: a.job_id, status: a.status, minutesAgo: minutesSince(a.created_at, now) })),
+        applications: (apps.data ?? []).map((a) => ({ id: a.id, jobId: a.job_id, status: a.status, minutesAgo: minutesSince(a.created_at, now) })),
         saved: (saved.data ?? []).map((s) => s.job_id),
         company: myCompany,
+        membership: myCompany ? membership : null,
+        teamsEnabled: member.data.teamsEnabled,
         unlockedJobIds,
       },
     };

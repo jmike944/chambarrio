@@ -13,8 +13,11 @@ import { Scene } from "@/components/chamba/art/scenes";
 import { cn } from "@/lib/utils";
 import { ChoiceCard, FlowShell, Slab, WORK_CONFETTI, focusRing } from "./flow";
 import { AuthNote, CodeAuth, MethodPicker, PasswordAuth, useRouteAfterSignIn, type Method } from "./live-auth";
+import { isInvitePath, readNextParam } from "./next-path";
 
 const METHODS = ["email", "sms", "password"] as const satisfies readonly Method[];
+/** A team invite is for an email address: no SMS (a phone account has no email to match). */
+const INVITE_METHODS = ["email", "password"] as const satisfies readonly Method[];
 const METHOD_KEY = "chamba-entrar-metodo";
 
 function rememberedMethod(): Method {
@@ -43,6 +46,14 @@ function useLinkError() {
     () => new URLSearchParams(window.location.search).get("error") === "enlace",
     () => false,
   );
+}
+/** `?next=` when it's a team invite ("/unirse?t=…"): where to return after signing in. Other paths are ignored. */
+function readInviteNext(): string | null {
+  const next = readNextParam();
+  return isInvitePath(next) ? next : null;
+}
+function useInviteNext() {
+  return useSyncExternalStore(subscribeNothing, readInviteNext, () => null);
 }
 
 const linkCls =
@@ -96,10 +107,14 @@ export function SignIn() {
   const resumeDemo = useApp((s) => s.signIn);
   const exitDemo = useApp((s) => s.exitDemo);
   const linkError = useLinkError();
+  // Signing in to accept a team invite (/entrar?next=/unirse?t=…): back to the invite afterwards.
+  const next = useInviteNext();
+  const invite = next !== null;
   const remembered = useSyncExternalStore(subscribeNothing, rememberedMethod, () => "email" as Method);
   const [picked, setPicked] = useState<Method | null>(null);
-  const method = picked ?? remembered;
-  const { start, reset, pending } = useRouteAfterSignIn();
+  const chosen = picked ?? remembered;
+  const method: Method = invite && chosen === "sms" ? "email" : chosen;
+  const { start, reset, pending } = useRouteAfterSignIn(next);
   const finished = useRef(false);
 
   // Routes stay mounted after navigation; start fresh next time once sign-in completes.
@@ -199,16 +214,20 @@ export function SignIn() {
   return (
     <FlowShell
       tone="mandarina"
-      art={{ scene: "codigo" }}
-      title="Entra a tu cuenta"
-      hint="Con un código a tu correo o celular, o con tu contraseña."
-      aside="Qué gusto verte de nuevo."
+      art={{ scene: invite ? "equipo" : "codigo" }}
+      title={invite ? "Entra para unirte al equipo" : "Entra a tu cuenta"}
+      hint={
+        invite
+          ? "Usa el correo donde te llegó la invitación. Al entrar vuelves a ella."
+          : "Con un código a tu correo o celular, o con tu contraseña."
+      }
+      aside={invite ? "Sin registrar ningún negocio." : "Qué gusto verte de nuevo."}
     >
       {linkError ? (
         <AuthNote className="mt-0 mb-5">El enlace venció o ya se usó. Pide un código nuevo para entrar.</AuthNote>
       ) : null}
-      {pausedNote}
-      <MethodPicker methods={METHODS} value={method} onChange={setMethod} />
+      {invite ? null : pausedNote}
+      <MethodPicker methods={invite ? INVITE_METHODS : METHODS} value={method} onChange={setMethod} />
       <div className="mt-6 flex flex-1 flex-col" key={method}>
         {method === "password" ? (
           <PasswordAuth onSignedIn={signedInLive} onForgot={() => setMethod("email")} />
@@ -218,6 +237,9 @@ export function SignIn() {
             idPrefix="entrar"
             onVerified={signedInLive}
             onUseEmail={() => setMethod("email")}
+            // A new account made to join a team is a company account (joining replaces onboarding).
+            role={invite ? "empresa" : undefined}
+            next={next ?? undefined}
           />
         )}
         {pending ? (
@@ -226,13 +248,17 @@ export function SignIn() {
           </p>
         ) : null}
       </div>
-      <p className="mt-7 text-[0.98rem] font-medium">
-        ¿Primera vez?{" "}
-        <Link href="/bienvenida" className={linkCls}>
-          Crea tu cuenta gratis
-        </Link>
-      </p>
-      <DemoOffer onPick={(r) => goDemo(r)} index={4} />
+      {invite ? null : (
+        <>
+          <p className="mt-7 text-[0.98rem] font-medium">
+            ¿Primera vez?{" "}
+            <Link href="/bienvenida" className={linkCls}>
+              Crea tu cuenta gratis
+            </Link>
+          </p>
+          <DemoOffer onPick={(r) => goDemo(r)} index={4} />
+        </>
+      )}
     </FlowShell>
   );
 }

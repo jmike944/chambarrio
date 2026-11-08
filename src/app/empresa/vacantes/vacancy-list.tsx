@@ -6,6 +6,7 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   ArrowRight01Icon,
   Briefcase01Icon,
+  InformationCircleIcon,
   Location01Icon,
   PlusSignIcon,
   SquareUnlock02Icon,
@@ -23,6 +24,8 @@ import { useMyCompany } from "@/lib/data/catalog";
 import { EmployerGate } from "@/components/empresa/employer-gate";
 import { useEmployerLocations, useIsLive, useIsUnlocked } from "@/lib/store";
 import { branchIdOf, coloniaText, useEmployerJobs } from "@/app/empresa/sucursales/branch-kit";
+import { StretchArt } from "@/components/team/team-kit";
+import { useCan } from "@/lib/team";
 import { cn } from "@/lib/utils";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
@@ -61,6 +64,9 @@ export function VacancyList() {
 }
 
 function VacancyListBody() {
+  const can = useCan();
+  // No membership yet = an owner registering the business.
+  const publisher = can.createVacancy || !can.role;
   const isUnlocked = useIsUnlocked();
   const live = useIsLive();
   const all = useEmployerJobs();
@@ -114,13 +120,22 @@ function VacancyListBody() {
         />
         {jobs.length === 0 && !current ? (
           <p className="mb-2 rounded-panel border-2 border-dashed border-ink/40 bg-card px-5 py-4 text-[0.95rem] text-muted-foreground dark:border-white/30">
-            <strong className="block font-display text-[1.2rem] font-extrabold text-foreground">Publica tu primera vacante</strong>
-            Es gratis y le avisamos a la gente que vive cerca de tu sucursal.
+            {publisher ? (
+              <>
+                <strong className="block font-display text-[1.2rem] font-extrabold text-foreground">Publica tu primera vacante</strong>
+                Es gratis y le avisamos a la gente que vive cerca de tu sucursal.
+              </>
+            ) : (
+              <>
+                <strong className="block font-display text-[1.2rem] font-extrabold text-foreground">Todavía no hay vacantes activas</strong>
+                En cuanto el dueño o un administrador publique una{can.allBranches ? "" : " en tu sucursal"}, la ves aquí.
+              </>
+            )}
           </p>
         ) : jobs.length === 0 ? (
           <p className="mb-2 rounded-panel border-2 border-dashed border-ink/40 bg-card px-5 py-4 text-[0.95rem] text-muted-foreground dark:border-white/30">
-            Todavía no hay vacantes en <strong className="font-semibold text-foreground">{current?.name}</strong>. Publica la
-            primera y le avisamos a quien vive cerca.
+            Todavía no hay vacantes en <strong className="font-semibold text-foreground">{current?.name}</strong>.
+            {publisher ? " Publica la primera y le avisamos a quien vive cerca." : ""}
           </p>
         ) : null}
         <ul className="grid lg:flex lg:flex-1 lg:flex-col">
@@ -204,24 +219,49 @@ function VacancyListBody() {
             className="animate-rise relative mt-5 lg:flex lg:flex-1 lg:flex-col"
             style={{ "--i": Math.min(jobs.length + 2, 8) } as CSSVars}
           >
-            <Link
-              href="/empresa/vacantes/nueva"
-              className={cn(
-                "group flex min-h-20 items-center gap-4 rounded-panel border-2 border-dashed border-ink/60 bg-card px-5 py-4 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 lg:flex-1 dark:border-white/40",
-                "press lift",
-              )}
-            >
-              <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-ink bg-limon text-ink transition-transform duration-300 group-hover:rotate-90">
-                <HugeiconsIcon icon={PlusSignIcon} className="size-6" strokeWidth={2.4} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-display text-[1.2rem] leading-tight font-extrabold tracking-[-0.02em]">
-                  Publicar otra vacante
+            {publisher ? (
+              <Link
+                href="/empresa/vacantes/nueva"
+                className={cn(
+                  "group flex min-h-20 items-center gap-4 rounded-panel border-2 border-dashed border-ink/60 bg-card px-5 py-4 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 lg:flex-1 dark:border-white/40",
+                  "press lift",
+                )}
+              >
+                <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-ink bg-limon text-ink transition-transform duration-300 group-hover:rotate-90">
+                  <HugeiconsIcon icon={PlusSignIcon} className="size-6" strokeWidth={2.4} />
                 </span>
-                <span className="block text-[0.92rem] text-muted-foreground">Gratis, en menos de 2 minutos</span>
-              </span>
-              <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0" strokeWidth={2} />
-            </Link>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-[1.2rem] leading-tight font-extrabold tracking-[-0.02em]">
+                    Publicar otra vacante
+                  </span>
+                  <span className="block text-[0.92rem] text-muted-foreground">Gratis, en menos de 2 minutos</span>
+                </span>
+                <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0" strokeWidth={2} />
+              </Link>
+            ) : (
+              // A reclutador doesn't publish: who does, instead of a "Publicar" that can't work. On desktop it
+              // stretches to the left column; the extra room gets a scene.
+              <Link
+                href="/empresa/equipo"
+                className={cn(
+                  "group press block-lila flex min-h-20 flex-col rounded-panel px-5 py-4 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 lg:flex-1",
+                  OUTLINE,
+                  HARD,
+                )}
+              >
+                <StretchArt name="negocio" className="mb-3 hidden lg:block" />
+                <span className="flex items-center gap-4">
+                  <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-ink bg-white text-ink">
+                    <HugeiconsIcon icon={InformationCircleIcon} className="size-6" strokeWidth={2.2} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-display text-[1.2rem] leading-tight font-extrabold tracking-[-0.02em]">¿Falta una vacante?</span>
+                    <span className="block text-[0.92rem] text-muted-foreground">Las publica el dueño o un administrador de tu equipo.</span>
+                  </span>
+                  <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0" strokeWidth={2} />
+                </span>
+              </Link>
+            )}
           </li>
         </ul>
       </section>

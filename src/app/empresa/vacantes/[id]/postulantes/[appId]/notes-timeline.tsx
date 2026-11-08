@@ -11,12 +11,20 @@ import type { ApplicationPipeline, PipelineEvent, RecruiterNote } from "@/lib/da
 import { PIPELINE_LIMITS, capitalize, eventChange, fmtDayTime, stepOf, validateNote, type PipelineActions } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 import { MyMascot } from "@/components/chamba/art/my-mascot";
+import { MemberAvatar } from "@/components/team/team-kit";
+import { useTeam } from "@/lib/team";
 
 /*
  * The applicant page's private notes (tinta, "Solo tu equipo las ve") and the event timeline.
  */
 
 // ------------------------------------------------------------------ notes
+
+/** "Tú" / "Lupita Garza" / "Alguien del equipo" (older notes without a known author: "Tu equipo"). */
+function authorOf(n: RecruiterNote): string {
+  if (n.by) return n.by.isMe ? "Tú" : (n.by.name ?? "Alguien del equipo");
+  return n.mine ? "Tú" : "Tu equipo";
+}
 
 export function NotesPanel({
   notes,
@@ -163,8 +171,13 @@ export function NotesPanel({
             >
               <p className="text-[0.98rem] leading-snug break-words whitespace-pre-line">{n.body}</p>
               <div className="mt-2 flex items-center justify-between gap-2 text-[0.82rem] text-white/60">
-                <span>
-                  {n.mine ? "Tú" : "Tu equipo"} · {n.pending ? "Guardando…" : now ? ago(n.at, now) : ""}
+                <span className="flex min-w-0 items-center gap-2">
+                  {n.authorId ? (
+                    <MemberAvatar userId={n.authorId} isMe={n.by?.isMe ?? n.mine} size={24} className="border-white/30 shadow-none dark:shadow-none" />
+                  ) : null}
+                  <span className="min-w-0">
+                    <span className="font-semibold text-white/85">{authorOf(n)}</span> · {n.pending ? "Guardando…" : now ? ago(n.at, now) : ""}
+                  </span>
                 </span>
                 {n.mine && !n.pending ? (
                   <button
@@ -202,28 +215,56 @@ export function NotesPanel({
 
 // ------------------------------------------------------------------ timeline
 
-function eventLabel(e: PipelineEvent, i: number, events: PipelineEvent[], first: string, now: number): string {
+/**
+ * Who made a company step, for its sentence: "me" (second person, as before teams), a team member by
+ * name, or "someone" (no name known: impersonal). Candidate steps have no actor.
+ */
+type Who = { kind: "me" } | { kind: "named"; name: string } | { kind: "someone" };
+
+function whoOf(e: PipelineEvent, solo: boolean): Who {
+  if (e.actor !== "empresa") return { kind: "me" };
+  // No actor recorded (older rows, or a database without team accounts): a solo owner did it.
+  if (!e.by) return solo ? { kind: "me" } : { kind: "someone" };
+  if (e.by.isMe) return { kind: "me" };
+  if (!e.by.name) return { kind: "someone" };
+  // First name ("Lupita agendó…"), except the stand-ins ("Alguien que ya no está en el equipo agendó…").
+  const name = e.by.name.trim();
+  return { kind: "named", name: name.startsWith("Alguien") ? name : name.split(/\s+/)[0] || name };
+}
+
+/** "Agendaste…" / "Lupita agendó…" / "Se agendó…": the same step in the right voice. */
+function say(w: Who, me: string, named: string, someone: string): string {
+  return w.kind === "me" ? me : w.kind === "named" ? `${w.name} ${named}` : someone;
+}
+
+function eventLabel(e: PipelineEvent, i: number, events: PipelineEvent[], first: string, now: number, solo: boolean): string {
   const change = eventChange(events, i);
-  if (change === "reabierta") return "Reabriste la postulación";
+  const w = whoOf(e, solo);
+  if (change === "reabierta") return say(w, "Reabriste la postulación", "reabrió la postulación", "Se reabrió la postulación");
   switch (e.status) {
     case "enviada":
       return "Se postuló";
     case "vista":
-      return "Viste su postulación";
+      return say(w, "Viste su postulación", "vio su postulación", "Se marcó como vista");
     case "entrevista": {
       const when = e.interviewAt && now ? fmtDayTime(e.interviewAt, { now }) : null;
-      if (change === "hora") return `Cambiaste la entrevista${when ? ` a ${when}` : ""}`;
-      if (change === "lugar") return "Cambiaste el lugar de la entrevista";
-      if (change === "indicaciones") return "Cambiaste las indicaciones de la entrevista";
-      return `Agendaste entrevista${when ? ` para ${when}` : ""}`;
+      if (change === "hora") return say(w, `Cambiaste la entrevista${when ? ` a ${when}` : ""}`, `cambió la entrevista${when ? ` a ${when}` : ""}`, `Se cambió la entrevista${when ? ` a ${when}` : ""}`);
+      if (change === "lugar") return say(w, "Cambiaste el lugar de la entrevista", "cambió el lugar de la entrevista", "Se cambió el lugar de la entrevista");
+      if (change === "indicaciones")
+        return say(w, "Cambiaste las indicaciones de la entrevista", "cambió las indicaciones de la entrevista", "Se cambiaron las indicaciones de la entrevista");
+      return say(w, `Agendaste entrevista${when ? ` para ${when}` : ""}`, `agendó la entrevista${when ? ` para ${when}` : ""}`, `Se agendó la entrevista${when ? ` para ${when}` : ""}`);
     }
     case "contratada":
-      if (change === "mensaje") return "Le dejaste un mensaje";
-      return first === "esta persona" ? "La contrataste" : `Contrataste a ${first}`;
+      if (change === "mensaje") return say(w, "Le dejaste un mensaje", "le dejó un mensaje", "Se le dejó un mensaje");
+      return first === "esta persona"
+        ? say(w, "La contrataste", "la contrató", "Se contrató")
+        : say(w, `Contrataste a ${first}`, `contrató a ${first}`, `Se contrató a ${first}`);
     case "cerrada": {
       const hiredBefore = events.slice(0, i).findLast((x) => x.status !== "cerrada")?.status === "contratada";
       if (e.actor === "candidato") return hiredBefore ? "Ya no va a tomar el trabajo" : "Retiró su postulación";
-      return hiredBefore ? "Cancelaste la contratación" : "La descartaste";
+      return hiredBefore
+        ? say(w, "Cancelaste la contratación", "canceló la contratación", "Se canceló la contratación")
+        : say(w, "La descartaste", "la descartó", "Se descartó");
     }
   }
 }
@@ -240,6 +281,8 @@ export function TimelinePanel({
   className?: string;
 }) {
   const events = data.events;
+  // A team with more people: steps without a recorded actor are said impersonally, not as "you".
+  const solo = useTeam().members.length <= 1;
   return (
     <section aria-labelledby="historial-title" className={cn("block-menta relative overflow-hidden rounded-panel p-5 sm:p-6", OUTLINE, HARD, className)}>
       <header className="mb-4 flex items-center gap-3">
@@ -262,7 +305,7 @@ export function TimelinePanel({
                 style={{ background: STEP_COLOR[step] }}
               />
               <p className={cn("text-[0.98rem] leading-snug", last ? "font-bold" : "font-semibold")}>
-                {eventLabel(e, i, events, first, now)}
+                {eventLabel(e, i, events, first, now, solo)}
               </p>
               <p className="text-[0.85rem] text-muted-foreground">{now ? capitalize(fmtDayTime(e.at, { now })) : ""}</p>
             </li>

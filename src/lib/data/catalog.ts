@@ -6,7 +6,7 @@ import { BRANCH_BY_ID, COMPANIES, COMPANY_BY_ID, DEMO_COMPANY_ID, JOBS, JOB_BY_I
 import { applicantsFor } from "@/lib/data/applicants";
 import type { Branch, Company, Job } from "@/lib/data/types";
 import { bearing, distanceKm, type LatLng } from "@/lib/geo";
-import { isLiveAvailable, useApp, useHydrated, type AppMode } from "@/lib/store";
+import { inScope, isLiveAvailable, scopeOf, useApp, useHydrated, useStoredMembership, type AppMode } from "@/lib/store";
 import * as api from "@/lib/live/api";
 import type { JobStatus, MyJob } from "@/lib/live/api";
 import { useLiveAuth } from "@/lib/live/auth-state";
@@ -395,15 +395,23 @@ export type MyCompany = {
   refreshing: boolean;
   /** Null in live until the business is registered (show the "registra tu negocio" state). */
   company: Company | null;
+  /** The branches I work: all of them, or a branch-limited reclutador's (pickers, filters). */
   branches: Branch[];
-  /** Live: every status (abierta/pausada/cerrada), newest first. Demo: the demo company's vacancies. */
+  /** Every branch of the company, whatever my scope (= company.locations). */
+  allBranches: Branch[];
+  /**
+   * The vacancies I work. Live: every status (abierta/pausada/cerrada), newest first. Demo: the demo
+   * company's vacancies. A branch-limited reclutador only gets their branches' (the open vacancies of
+   * every branch are public, so the jobs query returns them too: they're filtered out here).
+   */
   jobs: MyJob[];
   reload: () => Promise<void>;
 };
 
 /**
- * The employer's own company, branches and vacancies (all statuses). Demo: the demo company
- * (with any branch edits the demo user made). Live: from the session + the jobs table.
+ * The employer's own company, branches and vacancies (all statuses), limited to my branch scope
+ * (team accounts). Demo: the demo company (with any branch edits the demo user made). Live: from the
+ * session + the jobs table.
  */
 export function useMyCompany(): MyCompany {
   const source = useSource();
@@ -413,21 +421,34 @@ export function useMyCompany(): MyCompany {
   const my = useMyJobs();
   const live = mode === "live";
   const companyId = live ? (business?.id ?? null) : null;
+  const membership = useStoredMembership();
+  const scope = scopeOf(membership);
 
   useEffect(() => {
     if (companyId) void loadMyJobs(companyId);
   }, [companyId]);
 
   return useMemo((): MyCompany => {
+    const scoped = (branches: Branch[]) => (scope === null ? branches : branches.filter((b) => scope.includes(b.id)));
     if (!live) {
-      if (source === null) return { status: "loading", refreshing: false, company: null, branches: [], jobs: NO_MY_JOBS, reload: reloadNothing };
+      if (source === null)
+        return { status: "loading", refreshing: false, company: null, branches: [], allBranches: [], jobs: NO_MY_JOBS, reload: reloadNothing };
       // A visitor in a live-capable build has no company, and must never get the mock one.
-      if (source === "live") return { status: "ready", refreshing: false, company: null, branches: [], jobs: NO_MY_JOBS, reload: reloadNothing };
+      if (source === "live")
+        return { status: "ready", refreshing: false, company: null, branches: [], allBranches: [], jobs: NO_MY_JOBS, reload: reloadNothing };
       const base = COMPANY_BY_ID[DEMO_COMPANY_ID];
       const company: Company = business
         ? { ...base, name: business.name, kind: business.kind, size: business.size, locations: business.locations }
         : base;
-      return { status: "ready", refreshing: false, company, branches: company.locations, jobs: DEMO_MY_JOBS, reload: reloadNothing };
+      return {
+        status: "ready",
+        refreshing: false,
+        company,
+        branches: scoped(company.locations),
+        allBranches: company.locations,
+        jobs: inScope(membership, DEMO_MY_JOBS),
+        reload: reloadNothing,
+      };
     }
     if (!business?.id) {
       return {
@@ -435,6 +456,7 @@ export function useMyCompany(): MyCompany {
         refreshing: false,
         company: null,
         branches: business?.locations ?? [],
+        allBranches: business?.locations ?? [],
         jobs: NO_MY_JOBS,
         reload: reloadNothing,
       };
@@ -456,11 +478,12 @@ export function useMyCompany(): MyCompany {
       error: fresh ? my.error : undefined,
       refreshing: fresh && my.refreshing,
       company,
-      branches: business.locations,
-      jobs: fresh ? my.jobs : NO_MY_JOBS,
+      branches: scoped(business.locations),
+      allBranches: business.locations,
+      jobs: fresh ? inScope(membership, my.jobs) : NO_MY_JOBS,
       reload: () => loadMyJobs(business.id!, true),
     };
-  }, [live, source, business, sessionLoaded, my]);
+  }, [live, source, business, sessionLoaded, my, membership, scope]);
 }
 
 // ------------------------------------------------------------------ invalidation

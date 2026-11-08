@@ -15,9 +15,11 @@ export type Database = {
       // candidate and the vacancy's company.
       application_events: {
         // change / message: 20261108041400_pipeline_notify_v3.sql (not applied yet; live.ts falls back without them).
-        Row: { actor: "candidato" | "empresa"; application_id: string; change: EventChange | null; created_at: string; id: number; interview_at: string | null; message: string | null; status: E["application_status"] };
-        Insert: { actor: "candidato" | "empresa"; application_id: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status: E["application_status"] };
-        Update: { actor?: "candidato" | "empresa"; application_id?: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status?: E["application_status"] };
+        // actor_user_id: 20261108172838_team_accounts.sql (the team member behind a company-side step; null for the candidate's own).
+        // NOT selectable by `authenticated` (column grants keep member ids from candidates): read it with rpc("application_event_actors").
+        Row: { actor: "candidato" | "empresa"; actor_user_id: string | null; application_id: string; change: EventChange | null; created_at: string; id: number; interview_at: string | null; message: string | null; status: E["application_status"] };
+        Insert: { actor: "candidato" | "empresa"; actor_user_id?: string | null; application_id: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status: E["application_status"] };
+        Update: { actor?: "candidato" | "empresa"; actor_user_id?: string | null; application_id?: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status?: E["application_status"] };
         Relationships: [
           { foreignKeyName: "application_events_application_id_fkey"; columns: ["application_id"]; isOneToOne: false; referencedRelation: "applications"; referencedColumns: ["id"] },
         ];
@@ -133,6 +135,16 @@ export type Database = {
           verified?: boolean;
         };
         Relationships: [];
+      };
+      // Team accounts (20261108172838): read-only for members (RLS); written only by the team RPCs.
+      // company_invites is service-role / RPC only and deliberately not typed here.
+      company_members: {
+        Row: { branch_ids: string[] | null; company_id: string; created_at: string; invited_by: string | null; role: E["team_role"]; user_id: string };
+        Insert: { branch_ids?: string[] | null; company_id: string; created_at?: string; invited_by?: string | null; role: E["team_role"]; user_id: string };
+        Update: { branch_ids?: string[] | null; company_id?: string; created_at?: string; invited_by?: string | null; role?: E["team_role"]; user_id?: string };
+        Relationships: [
+          { foreignKeyName: "company_members_company_id_fkey"; columns: ["company_id"]; isOneToOne: false; referencedRelation: "companies"; referencedColumns: ["id"] },
+        ];
       };
       job_unlocks: {
         Row: { company_id: string; created_at: string; job_id: string; unlocked_until: string };
@@ -316,9 +328,51 @@ export type Database = {
     };
     Functions: {
       add_branch: { Args: { lat: number; lng: number; p_colonia: string; p_company_id: string; p_name: string }; Returns: string };
+      /** Since 20261108172838: the caller is a dueño of the company (kept for compatibility). */
       is_company_owner: { Args: { cid: string }; Returns: boolean };
-      /** The signed-in user owns the company of this application's vacancy. */
+      /** The caller is a team member whose branch scope includes this application's vacancy (never their own application). */
       owns_application: { Args: { p_app: string }; Returns: boolean };
+      // ---- team accounts (20261108172838_team_accounts.sql)
+      company_role: { Args: { p_company_id: string }; Returns: E["team_role"] | null };
+      is_company_member: { Args: { p_company_id: string; p_min_role?: E["team_role"] }; Returns: boolean };
+      can_see_branch: { Args: { p_company_id: string; p_branch_id: string }; Returns: boolean };
+      can_see_job: { Args: { p_job_id: string }; Returns: boolean };
+      my_membership: {
+        Args: Record<PropertyKey, never>;
+        Returns: { company_id: string; company_name: string; plan: E["plan_id"]; role: E["team_role"]; branch_ids: string[] | null; joined_at: string }[];
+      };
+      team_members: {
+        Args: { p_company_id: string };
+        Returns: { user_id: string; role: E["team_role"]; branch_ids: string[] | null; name: string; email: string | null; joined_at: string; invited_by: string | null; is_me: boolean }[];
+      };
+      team_invites: {
+        Args: { p_company_id: string };
+        Returns: { id: string; email: string; role: E["team_role"]; branch_ids: string[] | null; created_at: string; last_sent_at: string; expires_at: string; invited_by: string | null; expired: boolean }[];
+      };
+      team_people: { Args: { p_company_id: string }; Returns: { user_id: string; name: string; role: E["team_role"] | null }[] };
+      invite_preview: {
+        Args: { p_token: string };
+        Returns: {
+          status: "vigente" | "vencida" | "cancelada" | "usada";
+          company_name: string;
+          role: E["team_role"];
+          branch_names: string[] | null;
+          inviter_name: string | null;
+          email_hint: string;
+          expires_at: string;
+          email_matches: boolean | null;
+        }[];
+      };
+      /** Returns { id, token, expires_at, email, emailed }: the raw token only this once; emailed false = link only (address got 3 invites today). */
+      invite_member: { Args: { p_company_id: string; p_email: string; p_role: E["team_role"]; p_branch_ids?: string[] | null }; Returns: Json };
+      revoke_invite: { Args: { p_invite_id: string }; Returns: undefined };
+      /** Returns { company_id, company_name, role, branch_ids, profile_role }. */
+      accept_invite: { Args: { p_token: string; p_name?: string | null }; Returns: Json };
+      update_member: { Args: { p_company_id: string; p_user_id: string; p_role: E["team_role"]; p_branch_ids?: string[] | null }; Returns: undefined };
+      remove_member: { Args: { p_company_id: string; p_user_id: string }; Returns: undefined };
+      leave_company: { Args: { p_company_id: string }; Returns: undefined };
+      /** Who made each company-side step (team only; application_events.actor_user_id isn't selectable by authenticated). Up to 200 ids. */
+      application_event_actors: { Args: { p_application_ids: string[] }; Returns: { application_id: string; event_id: number; actor_user_id: string }[] };
       applied_to_job: { Args: { p_job: string }; Returns: boolean };
       job_applicants: {
         Args: { p_job_id: string };
@@ -416,6 +470,8 @@ export type Database = {
       pay_period: "semana" | "quincena" | "mes" | "dia";
       plan_id: "por-vacante" | "pyme" | "industrial";
       shift: "Matutino" | "Vespertino" | "Nocturno" | "Mixto" | "Rotativo";
+      /** Ordered reclutador < admin < dueno (20261108172838_team_accounts.sql). */
+      team_role: "reclutador" | "admin" | "dueno";
     };
     CompositeTypes: { [_ in never]: never };
   };

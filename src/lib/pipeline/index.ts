@@ -13,6 +13,7 @@ export type {
   PipelineEventChange,
   PipelineSummary,
   RecruiterNote,
+  TeamActor,
 } from "@/lib/data/types";
 
 // Candidate side

@@ -29,6 +29,7 @@ import {
   type PipelineStep,
 } from "@/lib/pipeline";
 import { formatKm } from "@/lib/geo";
+import { useTeam } from "@/lib/team";
 import { cn } from "@/lib/utils";
 import { STEP_COLOR, STEP_FILTER_LABEL, ago, applicantHref, personLabel } from "./pipeline-kit";
 
@@ -110,6 +111,7 @@ const MAX_ROWS = { review: 3, interviews: 3, hires: 2 } as const;
 export function TodayPanel({ data, className }: { data: DashboardPipeline; className?: string }) {
   const { loading, review, interviews, hires, now } = data;
   const open = useOpenStep();
+  const solo = useTeam().members.length <= 1;
   const total = review.length + interviews.filter((r) => r.p.interviewAt && now && relativeDayWord(r.p.interviewAt, now) === "hoy").length;
   return (
     <section
@@ -179,7 +181,8 @@ export function TodayPanel({ data, className }: { data: DashboardPipeline; class
           </Lane>
           <Lane
             step="contratada"
-            title="Contrataste"
+            // A team hires together: "Contrataste" only when it's just me.
+            title={solo ? "Contrataste" : "Contrataciones"}
             count={hires.length}
             onAll={() => open("contratada")}
             empty="Cuando contrates a alguien lo verás aquí."

@@ -31,6 +31,8 @@ import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
 import { EmployerGate } from "@/components/empresa/employer-gate";
 import { publishJob } from "@/lib/live/backend";
 import { useEmployerLocations, useIsLive } from "@/lib/store";
+import { useCan } from "@/lib/team";
+import { NotForRole } from "@/components/team/not-for-role";
 import { BranchMapArt, coloniaText, nearbyEstimate, typicalKm } from "@/app/empresa/sucursales/branch-kit";
 import type { CategoryId, EmploymentType, Experience, PayPeriod, Shift } from "@/lib/data/types";
 import { formatPay } from "@/lib/format";
@@ -132,7 +134,22 @@ function onRadioKeys<T>(e: React.KeyboardEvent, items: T[], current: T, set: (v:
 }
 
 export function NewJobForm() {
-  return <EmployerGate shape="form">{(my) => <NewJobFormBody companyName={my.company.name} />}</EmployerGate>;
+  return <EmployerGate shape="form">{(my) => <NewJobGate companyName={my.company.name} />}</EmployerGate>;
+}
+
+/** Publishing is for the dueño and admins; a reclutador gets who does it and where their work is. */
+function NewJobGate({ companyName }: { companyName: string }) {
+  const can = useCan();
+  if (can.role && !can.createVacancy) {
+    return (
+      <NotForRole
+        title="Las vacantes las publica el dueño"
+        body="O alguien de tu equipo con rol de administrador. Tú revisas a quien se postula, agendas entrevistas y contratas."
+        back={{ href: "/empresa/candidatos", label: "Ver candidatos" }}
+      />
+    );
+  }
+  return <NewJobFormBody companyName={companyName} />;
 }
 
 /** "Licencia vigente, secundaria\nTurnos rotativos" → ["Licencia vigente", "secundaria", "Turnos rotativos"]. */

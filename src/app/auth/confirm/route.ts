@@ -1,6 +1,7 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { isInvitePath } from "@/components/onboarding/next-path";
 
 /**
  * Landing point for links in Supabase auth emails. Handles both shapes:
@@ -30,7 +31,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(landing);
     }
   }
-  return NextResponse.redirect(new URL("/entrar?error=enlace", url.origin));
+  // Expired or reused link. A team invite's link keeps the invite, so a fresh code still lands on it.
+  const failed = new URL("/entrar?error=enlace", url.origin);
+  if (url.searchParams.get("next") && isInvitePath(safeNext.pathname + safeNext.search)) {
+    failed.searchParams.set("next", safeNext.pathname + safeNext.search);
+  }
+  return NextResponse.redirect(failed);
 }
 
 /**

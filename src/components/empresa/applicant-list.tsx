@@ -15,6 +15,7 @@ import { PipelineQuickAction } from "@/components/empresa/pipeline/quick-action"
 import type { MyJob } from "@/lib/data/catalog";
 import type { PipelineSummary } from "@/lib/data/types";
 import type { ApplicantProfile } from "@/lib/live/applicant-profiles";
+import { useCan } from "@/lib/team";
 import { cn } from "@/lib/utils";
 
 /*
@@ -127,6 +128,8 @@ export function usePipelineCardProps({
   visible: readonly ApplicantProfile[];
 }): (a: ApplicantProfile) => CardExtras {
   const placeFor = usePlaceFor();
+  // No quick action on an application I can't work (my own, or out of my branches).
+  const { workApplication } = useCan();
   return useCallback(
     (a: ApplicantProfile): CardExtras => {
       const p = byId[a.id];
@@ -141,10 +144,13 @@ export function usePipelineCardProps({
             jobId,
             visible.filter((v) => (v.jobId ?? byId[v.id]?.jobId) === jobId).map((v) => v.id),
           ),
-        action: p ? <PipelineQuickAction summary={p} first={personFirst(a)} defaultPlace={placeFor(job)} /> : undefined,
+        action:
+          p && workApplication({ id: a.id, jobId }) ? (
+            <PipelineQuickAction summary={p} first={personFirst(a)} defaultPlace={placeFor(job)} />
+          ) : undefined,
       };
     },
-    [byId, jobs, visible, placeFor],
+    [byId, jobs, visible, placeFor, workApplication],
   );
 }
 

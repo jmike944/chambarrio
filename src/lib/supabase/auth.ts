@@ -55,15 +55,18 @@ function friendly(message: string | undefined): string {
  * Sends a 6-digit code. New users are created on the fly: sign-up passes the role they picked;
  * sign-in (/entrar) passes none, so an existing account keeps its own and the email link lands on
  * /entrar/listo, which routes by the account's role.
+ * `next`: a same-site path the email's link returns to instead (e.g. "/unirse?t=…" for a team invite,
+ * so tapping the link instead of typing the code still lands on the same invite).
  */
-export async function sendCode(channel: Channel, to: string, role?: Role): Promise<string | null> {
+export async function sendCode(channel: Channel, to: string, role?: Role, next?: string): Promise<string | null> {
   const sb = client();
   const data = role ? { role } : undefined;
   if (channel === "email") {
-    const next = role ? `?next=${role === "empresa" ? "/empresa" : "/inicio"}` : "";
+    const custom = next && next.startsWith("/") && !next.startsWith("//") ? `?next=${encodeURIComponent(next)}` : "";
+    const query = custom || (role ? `?next=${role === "empresa" ? "/empresa" : "/inicio"}` : "");
     const { error } = await sb.auth.signInWithOtp({
       email: to.trim().toLowerCase(),
-      options: { shouldCreateUser: true, data, emailRedirectTo: `${window.location.origin}/auth/confirm${next}` },
+      options: { shouldCreateUser: true, data, emailRedirectTo: `${window.location.origin}/auth/confirm${query}` },
     });
     return error ? friendly(error.message) : null;
   }

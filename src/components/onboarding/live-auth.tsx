@@ -21,6 +21,7 @@ import { useSessionLoaded } from "@/lib/live/session";
 import { sendCode, signInWithPassword, verifyCode, type Channel } from "@/lib/supabase/auth";
 import { cn } from "@/lib/utils";
 import { HAZARD, PrimaryButton, SlabShadow, Slab, StickyFooter, focusRing, slabFace } from "./flow";
+import { isInvitePath } from "./next-path";
 import { CodeField, PhoneField, ResendButton, formatPhone, linkBtn, useCountdown } from "./phone-verify";
 
 /*
@@ -33,7 +34,7 @@ export type Method = Channel | "password";
 /** Supabase lets you ask for a new email code about once a minute. */
 const RESEND_LIVE = 60;
 
-const BIG_INPUT =
+export const BIG_INPUT =
   "h-17 rounded-[1.1rem] border-[3px] border-ink bg-white px-5 font-display text-[1.3rem] font-bold text-ink placeholder:text-ink/35 focus-visible:border-ink focus-visible:ring-4 focus-visible:ring-ink/25 md:text-[1.3rem] dark:bg-white";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -142,10 +143,13 @@ export function CodeAuth({
   onVerified,
   onUseEmail,
   submitLabel = "Enviarme un código",
+  next,
 }: {
   channel: Channel;
   /** Sign-up only: the side picked for a new account. Sign-in leaves it out. */
   role?: Role;
+  /** Same-site path the email's sign-in link returns to (e.g. a team invite "/unirse?t=…"). */
+  next?: string;
   idPrefix: string;
   /** Called once the Supabase session exists (store is already mode "live", signedIn). */
   onVerified: (info: { channel: Channel; to: string }) => void;
@@ -179,7 +183,7 @@ export function CodeAuth({
     leaveDemo();
     setBusy(true);
     setError(null);
-    const err = await sendCode(channel, to, role);
+    const err = await sendCode(channel, to, role, next);
     setBusy(false);
     if (err) {
       setError(err);
@@ -452,8 +456,10 @@ export function PasswordInput({
  * After a live sign-in: wait for the profile to load, then send the person where their account
  * belongs (each account is one type: candidato or empresa) — onboarding if they never finished
  * it, else their home screen. Returns `start()`; call it right after verifyCode / signInWithPassword.
+ * `next` (a safe same-site path): a team invite goes there right away, onboarded or not (the invite
+ * page loads the account itself); any other path once the account is onboarded.
  */
-export function useRouteAfterSignIn() {
+export function useRouteAfterSignIn(next?: string | null) {
   const router = useRouter();
   const loaded = useSessionLoaded();
   const live = useApp((s) => s.mode === "live" && s.signedIn);
@@ -461,6 +467,10 @@ export function useRouteAfterSignIn() {
 
   useEffect(() => {
     if (!started || !live) return;
+    if (isInvitePath(next)) {
+      router.replace(next);
+      return;
+    }
     const go = (sure: boolean) => {
       const s = useApp.getState();
       const empresa = s.role === "empresa";
@@ -470,7 +480,7 @@ export function useRouteAfterSignIn() {
       }
       const first = s.name.trim().split(/\s+/)[0];
       if (sure) toast.success(empresa && s.business ? `Hola de nuevo, ${s.business.name}.` : first ? `Hola de nuevo, ${first}.` : "¡Qué gusto verte!");
-      router.replace(empresa ? "/empresa" : "/inicio");
+      router.replace(next ?? (empresa ? "/empresa" : "/inicio"));
     };
     if (loaded) {
       go(true);
@@ -479,7 +489,7 @@ export function useRouteAfterSignIn() {
     // Slow network: go to the app anyway; its guard sends unfinished accounts to onboarding.
     const t = setTimeout(() => go(false), 8000);
     return () => clearTimeout(t);
-  }, [started, live, loaded, router]);
+  }, [started, live, loaded, router, next]);
 
   const start = useCallback(() => setStarted(true), []);
   const reset = useCallback(() => setStarted(false), []);

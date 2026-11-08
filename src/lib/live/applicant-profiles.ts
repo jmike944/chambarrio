@@ -8,7 +8,7 @@ import { APPLICANTS, demoAvatar, demoProfile, type DemoPersonKey } from "@/lib/d
 import { type AvatarConfig, randomAvatar, sanitizeAvatar } from "@/components/avatar/config";
 import type { ApplicationStatus, CategoryId, Experience, PayPeriod, Shift } from "@/lib/data/types";
 import { useMyCompany, type CatalogStatus } from "@/lib/data/catalog";
-import { useApp } from "@/lib/store";
+import { scopeOf, useApp, useStoredMembership } from "@/lib/store";
 import {
   EDUCATION_LEVELS,
   SHIFTS,
@@ -428,14 +428,18 @@ export function useApplicantProfiles(jobId?: string, opts?: { detailsFor?: reado
   const live = useApp((s) => s.mode === "live");
   const base = useApplicants(jobId);
   const my = useMyCompany();
+  const limited = scopeOf(useStoredMembership()) !== null;
+  // Same rule as useApplicants: a branch-limited member never asks for another branch's vacancy.
+  const outOfScope = !!jobId && limited && (my.status !== "ready" || !my.jobs.some((j) => j.id === jobId));
   const scope = opts?.detailsFor;
   const scopeKey = scope ? scope.toSorted().join(",") : null;
   const jobIds = useMemo(() => {
+    if (outOfScope) return [];
     const all = jobId ? [jobId] : my.jobs.map((j) => j.id);
     if (scopeKey === null) return all;
     const wanted = new Set(scopeKey ? scopeKey.split(",") : []);
     return all.filter((id) => wanted.has(id));
-  }, [jobId, my.jobs, scopeKey]);
+  }, [outOfScope, jobId, my.jobs, scopeKey]);
   const key = jobIds.join(",");
   const entries = useDetailCache((s) => s.entries);
   const ready = live && (jobId ? true : my.status === "ready");
