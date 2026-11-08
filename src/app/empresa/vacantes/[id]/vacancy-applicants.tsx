@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -44,11 +44,12 @@ import {
   ApplicantGrid,
   ApplicantGridSkeleton,
   SORT_PHRASE,
-  changeApplicantStatus,
+  usePipelineCardProps,
 } from "@/components/empresa/applicant-list";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import type { MyJob } from "@/lib/data/catalog";
-import { useApplicantProfiles } from "@/lib/live/applicant-profiles";
+import { useApplicantProfiles, type ApplicantProfile } from "@/lib/live/applicant-profiles";
+import { stepOf, usePipelineSummary, withPipelineStatus } from "@/lib/pipeline";
 import { setJobStatus, type JobStatus } from "@/lib/live/backend";
 import { isProfileComplete } from "@/lib/profile-strength";
 import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
@@ -120,9 +121,17 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
   const live = useIsLive();
   const payments = usePaymentsEnabled();
   // Demo: the enriched mock applicants (never Supabase). Live: job_applicants + job_applicants_detail.
-  const { status: listStatus, error: listError, detailError, applicants, reload, setStatus } = useApplicantProfiles(jobId);
-  // "Más completos primero" by default from 3 applicants; quick filters on top.
-  const controls = useApplicantControls(applicants);
+  const { status: listStatus, error: listError, detailError, applicants: rows, reload } = useApplicantProfiles(jobId);
+  // The hiring step of each applicant comes from the pipeline (demo rows are always "enviada").
+  const pipe = usePipelineSummary(jobId);
+  const applicants = useMemo(() => withPipelineStatus(rows, pipe.byId), [rows, pipe.byId]);
+  const stepOfApplicant = useCallback(
+    (a: ApplicantProfile) => (pipe.byId[a.id] ? stepOf(pipe.byId[a.id]) : a.status ? stepOf({ status: a.status }) : null),
+    [pipe.byId],
+  );
+  // "Más completos primero" by default from 3 applicants; step + quick filters on top (kept per vacancy).
+  const controls = useApplicantControls(applicants, { scope: jobId, stepOf: stepOfApplicant });
+  const cardProps = usePipelineCardProps({ byId: pipe.byId, jobs: [job], visible: controls.visible });
   const loadingList = listStatus === "loading";
   const total = loadingList ? job.applicants : applicants.length;
   const jobUnlocked = useIsUnlocked()(jobId);
@@ -437,16 +446,14 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
               {detailError ? <ApplicantDetailNote onRetry={reload} className="mb-4" /> : null}
               {applicants.length > 1 ? <ApplicantToolbar controls={controls} /> : null}
               {controls.visible.length === 0 ? (
-                <ApplicantFilterEmpty onClear={controls.clear} className="mt-4" />
+                <ApplicantFilterEmpty onClear={controls.clear} step={controls.step} quick={controls.filters.length > 0} className="mt-4" />
               ) : (
                 <ApplicantGrid
                   applicants={controls.visible}
                   label={`${people(controls.visible.length, "postulante", "postulantes")}, ${SORT_PHRASE[controls.sort]}`}
                   avoidTone={jobTone}
                   className="sm:grid-cols-2 lg:grid-cols-3"
-                  cardProps={(a) => ({
-                    onStatusChange: changeApplicantStatus(setStatus, a),
-                  })}
+                  cardProps={cardProps}
                 />
               )}
             </>

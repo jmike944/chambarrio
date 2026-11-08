@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { useStoreHydration } from "@/lib/store";
 import { LiveSession } from "@/lib/live/session";
+// Side effect: a new demo (or account) starts with a clean demo pipeline on every page.
+import "@/lib/pipeline/demo-reset";
 
 function OfflineBanner() {
   const offline = useOffline();

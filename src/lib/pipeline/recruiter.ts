@@ -1,0 +1,569 @@
+"use client";
+
+/*
+ * The company's side of the pipeline. Both modes, one shape:
+ *  - live: public.applications (+ application_events, application_notes) under RLS. Actions update
+ *    the row; the guard trigger stamps seen/hired/closed, logs the timeline and queues the candidate's
+ *    email. Optimistic everywhere (detail + lists), rolled back + toast.error on failure.
+ *  - demo: ./demo-store seeded from the 16 mock applicants (every step represented), fully
+ *    interactive, same rules (./transitions mirrors the trigger). Never touches Supabase.
+ *
+ * Actions never throw; they resolve { error?: string } and have already toasted the error.
+ */
+import { useEffect, useMemo } from "react";
+import { create } from "zustand";
+import { toast } from "sonner";
+import { APPLICANTS } from "@/lib/data/applicants";
+import { useMyCompany, type MyJob } from "@/lib/data/catalog";
+import type { ApplicationPipeline, ApplicationStatus, PipelineSummary, RecruiterNote } from "@/lib/data/types";
+import { emitLive, onLive } from "@/lib/live/events";
+import { useApp, useHydrated, type WriteResult } from "@/lib/store";
+import { demoRecruiterNotes, demoRecruiterPipeline, patchDemo, useDemoPipeline } from "./demo-store";
+import { deleteNote as deleteNoteLive, fetchNotes, fetchPipeline, fetchSummaries, insertNote, updateApplication } from "./live";
+import { stepOf, type PipelineStep } from "./steps";
+import { PIPELINE_MSG, toSummary, transition, validateNote, type InterviewInput, type PipelineChange } from "./transitions";
+
+const STALE_MS = 30_000;
+
+// ------------------------------------------------------------------ live caches
+
+type AppEntry = {
+  status: "loading" | "ready" | "error";
+  /** Null + ready = not found / not one of my vacancies. */
+  data: ApplicationPipeline | null;
+  notes: RecruiterNote[];
+  notesError?: string;
+  error?: string;
+  fetchedAt: number;
+  refreshing: boolean;
+};
+type ListEntry = { status: "loading" | "ready" | "error"; list: PipelineSummary[]; error?: string; fetchedAt: number; refreshing: boolean };
+type LiveCache = { apps: Record<string, AppEntry>; lists: Record<string, ListEntry> };
+
+const useLiveCache = create<LiveCache>()(() => ({ apps: {}, lists: {} }));
+const cache = () => useLiveCache.getState();
+const setApp = (id: string, e: AppEntry) => useLiveCache.setState((s) => ({ apps: { ...s.apps, [id]: e } }));
+const setList = (key: string, e: ListEntry) => useLiveCache.setState((s) => ({ lists: { ...s.lists, [key]: e } }));
+
+let resetSeq = 0;
+/** Per application / global: bumped on every write so answers that started before it are dropped. */
+const appMut = new Map<string, number>();
+let listMut = 0;
+const appToken = new Map<string, number>();
+const listToken = new Map<string, number>();
+const appFlights = new Map<string, Promise<void>>();
+const listFlights = new Map<string, Promise<void>>();
+/** Mounted hooks per key (refetched on "applicants" / after writes). */
+const activeApps = new Map<string, number>();
+const activeLists = new Map<string, string[]>();
+const activeListCount = new Map<string, number>();
+
+function bump(id: string) {
+  appMut.set(id, (appMut.get(id) ?? 0) + 1);
+  listMut++;
+}
+
+function loadApp(id: string, force = false): Promise<void> {
+  const e = cache().apps[id];
+  if (!force && e && e.status !== "error" && (e.status === "loading" || Date.now() - e.fetchedAt < STALE_MS)) return appFlights.get(id) ?? Promise.resolve();
+  if (!force && appFlights.has(id)) return appFlights.get(id)!;
+  const token = (appToken.get(id) ?? 0) + 1;
+  appToken.set(id, token);
+  const mut = appMut.get(id) ?? 0;
+  const rs = resetSeq;
+  setApp(id, e?.status === "ready" ? { ...e, refreshing: true } : { status: "loading", data: null, notes: [], fetchedAt: 0, refreshing: false });
+  const p = (async () => {
+    const [pipe, notes] = await Promise.all([fetchPipeline(id), fetchNotes(id, useApp.getState().userId)]);
+    if (rs !== resetSeq || appToken.get(id) !== token) return;
+    const cur = cache().apps[id];
+    if ((appMut.get(id) ?? 0) !== mut) {
+      // A write landed meanwhile; this answer may predate it. Ask again.
+      if (cur) setApp(id, { ...cur, refreshing: false });
+      void loadApp(id, true);
+      return;
+    }
+    if (pipe.error !== undefined) {
+      setApp(id, cur?.data ? { ...cur, error: pipe.error, refreshing: false } : { status: "error", data: null, notes: [], error: pipe.error, fetchedAt: 0, refreshing: false });
+      return;
+    }
+    setApp(id, {
+      status: "ready",
+      data: pipe.data,
+      notes: notes.error !== undefined ? (cur?.notes ?? []) : notes.data,
+      notesError: notes.error,
+      fetchedAt: Date.now(),
+      refreshing: false,
+    });
+  })();
+  appFlights.set(id, p);
+  return p.finally(() => {
+    if (appFlights.get(id) === p) appFlights.delete(id);
+  });
+}
+
+function loadList(key: string, jobIds: string[], force = false): Promise<void> {
+  const e = cache().lists[key];
+  if (!force && e && e.status !== "error" && (e.status === "loading" || Date.now() - e.fetchedAt < STALE_MS)) return listFlights.get(key) ?? Promise.resolve();
+  if (!force && listFlights.has(key)) return listFlights.get(key)!;
+  const token = (listToken.get(key) ?? 0) + 1;
+  listToken.set(key, token);
+  const mut = listMut;
+  const rs = resetSeq;
+  setList(key, e?.status === "ready" ? { ...e, refreshing: true } : { status: "loading", list: [], fetchedAt: 0, refreshing: false });
+  const p = (async () => {
+    const r = await fetchSummaries(jobIds);
+    if (rs !== resetSeq || listToken.get(key) !== token) return;
+    const cur = cache().lists[key];
+    if (listMut !== mut) {
+      if (cur) setList(key, { ...cur, refreshing: false });
+      void loadList(key, jobIds, true);
+      return;
+    }
+    if (r.error !== undefined) {
+      setList(key, cur?.status === "ready" ? { ...cur, error: r.error, refreshing: false } : { status: "error", list: [], error: r.error, fetchedAt: 0, refreshing: false });
+      return;
+    }
+    setList(key, { status: "ready", list: r.data, fetchedAt: Date.now(), refreshing: false });
+  })();
+  listFlights.set(key, p);
+  return p.finally(() => {
+    if (listFlights.get(key) === p) listFlights.delete(key);
+  });
+}
+
+function refetchActive() {
+  for (const id of activeApps.keys()) void loadApp(id, true);
+  for (const [key, jobIds] of activeLists) void loadList(key, jobIds, true);
+  // Not on screen: refetched next time they mount.
+  useLiveCache.setState((s) => ({
+    apps: Object.fromEntries(Object.entries(s.apps).map(([k, v]) => [k, activeApps.has(k) ? v : { ...v, fetchedAt: 0 }])),
+    lists: Object.fromEntries(Object.entries(s.lists).map(([k, v]) => [k, activeLists.has(k) ? v : { ...v, fetchedAt: 0 }])),
+  }));
+}
+
+if (typeof window !== "undefined") {
+  onLive("reset", () => {
+    resetSeq++;
+    appFlights.clear();
+    listFlights.clear();
+    useLiveCache.setState({ apps: {}, lists: {} }, true);
+  });
+  onLive("applicants", refetchActive);
+}
+
+// ------------------------------------------------------------------ optimistic plumbing
+
+type Snapshot = { app?: AppEntry; lists: Record<string, ListEntry> };
+
+function snapshot(id: string): Snapshot {
+  const s = cache();
+  return {
+    app: s.apps[id],
+    lists: Object.fromEntries(Object.entries(s.lists).filter(([, e]) => e.list.some((r) => r.id === id))),
+  };
+}
+
+function restore(id: string, snap: Snapshot) {
+  useLiveCache.setState((s) => {
+    const apps = { ...s.apps };
+    if (snap.app) apps[id] = snap.app;
+    return { apps, lists: { ...s.lists, ...snap.lists } };
+  });
+}
+
+/** Writes a pipeline into the detail entry and every cached list row with that id. */
+function applyLocal(p: ApplicationPipeline) {
+  const row = toSummary(p);
+  useLiveCache.setState((s) => {
+    const cur = s.apps[p.id];
+    const apps = cur ? { ...s.apps, [p.id]: { ...cur, data: p } } : s.apps;
+    const lists = Object.fromEntries(
+      Object.entries(s.lists).map(([k, e]) => [k, e.list.some((r) => r.id === p.id) ? { ...e, list: e.list.map((r) => (r.id === p.id ? row : r)) } : e]),
+    );
+    return { apps, lists };
+  });
+}
+
+function setNotesLocal(id: string, fn: (notes: RecruiterNote[]) => RecruiterNote[]) {
+  useLiveCache.setState((s) => {
+    const cur = s.apps[id];
+    return cur ? { apps: { ...s.apps, [id]: { ...cur, notes: fn(cur.notes) } } } : {};
+  });
+}
+
+function fail(error: string): { error: string } {
+  toast.error(error);
+  return { error };
+}
+
+const isLive = () => useApp.getState().mode === "live";
+
+// ------------------------------------------------------------------ actions
+
+async function run(applicationId: string, change: PipelineChange): Promise<WriteResult> {
+  if (!isLive()) {
+    const current = demoRecruiterPipeline(useDemoPipeline.getState(), applicationId);
+    if (!current) return fail(PIPELINE_MSG.notFound);
+    const t = transition(current, change);
+    if (t.error !== undefined) return fail(t.error);
+    if (t.patch) patchDemo((d) => ({ apps: { ...d.apps, [applicationId]: t.next } }));
+    return {};
+  }
+
+  let current = cache().apps[applicationId]?.data ?? null;
+  if (!current) {
+    const r = await fetchPipeline(applicationId);
+    if (r.error !== undefined) return fail(r.error);
+    if (!r.data) return fail(PIPELINE_MSG.notFound);
+    current = r.data;
+  }
+  const t = transition(current, change);
+  if (t.error !== undefined) return fail(t.error);
+  if (!t.patch) return {};
+
+  const snap = snapshot(applicationId);
+  bump(applicationId);
+  applyLocal({ ...t.next, pending: true });
+  const r = await updateApplication(applicationId, t.patch);
+  bump(applicationId);
+  if (r.error) {
+    restore(applicationId, snap);
+    void loadApp(applicationId, true); // e.g. "retiró su postulación": show the real state
+    return fail(r.error);
+  }
+  applyLocal(t.next);
+  if (t.statusChanged) emitLive("applicants"); // every applicant list / counter refetches (ours too)
+  else {
+    void loadApp(applicationId, true);
+    for (const [key, e] of Object.entries(cache().lists)) {
+      if (e.list.some((x) => x.id === applicationId)) void loadList(key, key ? key.split(",") : [], true);
+    }
+  }
+  return {};
+}
+
+/** Marks it as seen (enviada → vista). No-op on any other status. Call it when the company opens the applicant. */
+export function markSeen(applicationId: string): Promise<WriteResult> {
+  return run(applicationId, { kind: "seen" });
+}
+
+/**
+ * Sets the interview (→ entrevista). Calling it again on an "entrevista" reschedules: a new time
+ * logs a new timeline event and re-emails the candidate; changing only place/note doesn't.
+ */
+export function scheduleInterview(applicationId: string, input: InterviewInput): Promise<WriteResult> {
+  return run(applicationId, { kind: "interview", ...input });
+}
+
+/** → contratada, with an optional message (next steps). On a hired one, updates the message only. */
+export function hire(applicationId: string, message?: string | null): Promise<WriteResult> {
+  return run(applicationId, { kind: "hire", message });
+}
+
+/** → cerrada by the company with a courteous message (blank → DEFAULT_DECLINE_MESSAGE). */
+export function decline(applicationId: string, message?: string | null): Promise<WriteResult> {
+  return run(applicationId, { kind: "decline", message });
+}
+
+/** Undo a decline: back to the step before it (not possible once the candidate withdrew). */
+export function reopen(applicationId: string): Promise<WriteResult> {
+  return run(applicationId, { kind: "reopen" });
+}
+
+const tmpId = (p: string) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+/** Adds a private note (newest first). Resolves the saved note. */
+export async function addNote(applicationId: string, body: string): Promise<WriteResult & { note?: RecruiterNote }> {
+  const invalid = validateNote(body);
+  if (invalid) return fail(invalid);
+  const text = body.trim();
+  if (!isLive()) {
+    const note: RecruiterNote = { id: tmpId("n"), body: text, at: new Date().toISOString(), mine: true };
+    patchDemo((d) => ({ notes: { ...d.notes, [applicationId]: [note, ...demoRecruiterNotes(d, applicationId)] } }));
+    return { note };
+  }
+  const temp: RecruiterNote = { id: tmpId("tmp"), body: text, at: new Date().toISOString(), mine: true, pending: true };
+  bump(applicationId);
+  setNotesLocal(applicationId, (ns) => [temp, ...ns]);
+  const r = await insertNote(applicationId, text);
+  bump(applicationId);
+  if (r.error !== undefined) {
+    setNotesLocal(applicationId, (ns) => ns.filter((n) => n.id !== temp.id));
+    return fail(r.error);
+  }
+  setNotesLocal(applicationId, (ns) => ns.map((n) => (n.id === temp.id ? r.data : n)));
+  return { note: r.data };
+}
+
+/** Deletes one of my notes. */
+export async function deleteNote(applicationId: string, noteId: string): Promise<WriteResult> {
+  if (!isLive()) {
+    patchDemo((d) => ({ notes: { ...d.notes, [applicationId]: demoRecruiterNotes(d, applicationId).filter((n) => n.id !== noteId) } }));
+    return {};
+  }
+  if (noteId.startsWith("tmp-")) return {}; // still saving; it can be deleted once it's in
+  const list = cache().apps[applicationId]?.notes ?? [];
+  const index = list.findIndex((n) => n.id === noteId);
+  const removed = list[index];
+  bump(applicationId);
+  setNotesLocal(applicationId, (ns) => ns.filter((n) => n.id !== noteId));
+  const r = await deleteNoteLive(noteId);
+  bump(applicationId);
+  if (r.error) {
+    if (removed) setNotesLocal(applicationId, (ns) => (ns.some((n) => n.id === noteId) ? ns : [...ns.slice(0, index), removed, ...ns.slice(index)]));
+    return fail(r.error);
+  }
+  return {};
+}
+
+/** Puts back a note deleted a moment ago ("Deshacer"): same id, text and time, so it returns to its place. */
+export async function restoreNote(applicationId: string, note: RecruiterNote): Promise<WriteResult> {
+  const back: RecruiterNote = { id: note.id, body: note.body, at: note.at, mine: note.mine };
+  // Newest first, like every notes list.
+  const insertSorted = (ns: RecruiterNote[], n: RecruiterNote) =>
+    ns.some((x) => x.id === n.id) ? ns : [...ns, n].toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  if (!isLive()) {
+    patchDemo((d) => ({ notes: { ...d.notes, [applicationId]: insertSorted(demoRecruiterNotes(d, applicationId), back) } }));
+    return {};
+  }
+  bump(applicationId);
+  setNotesLocal(applicationId, (ns) => insertSorted(ns, { ...back, pending: true }));
+  const r = await insertNote(applicationId, note.body, { id: note.id, at: note.at });
+  bump(applicationId);
+  if (r.error !== undefined) {
+    setNotesLocal(applicationId, (ns) => ns.filter((n) => n.id !== note.id));
+    return fail(r.error);
+  }
+  setNotesLocal(applicationId, (ns) => ns.map((n) => (n.id === note.id ? r.data : n)));
+  return {};
+}
+
+export type PipelineActions = {
+  markSeen: () => Promise<WriteResult>;
+  scheduleInterview: (input: InterviewInput) => Promise<WriteResult>;
+  hire: (message?: string | null) => Promise<WriteResult>;
+  decline: (message?: string | null) => Promise<WriteResult>;
+  reopen: () => Promise<WriteResult>;
+  addNote: (body: string) => Promise<WriteResult & { note?: RecruiterNote }>;
+  deleteNote: (noteId: string) => Promise<WriteResult>;
+  restoreNote: (note: RecruiterNote) => Promise<WriteResult>;
+};
+
+const NO_ID = async () => ({ error: PIPELINE_MSG.notFound });
+
+/** The actions bound to one application id. */
+export function pipelineActions(applicationId: string | null | undefined): PipelineActions {
+  if (!applicationId) {
+    return {
+      markSeen: NO_ID,
+      scheduleInterview: NO_ID,
+      hire: NO_ID,
+      decline: NO_ID,
+      reopen: NO_ID,
+      addNote: NO_ID,
+      deleteNote: NO_ID,
+      restoreNote: NO_ID,
+    };
+  }
+  return {
+    markSeen: () => markSeen(applicationId),
+    scheduleInterview: (input) => scheduleInterview(applicationId, input),
+    hire: (message) => hire(applicationId, message),
+    decline: (message) => decline(applicationId, message),
+    reopen: () => reopen(applicationId),
+    addNote: (body) => addNote(applicationId, body),
+    deleteNote: (noteId) => deleteNote(applicationId, noteId),
+    restoreNote: (note) => restoreNote(applicationId, note),
+  };
+}
+
+// ------------------------------------------------------------------ hooks
+
+function useFocusRefresh(enabled: boolean, cb: () => void) {
+  useEffect(() => {
+    if (!enabled) return;
+    const onFocus = () => {
+      if (document.visibilityState === "visible") cb();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [enabled, cb]);
+}
+
+export type ApplicationPipelineResult = {
+  data: ApplicationPipeline | null;
+  /** The vacancy (any status) from useMyCompany(); null while it loads or if it isn't mine. */
+  job: MyJob | null;
+  /** Newest first. */
+  notes: RecruiterNote[];
+  notesError?: string;
+  loading: boolean;
+  error?: string;
+  /** Loaded, and there's no such application among my vacancies. */
+  notFound: boolean;
+  refreshing: boolean;
+  refresh: () => Promise<void>;
+  actions: PipelineActions;
+};
+
+/** One applicant's full pipeline for the company's applicant page (+ its vacancy and my notes). */
+export function useApplicationPipeline(applicationId: string | null | undefined): ApplicationPipelineResult {
+  const hydrated = useHydrated();
+  const live = useApp((s) => s.mode === "live");
+  const my = useMyCompany();
+  const entry = useLiveCache((s) => (applicationId ? s.apps[applicationId] : undefined));
+  const demoApps = useDemoPipeline((s) => s.apps);
+  const demoNotes = useDemoPipeline((s) => s.notes);
+  const id = applicationId ?? null;
+
+  useEffect(() => {
+    if (!live || !id) return;
+    activeApps.set(id, (activeApps.get(id) ?? 0) + 1);
+    void loadApp(id);
+    return () => {
+      const n = (activeApps.get(id) ?? 1) - 1;
+      if (n <= 0) activeApps.delete(id);
+      else activeApps.set(id, n);
+    };
+  }, [live, id]);
+  const onFocus = useMemo(() => () => (id ? void loadApp(id) : undefined), [id]);
+  useFocusRefresh(live && !!id, onFocus);
+
+  return useMemo((): ApplicationPipelineResult => {
+    const actions = pipelineActions(id);
+    const refresh = () => (live && id ? loadApp(id, true) : Promise.resolve());
+    const jobOf = (p: ApplicationPipeline | null) => (p ? (my.jobs.find((j) => j.id === p.jobId) ?? null) : null);
+    if (!hydrated || !id) {
+      return { data: null, job: null, notes: [], loading: !hydrated, notFound: hydrated && !id, refreshing: false, refresh, actions };
+    }
+    if (!live) {
+      const data = demoRecruiterPipeline({ apps: demoApps }, id);
+      return {
+        data,
+        job: jobOf(data),
+        notes: data ? demoRecruiterNotes({ notes: demoNotes }, id) : [],
+        loading: false,
+        notFound: !data,
+        refreshing: false,
+        refresh,
+        actions,
+      };
+    }
+    const status = entry?.status ?? "loading";
+    return {
+      data: entry?.data ?? null,
+      job: jobOf(entry?.data ?? null),
+      notes: entry?.notes ?? [],
+      notesError: entry?.notesError,
+      loading: status === "loading",
+      error: entry?.error,
+      notFound: status === "ready" && !entry?.data,
+      refreshing: entry?.refreshing ?? false,
+      refresh,
+      actions,
+    };
+  }, [hydrated, live, id, entry, demoApps, demoNotes, my.jobs]);
+}
+
+export type PipelineCounts = Record<PipelineStep, number> & { total: number; active: number };
+
+export type PipelineSummaryResult = {
+  /** Newest first. */
+  data: PipelineSummary[];
+  byId: Record<string, PipelineSummary>;
+  counts: PipelineCounts;
+  loading: boolean;
+  error?: string;
+  refreshing: boolean;
+  refresh: () => Promise<void>;
+};
+
+/** Counts per step; `active` = still in process (enviada + vista + entrevista). */
+export function countSteps(list: Pick<PipelineSummary, "status" | "closedBy">[]): PipelineCounts {
+  const c: PipelineCounts = { enviada: 0, vista: 0, entrevista: 0, contratada: 0, descartada: 0, retirada: 0, total: list.length, active: 0 };
+  for (const r of list) c[stepOf(r)]++;
+  c.active = c.enviada + c.vista + c.entrevista;
+  return c;
+}
+
+/** Interviews still ahead (or started less than `graceMs` ago, default 2 h), soonest first. */
+export function upcomingInterviews(list: PipelineSummary[], now = Date.now(), graceMs = 2 * 3_600_000): PipelineSummary[] {
+  return list
+    .filter((r) => r.status === "entrevista" && r.interviewAt && Date.parse(r.interviewAt) + graceMs >= now)
+    .toSorted((a, b) => Date.parse(a.interviewAt!) - Date.parse(b.interviewAt!));
+}
+
+/**
+ * Overlays the pipeline status on rows from useApplicants / useApplicantProfiles (their demo
+ * statuses are not synced with the pipeline, and live they refetch a moment later).
+ */
+export function withPipelineStatus<T extends { id: string; status: ApplicationStatus | null }>(rows: T[], byId: Record<string, PipelineSummary>): T[] {
+  return rows.map((r) => {
+    const p = byId[r.id];
+    return p && p.status !== r.status ? { ...r, status: p.status } : r;
+  });
+}
+
+const EMPTY_LIST: PipelineSummary[] = [];
+
+/**
+ * Light status rows for one vacancy's applicants (or, without jobId, all my vacancies) — for list
+ * chips, counters and "próximas entrevistas". Live: one query for all the vacancies.
+ */
+export function usePipelineSummary(jobId?: string | null): PipelineSummaryResult {
+  const hydrated = useHydrated();
+  const live = useApp((s) => s.mode === "live");
+  const my = useMyCompany();
+  const demoApps = useDemoPipeline((s) => s.apps);
+  const jobIds = useMemo(() => (jobId ? [jobId] : my.jobs.map((j) => j.id).toSorted()), [jobId, my.jobs]);
+  const key = jobIds.join(",");
+  const ready = live && (jobId ? true : my.status === "ready");
+  const entry = useLiveCache((s) => s.lists[key]);
+
+  useEffect(() => {
+    if (!ready || !key) return;
+    const ids = key.split(",");
+    activeLists.set(key, ids);
+    activeListCount.set(key, (activeListCount.get(key) ?? 0) + 1);
+    void loadList(key, ids);
+    return () => {
+      const n = (activeListCount.get(key) ?? 1) - 1;
+      if (n <= 0) {
+        activeListCount.delete(key);
+        activeLists.delete(key);
+      } else activeListCount.set(key, n);
+    };
+  }, [ready, key]);
+  const onFocus = useMemo(() => () => (key ? void loadList(key, key.split(",")) : undefined), [key]);
+  useFocusRefresh(ready && !!key, onFocus);
+
+  return useMemo((): PipelineSummaryResult => {
+    const refresh = () => (ready && key ? loadList(key, key.split(","), true) : Promise.resolve());
+    const done = (data: PipelineSummary[], rest: Partial<PipelineSummaryResult> = {}): PipelineSummaryResult => ({
+      data,
+      byId: Object.fromEntries(data.map((r) => [r.id, r])),
+      counts: countSteps(data),
+      loading: false,
+      refreshing: false,
+      refresh,
+      ...rest,
+    });
+    if (!hydrated) return done(EMPTY_LIST, { loading: true });
+    if (!live) {
+      const rows = APPLICANTS.filter((a) => !jobId || a.jobId === jobId)
+        .map((a) => demoRecruiterPipeline({ apps: demoApps }, a.id))
+        .filter((p): p is ApplicationPipeline => !!p)
+        .map(toSummary)
+        .toSorted((a, b) => Date.parse(b.appliedAt) - Date.parse(a.appliedAt));
+      return done(rows);
+    }
+    if (!jobId && my.status !== "ready") return done(EMPTY_LIST, { loading: my.status === "loading", error: my.error });
+    if (!key) return done(EMPTY_LIST);
+    const status = entry?.status ?? "loading";
+    return done(entry?.list ?? EMPTY_LIST, { loading: status === "loading", error: entry?.error, refreshing: entry?.refreshing ?? false });
+  }, [hydrated, live, jobId, my.status, my.error, key, ready, entry, demoApps]);
+}

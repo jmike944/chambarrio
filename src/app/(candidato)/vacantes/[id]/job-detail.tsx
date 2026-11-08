@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -23,23 +24,44 @@ import {
   Tick02Icon,
   WalkingIcon,
   Message01Icon,
+  LockIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Panel, StatTile, surface, type BlockTone } from "@/components/chamba/primitives";
-import { CountUp, Reveal, StepList, Sticker, useConfetti } from "@/components/chamba/motion";
+import { CountUp, Reveal, Sticker, useConfetti } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
 import { Scene } from "@/components/chamba/art/scenes";
 import { Mascot } from "@/components/chamba/art/mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import { useCatalog, useJob } from "@/lib/data/catalog";
-import type { Branch, Company, Job } from "@/lib/data/types";
+import type { ApplicationPipeline, Branch, Company, Job } from "@/lib/data/types";
 import { bandColor, bandFor, BAND_LABEL, commuteOptions, distanceKm, formatKm, type CommuteMode, type LatLng } from "@/lib/geo";
 import { formatMinutesAgo, formatMXN, formatNumber, formatPay, PERIOD_LONG } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import {
+  STEP_META,
+  UNHIRE_COPY,
+  capitalize,
+  fmtDate,
+  fmtDateLong,
+  fmtDayTime,
+  fmtTime,
+  relativeDayWord,
+  stepOf,
+  useMyPipeline,
+  useNow,
+  wasHiredBeforeClose,
+  type PipelineStep,
+} from "@/lib/pipeline";
+import { STRENGTH_LEVEL_LABEL, strengthLevel } from "@/lib/profile-strength";
+import { ApplicantAvatar } from "@/components/empresa/applicant-avatar";
 import { CatalogErrorPanel, GoneScene, InkSkeleton, LoadingNote } from "../_seeker/states";
+import { appliedRecently, candidateTitle, interviewState, STEP_TONE } from "../../postulaciones/_pipeline/model";
+import { useMyStrength } from "../../postulaciones/_pipeline/profile";
+import { MiniTrack, NotAppliedSteps, PipelineStatus, StatusHeader } from "../../postulaciones/_pipeline/status";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
@@ -166,7 +188,7 @@ function BranchesPanel({ company, stops, job }: { company: Company; stops: Branc
   const nearestId = stops[0]?.id;
   const total = stops.reduce((n, b) => n + b.jobs.length, 0);
   return (
-    <Panel aria-labelledby="sucursales-titulo" className="border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
+    <Panel aria-labelledby="sucursales-titulo" className="h-full border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
       <header className="mb-1 flex items-center gap-3">
         <span className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white dark:bg-limon dark:text-ink">
           <HugeiconsIcon icon={Store01Icon} className="size-5" strokeWidth={2} />
@@ -343,11 +365,13 @@ function DetailGone() {
 
 /**
  * Reads the vacancy from the catalog (demo mock or live Supabase; live fetches it by id when it isn't
- * in the nearby list). Not-found only once the catalog is ready.
+ * in the nearby list). Not-found only once the catalog is ready. A vacancy that closed after the
+ * person applied still shows their application (live: candidates can't read closed vacancies).
  */
 export function JobDetail({ jobId }: { jobId: string }) {
   const { status, error, job, company, branch } = useJob(jobId);
   const { jobsAtBranch, source } = useCatalog();
+  const mine = useMyPipeline(jobId);
   if (job && company) {
     return <JobDetailView job={job} company={company} branch={branch} jobsAtBranch={jobsAtBranch} live={source === "live"} />;
   }
@@ -360,8 +384,181 @@ export function JobDetail({ jobId }: { jobId: string }) {
       </div>
     );
   }
+  if (mine.data) return <GoneWithApplication p={mine.data} />;
   return <DetailGone />;
 }
+
+/** The vacancy closed (or isn't visible anymore) but this person applied: keep their process visible. */
+function GoneWithApplication({ p }: { p: ApplicationPipeline }) {
+  const now = useNow();
+  useScrollToStatus(!!now);
+  return (
+    <div className="pt-5 pb-28 lg:pt-10">
+      <BackLink />
+      <p className={cn("mt-5 flex items-center gap-2.5 rounded-panel border-2 border-ink px-4 py-3 font-semibold", surface("cielo"), HARD_SM)}>
+        <HugeiconsIcon icon={Store01Icon} className="size-5 shrink-0" strokeWidth={2.2} />
+        Esta vacante ya no recibe postulaciones. Tu proceso sigue aquí.
+      </p>
+      {now ? <StatusBlock p={p} now={now} tone={STEP_TONE[stepOf(p)]} className="mt-5" /> : <div className="mt-5 h-96 animate-pulse rounded-panel bg-card" />}
+    </div>
+  );
+}
+
+/**
+ * Opening /vacantes/x#tu-postulacion (from Avisos) lands on the application block once it renders.
+ * Safe to run twice (StrictMode runs effect → cleanup → effect in dev; a kept-alive page re-runs it
+ * when shown again): nothing is marked done until the frame that scrolls actually runs.
+ */
+function useScrollToStatus(ready: boolean) {
+  useEffect(() => {
+    if (!ready || window.location.hash !== `#${STATUS_ID}`) return;
+    const id = requestAnimationFrame(() => document.getElementById(STATUS_ID)?.scrollIntoView({ block: "start" }));
+    return () => cancelAnimationFrame(id);
+  }, [ready]);
+}
+
+const STATUS_ID = "tu-postulacion";
+
+function scrollToStatus() {
+  document.getElementById(STATUS_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/** "Tu postulación": header (title, chip, mini track, mascot) + the state-aware body. */
+function StatusBlock({
+  p,
+  now,
+  tone,
+  job,
+  company,
+  branch,
+  nudge,
+  title,
+  className,
+}: {
+  p: ApplicationPipeline;
+  now: number;
+  tone: BlockTone;
+  job?: Job;
+  company?: Company;
+  branch?: Branch;
+  /** Show the "Completa tu perfil" nudge (off while the apply confirmation already shows it). */
+  nudge?: boolean;
+  /** Replaces the step's title (the apply confirmation above already says it arrived). */
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <section
+      id={STATUS_ID}
+      aria-labelledby="tu-postulacion-titulo"
+      className={cn("relative isolate scroll-mt-6 animate-rise rounded-panel border-2 border-ink p-4 sm:p-6", surface(tone), HARD, className)}
+    >
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]">
+        <span className="absolute -top-12 -left-12 size-44 rounded-full bg-dots text-ink/12" />
+      </span>
+      <StatusHeader p={p} now={now} title={title} id="tu-postulacion-titulo" className="mb-4 sm:mb-5" />
+      <PipelineStatus p={p} now={now} job={job} company={company} branch={branch} nudge={nudge} />
+    </section>
+  );
+}
+
+/** Right after applying: what the company sees now, and a gentle nudge to complete the profile. */
+function ApplyConfirmation({ company, km, tone }: { company: Company; km: number; tone: BlockTone }) {
+  const colonia = useApp((s) => (s.hasHome && s.colonia ? s.colonia : null));
+  const experience = useApp((s) => s.experience);
+  const jobsBefore = useApp((s) => s.workExperiences.length);
+  const strength = useMyStrength();
+  const level = strengthLevel(strength.value);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Mobile: the button lives in the bottom bar; bring the confirmation into view if it's hidden.
+    if (r.top > window.innerHeight - 160 || r.bottom < 0) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+  const facts = [
+    { label: "Colonia", value: colonia ?? "Saltillo" },
+    { label: "Distancia", value: `A ${formatKm(km)}` },
+    { label: "Experiencia", value: jobsBefore > 0 ? `${experience} · ${jobsBefore} ${jobsBefore === 1 ? "empleo" : "empleos"}` : experience },
+  ];
+  return (
+    <section
+      ref={ref}
+      aria-live="polite"
+      aria-labelledby="ya-quedo-titulo"
+      className={cn("@container relative isolate scroll-mt-6 animate-pop-in overflow-hidden rounded-panel border-2 border-ink p-4 sm:p-6", surface(tone), HARD)}
+    >
+      <span aria-hidden className="pointer-events-none absolute -right-10 -bottom-12 -z-10 size-48 rounded-full bg-dots text-ink/12" />
+      <div className="grid gap-4 @2xl:grid-cols-[0.9fr_1.1fr] @2xl:grid-rows-[auto_1fr] @2xl:gap-x-6">
+        <div className="min-w-0 @2xl:col-start-1 @2xl:row-start-1">
+          <div className="flex items-start gap-3">
+            <Scene name="exito" className="-mt-1 -ml-1 w-24 shrink-0 sm:w-28" />
+            <div className="min-w-0">
+              <p className="text-[0.75rem] font-extrabold tracking-[0.14em] uppercase">¡Ya quedó!</p>
+              <h2 id="ya-quedo-titulo" className="mt-1 font-display text-[1.45rem] leading-[1.05] font-extrabold tracking-[-0.03em] sm:text-[1.8rem]">
+                {company.name} ya tiene tu solicitud
+              </h2>
+            </div>
+          </div>
+          <p className="mt-3 text-[0.98rem] leading-snug">
+            Desde ahora te ve en su lista. Cuando la revisen, cuando te inviten a entrevista o si hay cambios, te avisamos aquí.
+          </p>
+        </div>
+
+        <div className="@container min-w-0 rounded-tile border-2 border-ink bg-white p-4 text-ink shadow-[4px_4px_0_0_var(--ink)] @2xl:col-start-2 @2xl:row-span-2 @2xl:row-start-1">
+          <p className="text-[0.72rem] font-extrabold tracking-[0.14em] uppercase">Esto ve {company.name} ahora</p>
+          <div className="mt-3 flex items-center gap-3">
+            <ApplicantAvatar name={null} locked />
+            <div className="min-w-0">
+              <p className="font-display text-[1.15rem] leading-tight font-extrabold">Tu ficha</p>
+              <p className="flex items-start gap-1.5 text-[0.88rem] leading-snug text-ink/70">
+                <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.4} />
+                Tu nombre y teléfono se ven cuando abren tus datos
+              </p>
+            </div>
+          </div>
+          <dl className="mt-3 grid grid-cols-1 gap-2 @sm:grid-cols-3">
+            {facts.map((f) => (
+              <div key={f.label} className="min-w-0 rounded-xl bg-ink/[0.05] px-3 py-2">
+                <dt className="text-[0.7rem] font-bold tracking-[0.12em] text-ink/60 uppercase">{f.label}</dt>
+                <dd className="font-semibold">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mt-3">
+            <p className="flex items-baseline justify-between gap-2 text-[0.88rem]">
+              <span className="font-semibold">Tu perfil</span>
+              <span className="tabular-nums">
+                <strong className="font-display text-[1.15rem] font-extrabold">{strength.value}%</strong> · {STRENGTH_LEVEL_LABEL[level]}
+              </span>
+            </p>
+            <div className="mt-1.5 h-3 overflow-hidden rounded-full border-2 border-ink bg-ink/[0.06]">
+              <div className="h-full origin-left animate-grow rounded-full bg-nopal" style={{ width: `${Math.max(6, strength.value)}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap @2xl:col-start-1 @2xl:row-start-2 @2xl:self-end">
+          {strength.low ? (
+            <Link href="/perfil" className={INK_LINK}>
+              Completa tu perfil y destaca
+              <HugeiconsIcon icon={ArrowRight01Icon} className="size-5" strokeWidth={2.2} />
+            </Link>
+          ) : null}
+          <Link href="/postulaciones" className={WHITE_LINK}>
+            Ver mis postulaciones
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const INK_LINK =
+  "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink px-5 text-[0.98rem] font-semibold text-white outline-none focus-visible:ring-3 focus-visible:ring-ink/40";
+const WHITE_LINK =
+  "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-ink bg-white px-5 text-[0.98rem] font-semibold text-ink outline-none hover:bg-white/90 focus-visible:ring-3 focus-visible:ring-ink/40";
 
 function JobDetailView({
   job,
@@ -380,11 +577,17 @@ function JobDetailView({
   const home = useApp((s) => s.home);
   const signedIn = useApp((s) => s.signedIn);
   const saved = useApp((s) => s.saved.includes(jobId));
-  const applied = useApp((s) => s.applications.some((a) => a.jobId === jobId));
+  const appliedInStore = useApp((s) => s.applications.some((a) => a.jobId === jobId));
   const apply = useApp((s) => s.apply);
   const toggleSaved = useApp((s) => s.toggleSaved);
   const fire = useConfetti();
+  const { data: p } = useMyPipeline(jobId);
+  const now = useNow();
+  const [justApplied, setJustApplied] = useState(false);
+  useScrollToStatus(!!p && !!now);
 
+  const applied = appliedInStore || !!p;
+  const step = p ? stepOf(p) : null;
   const multi = company.locations.length > 1;
   const km = distanceKm(home, job.location);
   const stops = multi ? branchStops(company, home, jobsAtBranch) : [];
@@ -392,14 +595,17 @@ function JobDetailView({
   const band = bandFor(km);
   const commutes = commuteOptions(km);
   const fastest = commutes.reduce((a, b) => (b.minutes < a.minutes ? b : a), commutes[0]);
-  const waText = encodeURIComponent(
-    `Hola, vi la vacante de ${job.title} en Chambarrio y me interesa. ¿Sigue disponible?`,
-  );
+  const smsText = encodeURIComponent(`Hola, vi la vacante de ${job.title} en Chambarrio y me interesa. ¿Sigue disponible?`);
   const category = CATEGORY_BY_ID[job.category];
 
   const heroTone = CATEGORY_BLOCK[job.category];
   const tones = PASTELS.filter((t) => t !== heroTone);
   const successTone: BlockTone = heroTone === "limon" ? "menta" : "limon";
+  const statusTone: BlockTone = !step ? "sol" : STEP_TONE[step] !== heroTone ? STEP_TONE[step] : STEP_TONE[step] === "menta" ? "cielo" : "menta";
+  const showConfirmation = !!p && step === "enviada" && (justApplied || appliedRecently(p, now));
+  // Panels right under the status block never repeat its colour.
+  const comoTone: BlockTone = tones[4] ?? tones[1];
+  const piden: BlockTone = [tones[3], ...tones].find((t) => t !== statusTone && t !== comoTone) ?? tones[3];
   const initials = company.name
     .split(/\s+/)
     .filter((w) => w.length > 2)
@@ -416,20 +622,21 @@ function JobDetailView({
     const origin = e.currentTarget;
     if (!live) {
       apply(jobId);
+      setJustApplied(true);
       fire({ origin, count: 56, colors: CONFETTI });
-      toast.success("¡Ya quedó! Postulación enviada", {
-        description: `${company.name} ya tiene tu solicitud. Te avisamos por SMS o correo.`,
-      });
+      toast.success("¡Ya quedó! Postulación enviada", { description: `${company.name} ya tiene tu solicitud.` });
       return;
     }
-    // Live: the button flips to "Ya te postulaste" at once; celebrate only once the server agrees
-    // (on error the store rolls back and toasts by itself).
+    // Live: the button flips at once; celebrate only once the server agrees (on error the store
+    // rolls back and toasts by itself).
+    setJustApplied(true);
     const r = await apply(jobId);
-    if (r.error) return;
+    if (r.error) {
+      setJustApplied(false);
+      return;
+    }
     fire({ origin, count: 56, colors: CONFETTI });
-    toast.success("¡Ya quedó! Postulación enviada", {
-      description: `${company.name} ya tiene tu solicitud. Sigue el avance en tus postulaciones.`,
-    });
+    toast.success("¡Ya quedó! Postulación enviada", { description: `${company.name} ya tiene tu solicitud.` });
   }
 
   async function onSave() {
@@ -442,47 +649,53 @@ function JobDetailView({
     if (!r.error) toast(saved ? "Quitada de tus guardadas" : "Guardada para después");
   }
 
-  /** CTA cluster — lives on the violet action block (mobile bar; `stacked` in the narrower desktop aside). */
-  const renderActions = (stacked = false) => (
-    <div className="flex flex-col gap-2.5">
-      {needsAccount ? (
-        <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
-          <Link href="/entrar">Entra para postularte</Link>
-        </Button>
-      ) : (
+  /** The big lime button: apply, or (once applied) jump to the application's status. */
+  const primary = (compact: boolean) =>
+    needsAccount ? (
+      <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
+        <Link href="/entrar">Entra para postularte</Link>
+      </Button>
+    ) : applied ? (
       <Button
         variant="lime"
         size="xl"
-        className={cn("w-full border-2 border-ink text-[1.05rem] font-bold disabled:opacity-100", !applied && HARD_SM)}
-        onClick={onApply}
-        disabled={applied}
+        className="h-auto min-h-14 w-full flex-col gap-0 border-2 border-ink py-1.5 text-[1.02rem] leading-tight font-bold"
+        onClick={scrollToStatus}
       >
-        {applied ? (
-          <>
-            <HugeiconsIcon icon={Tick02Icon} className="size-5" strokeWidth={2.4} />
-            Ya te postulaste
-          </>
-        ) : (
-          "¡Postularme!"
-        )}
+        <span className="inline-flex items-center gap-1.5">
+          <HugeiconsIcon icon={Tick02Icon} className="size-5" strokeWidth={2.4} />
+          {step === "descartada" || step === "retirada" ? "Postulación cerrada" : step === "contratada" ? "¡Te contrataron!" : "Ya te postulaste"}
+        </span>
+        <span className="text-[0.82rem] font-semibold opacity-75">
+          {!compact && p && step ? actionLine(p, step, now) : "Ver mi postulación"}
+        </span>
       </Button>
-      )}
+    ) : (
+      <Button variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)} onClick={onApply}>
+        ¡Postularme!
+      </Button>
+    );
+
+  /** CTA cluster — lives on the violet action block (mobile bar; `stacked` in the narrower desktop aside). */
+  const renderActions = (stacked = false) => (
+    <div className="flex flex-col gap-2.5">
+      {primary(stacked)}
       <div className={cn("grid gap-2.5", !hasPhone ? "grid-cols-1" : stacked ? "grid-cols-2" : "grid-cols-[1fr_1fr_auto]")}>
         {hasPhone ? (
-        <>
-        <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-          <a href={`sms:+52${job.phone}?&body=${waText}`}>
-            <HugeiconsIcon icon={Message01Icon} className="size-5 text-nopal" strokeWidth={2} />
-            SMS
-          </a>
-        </Button>
-        <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-          <a href={`tel:+52${job.phone}`}>
-            <HugeiconsIcon icon={Call02Icon} className="size-5" strokeWidth={2} />
-            Llamar
-          </a>
-        </Button>
-        </>
+          <>
+            <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
+              <a href={`sms:+52${job.phone}?&body=${smsText}`}>
+                <HugeiconsIcon icon={Message01Icon} className="size-5 text-nopal" strokeWidth={2} />
+                SMS
+              </a>
+            </Button>
+            <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
+              <a href={`tel:+52${job.phone}`}>
+                <HugeiconsIcon icon={Call02Icon} className="size-5" strokeWidth={2} />
+                Llamar
+              </a>
+            </Button>
+          </>
         ) : null}
         <Button
           variant="white"
@@ -505,27 +718,153 @@ function JobDetailView({
     </div>
   );
 
+  const queVasAHacer = (
+    <Panel className="flex h-full flex-col border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
+      <BlockHeader icon={Note01Icon} title="Qué vas a hacer" onCard />
+      <p className="text-[1.05rem] leading-relaxed">{job.description}</p>
+      <dl className="mt-auto grid grid-cols-2 gap-2.5 pt-5">
+        <Fact label="Horario" value={job.schedule} className="col-span-2" />
+        <Fact label="Jornada" value={job.type} />
+        <Fact label="Experiencia" value={job.experience} />
+      </dl>
+    </Panel>
+  );
+
+  const quePiden = (
+    <Panel tone={piden} className={cn("h-full overflow-hidden border-2 border-ink", HARD)}>
+      <BlockHeader icon={CheckListIcon} title="Qué piden" />
+      <ul className="space-y-2">
+        {job.requirements.map((r, i) => (
+          <li
+            key={r}
+            className="flex animate-rise items-start gap-3 rounded-tile bg-white/55 p-3 text-[1.02rem] leading-snug font-medium"
+            style={{ "--i": i } as CSSVars}
+          >
+            <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-md border-2 border-ink bg-block-sol text-ink">
+              <HugeiconsIcon icon={Tick02Icon} className="size-4" strokeWidth={3} />
+            </span>
+            <span className="pt-0.5">{r}</span>
+          </li>
+        ))}
+      </ul>
+
+      <h3 className="mt-6 mb-3 font-display text-[1.15rem] font-extrabold">Prestaciones</h3>
+      <ul className="flex flex-wrap gap-2.5">
+        {job.benefits.map((b, i) => (
+          <li key={b} className="animate-pop-in" style={{ "--i": i, rotate: `${i % 2 === 0 ? -2 : 2}deg` } as CSSVars}>
+            <span
+              className={cn(
+                "inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-ink px-3.5 text-[0.95rem] font-semibold text-ink",
+                CHIP_BG[i % CHIP_BG.length],
+                HARD_SM,
+              )}
+            >
+              <HugeiconsIcon icon={Tick02Icon} className="size-4" strokeWidth={2.6} />
+              {b}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+
+  const comoLlegar = (
+    <Panel tone={comoTone} className={cn("@container flex h-full flex-col border-2 border-ink", HARD)}>
+      <BlockHeader icon={Route01Icon} title="Cómo llegar" />
+      <ul className="grid gap-2 @lg:grid-cols-2">
+        {commutes.map((c) => {
+          const best = c.mode === fastest.mode;
+          return (
+            <li
+              key={c.mode}
+              className={cn(
+                "group relative flex items-center gap-3 rounded-tile border-2 p-3",
+                best ? "border-ink bg-white/80" : "border-transparent bg-white/45",
+              )}
+            >
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white">
+                <HugeiconsIcon icon={MODE_ICON[c.mode]} className="size-5 group-hover:animate-wiggle" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[1.02rem] leading-tight font-semibold">{c.label}</span>
+                <span className="block text-sm text-muted-foreground tabular-nums">
+                  {c.costPerDay === 0 ? "Gratis" : `${formatMXN(c.costPerDay)} al día`}
+                </span>
+              </span>
+              <span className="shrink-0 text-right font-display text-[1.35rem] leading-none font-extrabold tabular-nums">
+                {c.minutes}
+                <span className="ml-0.5 font-sans text-sm font-semibold">min</span>
+              </span>
+              {best ? (
+                <span className="absolute -top-2.5 left-3 rounded-md bg-ink px-1.5 py-0.5 text-[0.65rem] font-bold tracking-[0.12em] text-limon uppercase">
+                  Más rápido
+                </span>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-auto pt-3 text-sm text-muted-foreground">Tiempos estimados por calle, ida. Costos de ida y vuelta.</p>
+    </Panel>
+  );
+
+  const queSigue = (
+    <Panel tone="cielo" className={cn("relative flex h-full flex-col overflow-hidden border-2 border-ink", HARD)}>
+      <div className="flex items-start justify-between gap-3">
+        <BlockHeader icon={Clock01Icon} title="¿Qué sigue?" />
+        <Mascot mood="saluda" prop="casco" size={72} className="-mt-2 -mr-1 shrink-0" />
+      </div>
+      <NotAppliedSteps className="-mt-1" />
+    </Panel>
+  );
+
+  /** Company card. `wide` (alone in its row) lays out horizontally; `fill` grows with art at the bottom. */
+  const empresa = (fill: boolean) => (
+    <Panel tone={tones[0]} className={cn("flex h-full flex-col overflow-hidden border-2 border-ink", HARD)}>
+      <div className="flex items-center gap-3.5">
+        <Avatar className="size-14 border-2 border-ink">
+          <AvatarFallback className="bg-ink font-display text-lg font-extrabold text-limon">{initials || "E"}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[0.72rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">
+            <HugeiconsIcon icon={Building06Icon} className="size-4" strokeWidth={2} />
+            Sobre la empresa
+          </p>
+          <h2 className="font-display text-[1.35rem] leading-tight font-extrabold tracking-[-0.03em]">{company.name}</h2>
+        </div>
+      </div>
+      <ul className="mt-4 flex flex-wrap gap-2 text-[0.9rem] font-semibold">
+        {[company.kind, company.employees, multi ? `${company.locations.length} sucursales` : job.colonia].filter(Boolean).map((t) => (
+          <li key={t} className="inline-flex h-8 items-center rounded-full bg-white/60 px-3">
+            {t}
+          </li>
+        ))}
+      </ul>
+      {company.about ? <p className="mt-4 text-[1.02rem] leading-relaxed">{company.about}</p> : null}
+      {/* Desktop, next to a taller panel: the art takes only the leftover height (never adds any). */}
+      {fill ? (
+        <div aria-hidden className="relative mt-4 hidden min-h-0 flex-1 lg:block">
+          <Scene name="negocio" className="absolute inset-x-0 bottom-0 h-full max-h-60 w-full" />
+        </div>
+      ) : null}
+    </Panel>
+  );
+
   return (
     <div className="pt-5 pb-48 lg:pt-10 lg:pb-0">
       <BackLink />
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-12">
-        <div className="min-w-0 space-y-5 lg:col-span-8">
+      {/* Desktop: rows of panels whose heights match (grid rows stretch), so no column ends early. */}
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
+        <div className="flex min-w-0 flex-col gap-5 lg:col-span-8">
           {/* ------------------------------------------------ hero: category block + huge moving art */}
           <div className="relative animate-rise">
             <section
               aria-labelledby="vacante-titulo"
-              className={cn(
-                "relative isolate overflow-hidden rounded-panel border-2 border-ink p-5 pb-0 sm:p-7 sm:pb-0",
-                surface(heroTone),
-                HARD,
-              )}
+              className={cn("relative isolate overflow-hidden rounded-panel border-2 border-ink p-5 pb-0 sm:p-7 sm:pb-0", surface(heroTone), HARD)}
             >
               <span aria-hidden className="pointer-events-none absolute -top-10 -left-10 -z-20 size-48 rounded-full bg-dots text-ink/12" />
-              <span
-                aria-hidden
-                className="pointer-events-none absolute -top-2 -right-7 -z-10 size-32 rotate-[8deg] sm:-top-4 sm:-right-4 sm:size-56"
-              >
+              <span aria-hidden className="pointer-events-none absolute -top-2 -right-7 -z-10 size-32 rotate-[8deg] sm:-top-4 sm:-right-4 sm:size-56">
                 <span className="block size-full animate-float">
                   <CategoryArt category={job.category} animated className="size-full" />
                 </span>
@@ -585,8 +924,8 @@ function JobDetailView({
             </div>
           </div>
 
-          {/* ------------------------------------------------ stat tiles in three pastels */}
-          <div className="grid grid-cols-3 gap-2.5 pt-4 sm:gap-3">
+          {/* ------------------------------------------------ stat tiles in three pastels (grow to the action block's height) */}
+          <div className="grid flex-1 grid-cols-3 gap-2.5 pt-4 sm:gap-3">
             {[
               {
                 label: "Sueldo",
@@ -619,219 +958,193 @@ function JobDetailView({
               </div>
             ))}
           </div>
-
-          {alt ? <CloserBranchNudge company={company} alt={alt} savedKm={km - alt.branch.km} /> : null}
-
-          {/* ------------------------------------------------ success moment */}
-          {applied ? (
-            <Panel
-              tone={successTone}
-              aria-live="polite"
-              className={cn("flex animate-pop-in flex-wrap items-center gap-x-4 gap-y-3 overflow-hidden border-2 border-ink sm:flex-nowrap sm:gap-x-6", HARD)}
-            >
-              <div className="w-24 shrink-0 sm:w-40">
-                <Scene name="exito" className="w-full" />
-              </div>
-              <div className="min-w-0 flex-1 basis-40">
-                <p className="text-[0.75rem] font-extrabold tracking-[0.14em] uppercase">¡Ya quedó!</p>
-                <h2 className="mt-1 font-display text-[1.45rem] leading-[1.05] font-extrabold tracking-[-0.03em] sm:text-[1.8rem]">
-                  Tu solicitud ya va en camino
-                </h2>
-                <p className="mt-1.5 text-[0.95rem] text-muted-foreground">
-                  {company.name} te contacta por llamada o SMS. Sigue el avance en tus postulaciones.
-                </p>
-                <Button asChild variant="white" size="lg" className="mt-3 hidden sm:inline-flex border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-                  <Link href="/postulaciones">Ver mis postulaciones</Link>
-                </Button>
-              </div>
-              <Button asChild variant="white" size="lg" className="w-full sm:hidden border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-                <Link href="/postulaciones">Ver mis postulaciones</Link>
-              </Button>
-            </Panel>
-          ) : null}
-
-          {/* ------------------------------------------------ what you'll do */}
-          <Reveal inView>
-            <Panel className="border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
-              <BlockHeader icon={Note01Icon} title="Qué vas a hacer" onCard />
-              <p className="text-[1.05rem] leading-relaxed">{job.description}</p>
-              <dl className="mt-5 grid grid-cols-2 gap-2.5">
-                <Fact label="Horario" value={job.schedule} className="col-span-2" />
-                <Fact label="Jornada" value={job.type} />
-                <Fact label="Experiencia" value={job.experience} />
-              </dl>
-            </Panel>
-          </Reveal>
-
-          {/* ------------------------------------------------ requirements + benefits */}
-          <Reveal inView>
-            <Panel tone={tones[3]} className={cn("overflow-hidden border-2 border-ink", HARD)}>
-              <BlockHeader icon={CheckListIcon} title="Qué piden" />
-              <ul className="space-y-2">
-                {job.requirements.map((r, i) => (
-                  <li
-                    key={r}
-                    className="flex animate-rise items-start gap-3 rounded-tile bg-white/55 p-3 text-[1.02rem] leading-snug font-medium"
-                    style={{ "--i": i } as CSSVars}
-                  >
-                    <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-md border-2 border-ink bg-block-sol text-ink">
-                      <HugeiconsIcon icon={Tick02Icon} className="size-4" strokeWidth={3} />
-                    </span>
-                    <span className="pt-0.5">{r}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <h3 className="mt-6 mb-3 font-display text-[1.15rem] font-extrabold">Prestaciones</h3>
-              <ul className="flex flex-wrap gap-2.5">
-                {job.benefits.map((b, i) => (
-                  <li
-                    key={b}
-                    className="animate-pop-in"
-                    style={{ "--i": i, rotate: `${i % 2 === 0 ? -2 : 2}deg` } as CSSVars}
-                  >
-                    <span
-                      className={cn(
-                        "inline-flex h-10 items-center gap-1.5 rounded-full border-2 border-ink px-3.5 text-[0.95rem] font-semibold text-ink",
-                        CHIP_BG[i % CHIP_BG.length],
-                        HARD_SM,
-                      )}
-                    >
-                      <HugeiconsIcon icon={Tick02Icon} className="size-4" strokeWidth={2.6} />
-                      {b}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          </Reveal>
-
-          {/* ------------------------------------------------ commute */}
-          <Reveal inView>
-            <Panel tone={tones[4] ?? tones[1]} className={cn("border-2 border-ink", HARD)}>
-              <BlockHeader icon={Route01Icon} title="Cómo llegar" />
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {commutes.map((c) => {
-                  const best = c.mode === fastest.mode;
-                  return (
-                    <li
-                      key={c.mode}
-                      className={cn(
-                        "group relative flex items-center gap-3 rounded-tile border-2 p-3",
-                        best ? "border-ink bg-white/80" : "border-transparent bg-white/45",
-                      )}
-                    >
-                      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white">
-                        <HugeiconsIcon icon={MODE_ICON[c.mode]} className="size-5 group-hover:animate-wiggle" strokeWidth={2} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[1.02rem] leading-tight font-semibold">{c.label}</span>
-                        <span className="block text-sm text-muted-foreground tabular-nums">
-                          {c.costPerDay === 0 ? "Gratis" : `${formatMXN(c.costPerDay)} al día`}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-right font-display text-[1.35rem] leading-none font-extrabold tabular-nums">
-                        {c.minutes}
-                        <span className="ml-0.5 font-sans text-sm font-semibold">min</span>
-                      </span>
-                      {best ? (
-                        <span className="absolute -top-2.5 left-3 rounded-md bg-ink px-1.5 py-0.5 text-[0.65rem] font-bold tracking-[0.12em] text-limon uppercase">
-                          Más rápido
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="mt-3 text-sm text-muted-foreground">Tiempos estimados por calle, ida. Costos de ida y vuelta.</p>
-            </Panel>
-          </Reveal>
-
-          {/* ------------------------------------------------ what happens next */}
-          <Reveal inView>
-            <Panel className="border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
-              <div aria-hidden className="pointer-events-none absolute -top-12 right-3 sm:right-6">
-                <Mascot mood={applied ? "festeja" : "saluda"} prop="casco" size={84} />
-              </div>
-              <BlockHeader icon={Clock01Icon} title="¿Qué sigue?" onCard />
-              <StepList
-                current={applied ? 1 : 0}
-                steps={[
-                  { title: "Enviada", body: applied ? "Tu solicitud ya llegó." : "Un toque y listo, sin currículum." },
-                  { title: "La empresa la ve", body: "Revisan tu perfil, casi siempre en 1–2 días." },
-                  { title: "Entrevista", body: "Te llaman o te mandan SMS para agendar." },
-                  { title: "¡Contratado!", body: "A chambear cerca de tu casa." },
-                ]}
-              />
-            </Panel>
-          </Reveal>
-
-          {/* ------------------------------------------------ branches (multi-location companies) */}
-          {multi ? (
-            <Reveal inView>
-              <BranchesPanel company={company} stops={stops} job={job} />
-            </Reveal>
-          ) : null}
-
-          {/* ------------------------------------------------ company */}
-          <Reveal inView>
-            <Panel tone={tones[0]} className={cn("border-2 border-ink", HARD)}>
-              <div className="flex items-center gap-3.5">
-                <Avatar className="size-14 border-2 border-ink">
-                  <AvatarFallback className="bg-ink font-display text-lg font-extrabold text-limon">{initials || "E"}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 text-[0.72rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">
-                    <HugeiconsIcon icon={Building06Icon} className="size-4" strokeWidth={2} />
-                    Sobre la empresa
-                  </p>
-                  <h2 className="font-display text-[1.35rem] leading-tight font-extrabold tracking-[-0.03em]">{company.name}</h2>
-                </div>
-              </div>
-              <ul className="mt-4 flex flex-wrap gap-2 text-[0.9rem] font-semibold">
-                {[company.kind, company.employees, multi ? `${company.locations.length} sucursales` : job.colonia].filter(Boolean).map((t) => (
-                  <li key={t} className="inline-flex h-8 items-center rounded-full bg-white/60 px-3">
-                    {t}
-                  </li>
-                ))}
-              </ul>
-              {company.about ? <p className="mt-4 text-[1.02rem] leading-relaxed">{company.about}</p> : null}
-            </Panel>
-          </Reveal>
         </div>
 
         {/* ------------------------------------------------ desktop action block (the one saturated block) */}
-        <aside className="hidden min-w-0 lg:col-span-4 lg:block">
+        <aside className="hidden min-w-0 lg:col-span-4 lg:flex">
           <section
-            aria-label="Postúlate"
-            className={cn("sticky top-10 isolate overflow-hidden rounded-panel border-2 border-ink p-6 block-uva", HARD)}
+            aria-label={applied ? "Tu postulación" : "Postúlate"}
+            // overflow-clip, not hidden: a hidden box is still a scroll container, and when applying
+            // grows the content, scroll anchoring scrolled it and cut off the top line.
+            className={cn("relative isolate flex flex-1 flex-col overflow-clip rounded-panel border-2 border-ink p-6 block-uva", HARD)}
           >
             <span aria-hidden className="pointer-events-none absolute -right-12 -bottom-12 -z-10 size-48 rounded-full bg-dots text-white/10" />
-            <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">¡Ándale, no la dejes ir!</p>
-            <p className="mt-2 font-display text-[1.6rem] leading-[1.05] font-extrabold tracking-[-0.03em]">
-              {job.applicants > 0 ? (
-                <>
-                  <CountUp value={job.applicants} className="text-limon" />{" "}
-                  {job.applicants === 1 ? "persona ya se postuló" : "personas ya se postularon"}
-                </>
-              ) : (
-                <>
-                  Sé <span className="text-limon">de los primeros</span> en postularte
-                </>
-              )}
-            </p>
-            <p className="mt-1.5 mb-5 text-primary-foreground/80">Contacta directo a {company.name}</p>
-            {renderActions(true)}
+            {applied ? (
+              <>
+                <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">
+                  {step === "contratada" ? "¡Felicidades!" : step === "descartada" || step === "retirada" ? "Tu postulación" : "Ya estás en la lista"}
+                </p>
+                <p className="mt-2 font-display text-[1.6rem] leading-[1.05] font-extrabold tracking-[-0.03em]">
+                  {p ? candidateTitle(p, now) : STEP_META.enviada.candidateTitle}
+                </p>
+                {p ? <MiniTrack p={p} inverse className="mt-4" /> : null}
+                {p && step && now ? <AsideStamp p={p} step={step} now={now} /> : null}
+                <p className="mt-3 text-primary-foreground/80">{p && step ? asideLine(p, step, now) : "Sigue el avance aquí abajo."}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">¡Ándale, no la dejes ir!</p>
+                <p className="mt-2 font-display text-[1.6rem] leading-[1.05] font-extrabold tracking-[-0.03em]">
+                  {job.applicants > 0 ? (
+                    <>
+                      <CountUp value={job.applicants} className="text-limon" />{" "}
+                      {job.applicants === 1 ? "persona ya se postuló" : "personas ya se postularon"}
+                    </>
+                  ) : (
+                    <>
+                      Sé <span className="text-limon">de los primeros</span> en postularte
+                    </>
+                  )}
+                </p>
+                <ul className="mt-4 space-y-1.5 text-[0.95rem] text-primary-foreground/85">
+                  {["Un toque, sin currículum", `Te ven en ${company.name} al instante`, "Te avisamos aquí cada paso"].map((t) => (
+                    <li key={t} className="flex items-center gap-2">
+                      <HugeiconsIcon icon={Tick02Icon} className="size-4 shrink-0 text-limon" strokeWidth={3} />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div className="mt-auto pt-5">{renderActions(true)}</div>
           </section>
         </aside>
+
+        {alt ? (
+          <div className="lg:col-span-12">
+            <CloserBranchNudge company={company} alt={alt} savedKm={km - alt.branch.km} />
+          </div>
+        ) : null}
+
+        {/* ------------------------------------------------ right after applying */}
+        {showConfirmation ? (
+          <div className="lg:col-span-12">
+            <ApplyConfirmation company={company} km={km} tone={successTone} />
+          </div>
+        ) : null}
+
+        {/* ------------------------------------------------ this person's application, state-aware */}
+        {p && now ? (
+          <div className="min-w-0 lg:col-span-12">
+            <StatusBlock
+              p={p}
+              now={now}
+              tone={showConfirmation && statusTone === successTone ? "cielo" : statusTone}
+              job={job}
+              company={company}
+              branch={branch}
+              nudge={!showConfirmation}
+              title={showConfirmation ? "Así va tu proceso" : undefined}
+            />
+          </div>
+        ) : null}
+
+        {applied ? (
+          <>
+            <Reveal inView className="min-w-0 lg:col-span-6">
+              {queVasAHacer}
+            </Reveal>
+            <Reveal inView className="min-w-0 lg:col-span-6">
+              {quePiden}
+            </Reveal>
+            <Reveal inView className={cn("min-w-0", multi ? "lg:col-span-5" : "lg:col-span-7")}>
+              {comoLlegar}
+            </Reveal>
+            {multi ? (
+              <>
+                <Reveal inView className="min-w-0 lg:col-span-7">
+                  <BranchesPanel company={company} stops={stops} job={job} />
+                </Reveal>
+                <Reveal inView className="min-w-0 lg:col-span-12">
+                  {empresa(false)}
+                </Reveal>
+              </>
+            ) : (
+              <Reveal inView className="min-w-0 lg:col-span-5">
+                {empresa(true)}
+              </Reveal>
+            )}
+          </>
+        ) : (
+          <>
+            <Reveal inView className="min-w-0 lg:col-span-7">
+              {queVasAHacer}
+            </Reveal>
+            <Reveal inView className="min-w-0 lg:col-span-5">
+              {queSigue}
+            </Reveal>
+            <Reveal inView className="min-w-0 lg:col-span-6">
+              {quePiden}
+            </Reveal>
+            <Reveal inView className="min-w-0 lg:col-span-6">
+              {comoLlegar}
+            </Reveal>
+            {multi ? (
+              <>
+                <Reveal inView className="min-w-0 lg:col-span-7">
+                  <BranchesPanel company={company} stops={stops} job={job} />
+                </Reveal>
+                <Reveal inView className="min-w-0 lg:col-span-5">
+                  {empresa(true)}
+                </Reveal>
+              </>
+            ) : (
+              <Reveal inView className="min-w-0 lg:col-span-12">
+                {empresa(false)}
+              </Reveal>
+            )}
+          </>
+        )}
       </div>
 
       {/* Mobile sticky action block above the pill nav */}
       <div className="fixed inset-x-0 bottom-24 z-30 px-3 lg:hidden">
-        <div className={cn("mx-auto max-w-xl rounded-[1.75rem] border-2 border-ink p-2.5 block-uva", HARD)}>
-          {renderActions()}
-        </div>
+        <div className={cn("mx-auto max-w-xl rounded-[1.75rem] border-2 border-ink p-2.5 block-uva", HARD)}>{renderActions()}</div>
       </div>
     </div>
   );
+}
+
+/** White stamp in the desktop action block: the interview time, or when the last step happened. */
+function AsideStamp({ p, step, now }: { p: ApplicationPipeline; step: PipelineStep; now: number }) {
+  const upcoming = step === "entrevista" && p.interview && interviewState(p, now) !== "past" ? p.interview.at : null;
+  const last = p.events.at(-1)?.at ?? p.appliedAt;
+  const at = upcoming ?? last;
+  const label = upcoming ? "Tu entrevista" : STEP_META[step].candidateLabel;
+  return (
+    <button
+      type="button"
+      onClick={scrollToStatus}
+      className="press mt-4 block w-full rounded-tile border-2 border-ink bg-white p-3.5 text-left text-ink shadow-[3px_3px_0_0_var(--ink)] outline-none focus-visible:ring-3 focus-visible:ring-limon"
+    >
+      <span className="block text-[0.7rem] font-extrabold tracking-[0.14em] uppercase opacity-70">
+        {label} · {capitalize(relativeDayWord(at, now) ?? fmtDate(at, { now }))}
+      </span>
+      <span className="block font-display text-[2rem] leading-none font-extrabold tracking-[-0.04em] tabular-nums">{fmtTime(at)}</span>
+      <span className="mt-1 block text-[0.88rem] leading-snug font-medium">{fmtDateLong(at, { now, capitalize: true })}</span>
+    </button>
+  );
+}
+
+/** Second line of the "Ya te postulaste" button (the first line already names closed / hired). */
+function actionLine(p: ApplicationPipeline, step: PipelineStep, now: number): string {
+  if (step === "entrevista" && p.interview && now) {
+    return interviewState(p, now) === "past" ? "Ver tu postulación" : `Entrevista: ${fmtDayTime(p.interview.at, { now })}`;
+  }
+  if (step === "contratada") return "Confirma tu primer día";
+  if (step === "descartada") return p.companyMessage?.trim() ? "Ver el mensaje de la empresa" : "Ver detalle";
+  if (step === "retirada") return "Ver detalle";
+  return `${STEP_META[step].candidateLabel} · Ver avance`;
+}
+
+/** One line under the title of the desktop action block once applied. */
+function asideLine(p: ApplicationPipeline, step: PipelineStep, now: number): string {
+  if (step === "entrevista" && p.interview && now && interviewState(p, now) !== "past") {
+    return "Abajo tienes el lugar, qué llevar y cómo avisar si no puedes ir.";
+  }
+  if (step === "contratada") {
+    return p.companyMessage?.trim() ? "Lee el mensaje de la empresa y confirma tu primer día." : "Llama o manda SMS para confirmar tu primer día.";
+  }
+  if (wasHiredBeforeClose(p)) return UNHIRE_COPY.next;
+  return STEP_META[step].typical ?? STEP_META[step].candidateNext;
 }

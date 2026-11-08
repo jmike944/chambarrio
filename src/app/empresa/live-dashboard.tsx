@@ -6,7 +6,6 @@ import {
   Add01Icon,
   ArrowRight01Icon,
   Briefcase01Icon,
-  Clock01Icon,
   ComingSoon01Icon,
   Invoice01Icon,
   Location01Icon,
@@ -17,23 +16,20 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { BLOCK_CLASS, HeroCard, Panel, PanelHeader, SectionLabel, StatTile } from "@/components/chamba/primitives";
 import { CountUp, Sticker } from "@/components/chamba/motion";
-import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
+import { CategoryArt, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
 import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle, HazardTape } from "@/components/chamba/art/doodles";
 import { useMyCompany } from "@/lib/data/catalog";
-import { useApplicants } from "@/lib/live/applicants";
 import { useLiveUser } from "@/lib/live/session";
 import { formatPay } from "@/lib/format";
-import { formatKm } from "@/lib/geo";
 import { useApp, useEmployerPlan, type PlanId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { BranchMapArt, coloniaText, placeText, useBranchSummaries } from "./sucursales/branch-kit";
-import { InitialsAvatar, LockAvatar, WaitRing } from "./wait-ring";
+import { ReviewChip, TodayPanel, useDashboardPipeline } from "@/components/empresa/pipeline/today-panel";
 
 /*
  * The employer dashboard on real data (live mode). Same look as the demo dashboard, but every
@@ -50,12 +46,11 @@ const RUG = "border-2 border-ink shadow-[4px_5px_0_0_var(--ink)] dark:border-bla
 const inkCta =
   "press lift inline-flex h-14 items-center justify-center gap-2.5 rounded-full bg-ink px-7 text-[1.05rem] font-semibold text-white shadow-[0_10px_22px_-12px_var(--ink)] outline-none focus-visible:ring-4 focus-visible:ring-white/70";
 
-const DAY = 24 * 60;
-
 export function LiveDashboard() {
   const my = useMyCompany();
   const planId = useEmployerPlan();
-  const { status: appsStatus, applicants } = useApplicants();
+  // Applicant numbers come from the hiring pipeline (same as the lists and the applicant page).
+  const dash = useDashboardPipeline();
   const branches = useBranchSummaries();
   const locations = branches.map((b) => b.branch);
   const multi = locations.length > 1;
@@ -63,12 +58,8 @@ export function LiveDashboard() {
   const open = my.jobs.filter((j) => j.status === "abierta");
   const active = my.jobs.filter((j) => j.status !== "cerrada");
   const totalApplicants = my.jobs.reduce((n, j) => n + j.applicants, 0);
-  const appsReady = appsStatus === "ready";
-  const fresh = applicants.filter((a) => a.minutesAgo < DAY).length;
-  const week = applicants.filter((a) => a.minutesAgo < 7 * DAY).length;
-  const hired = applicants.filter((a) => a.status === "contratada").length;
-  const pending = applicants.filter((a) => a.status === "enviada").slice(0, 4);
-  const jobById = Object.fromEntries(my.jobs.map((j) => [j.id, j]));
+  const appsReady = !dash.loading;
+  const toReview = dash.review.length;
   const noJobs = my.jobs.length === 0;
 
   return (
@@ -82,19 +73,20 @@ export function LiveDashboard() {
         title={
           noJobs ? (
             "Publica tu primera vacante"
-          ) : appsReady && fresh > 0 ? (
+          ) : appsReady && toReview > 0 ? (
             <>
-              Tienes <CountUp value={fresh} from={0} className="inline-block" /> postulante{fresh === 1 ? "" : "s"} nuevo
-              {fresh === 1 ? "" : "s"}
+              Tienes <CountUp value={toReview} from={0} className="inline-block" /> postulante{toReview === 1 ? "" : "s"} por revisar
             </>
+          ) : appsReady && dash.counts.total > 0 ? (
+            "¡Estás al día!"
           ) : (
             "Tus vacantes ya están en el radar"
           )
         }
         sticker={
-          appsReady && week > 0 ? (
+          appsReady && dash.week > 0 ? (
             <Sticker variant="ink" rotate={12} dot>
-              <strong>+{week}</strong>esta semana
+              <strong>+{dash.week}</strong>esta semana
             </Sticker>
           ) : undefined
         }
@@ -106,9 +98,11 @@ export function LiveDashboard() {
         <p className="mt-3 max-w-md text-[1.05rem] leading-snug font-medium text-muted-foreground">
           {noJobs
             ? "Es gratis. Le aparece a la gente que vive cerca de tu sucursal y te llegan sus postulaciones."
-            : appsReady && fresh > 0
-              ? "Llegaron en las últimas 24 h. ¡Respóndeles hoy y gánale a la competencia!"
-              : "Le aparecen a la gente que vive cerca. Te avisamos aquí en cuanto alguien se postule."}
+            : appsReady && toReview > 0
+              ? "Revísalos hoy y agenda entrevistas: gánale a la competencia."
+              : appsReady && dash.counts.total > 0
+                ? "Ya revisaste a todos. Te avisamos en cuanto alguien más se postule."
+                : "Le aparecen a la gente que vive cerca. Te avisamos aquí en cuanto alguien se postule."}
         </p>
         <Link
           href="/empresa/sucursales"
@@ -141,74 +135,8 @@ export function LiveDashboard() {
         </div>
       </HeroCard>
 
-      {/* ------------------------------------------------ Pending replies (tinta) */}
-      <Panel tone="tinta" className={cn("min-w-0 overflow-hidden lg:col-span-5", RUG)}>
-        <Doodle
-          name="flecha"
-          color="var(--block-sol)"
-          className="pointer-events-none absolute top-5 right-5 size-10 rotate-[20deg]"
-        />
-        <PanelHeader icon={Clock01Icon} title="Por responder" count={appsReady ? pending.length : undefined} />
-        {!appsReady ? (
-          <div role="status" aria-busy="true" className="space-y-2">
-            <span className="sr-only">Cargando postulantes…</span>
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-16 rounded-tile bg-white/10" />
-            ))}
-          </div>
-        ) : pending.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-tile border-2 border-dashed border-white/25 p-4">
-            <Mascot mood="piensa" prop="lupa" size={56} className="-my-2 shrink-0" />
-            <p className="text-[0.98rem] leading-snug">
-              {totalApplicants > 0
-                ? "¡Al día! Ya revisaste todas las postulaciones."
-                : "Aún nadie se postula. Aquí verás a cada persona en cuanto lo haga."}
-            </p>
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {pending.map((a, i) => {
-              const job = jobById[a.jobId];
-              const named = a.unlocked && a.name;
-              return (
-                <li
-                  key={a.id}
-                  className="group lift flex animate-rise items-center gap-3 rounded-tile border-2 border-white/10 bg-white/[0.07] p-2.5"
-                  style={{ "--i": i } as CSSVars}
-                >
-                  <span className="relative shrink-0">
-                    {named ? <InitialsAvatar name={a.name!} /> : <LockAvatar />}
-                    {job ? (
-                      <CategoryIcon
-                        category={job.category}
-                        size="xs"
-                        className="absolute -right-3 -bottom-3 scale-[0.78] ring-2 ring-[var(--block-tinta)]"
-                      />
-                    ) : null}
-                  </span>
-                  <Link
-                    href={`/empresa/vacantes/${a.jobId}`}
-                    className="min-w-0 flex-1 rounded-lg pl-1 outline-none focus-visible:ring-3 focus-visible:ring-white/70"
-                  >
-                    <span className="block truncate text-[1.05rem] leading-snug font-semibold">
-                      {named ? a.name : "Nueva postulación"}
-                    </span>
-                    <span className="block truncate text-[0.9rem] text-muted-foreground">
-                      {a.km !== null ? `${formatKm(a.km)} · ` : ""}
-                      {a.colonia ? `Col. ${a.colonia}` : job?.title}
-                    </span>
-                  </Link>
-                  <WaitRing minutes={a.minutesAgo} index={i + 1} />
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-          <Doodle name="rayo" color="var(--block-sol)" className="size-5 shrink-0" />
-          Responde en menos de 24 h para no perder a los mejores candidatos.
-        </p>
-      </Panel>
+      {/* ------------------------------------------------ Para hoy (tinta): from the hiring pipeline */}
+      <TodayPanel data={dash} className="lg:col-span-5" />
 
       {/* ------------------------------------------------ KPI tiles */}
       <section aria-label="Resumen" className="grid grid-cols-2 gap-3 lg:col-span-12 lg:grid-cols-4 lg:gap-5">
@@ -231,8 +159,8 @@ export function LiveDashboard() {
             {
               tone: "limon",
               label: "Contrataciones",
-              value: appsReady ? <CountUp value={hired} from={0} /> : "—",
-              hint: "marcadas como contratadas",
+              value: appsReady ? <CountUp value={dash.counts.contratada} from={0} /> : "—",
+              hint: "en tus vacantes",
               icon: Tick02Icon,
             },
             {
@@ -258,7 +186,7 @@ export function LiveDashboard() {
       </section>
 
       {/* ------------------------------------------------ Your jobs: stacked category blocks */}
-      <section aria-labelledby="tus-vacantes" className="min-w-0 lg:col-span-7">
+      <section aria-labelledby="tus-vacantes" className="flex min-w-0 flex-col lg:col-span-7">
         <SectionLabel
           className="mb-3"
           title={<span id="tus-vacantes">Tus vacantes</span>}
@@ -287,17 +215,18 @@ export function LiveDashboard() {
             </span>
           </Link>
         ) : (
-          <ul>
+          // The last card grows when the plan column is taller, so both columns end together.
+          <ul className="flex flex-1 flex-col">
             {active.map((j, i) => (
               <li
                 key={j.id}
-                className={cn("relative animate-rise", i > 0 && "-mt-7")}
+                className={cn("relative animate-rise", i > 0 && "-mt-7", i === active.length - 1 && "flex flex-1 flex-col")}
                 style={{ "--i": i + 3, zIndex: i + 1 } as CSSVars}
               >
                 <Link
                   href={`/empresa/vacantes/${j.id}`}
                   className={cn(
-                    "group press lift relative block overflow-hidden rounded-panel p-5 outline-none focus-visible:ring-4 focus-visible:ring-ring/60",
+                    "group press lift relative block flex-1 overflow-hidden rounded-panel p-5 outline-none focus-visible:ring-4 focus-visible:ring-ring/60",
                     RUG,
                     i > 0 && "pt-11",
                     i < active.length - 1 && "pb-12",
@@ -327,6 +256,7 @@ export function LiveDashboard() {
                       <span className="font-display text-[2rem] leading-none font-extrabold tabular-nums">{j.applicants}</span>
                       <span className="text-[0.95rem] font-medium">postulante{j.applicants === 1 ? "" : "s"}</span>
                     </span>
+                    <ReviewChip jobId={j.id} data={dash} className="mt-2" />
                   </span>
                 </Link>
               </li>

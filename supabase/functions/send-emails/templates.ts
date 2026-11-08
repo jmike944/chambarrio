@@ -392,14 +392,78 @@ function renderNewApplicant(p: Obj, token: string | null): RenderedEmail {
 
 // ------------------------------------------------------------------------------- application_status
 
+const TZ = "America/Monterrey";
+const DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MONTHS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** "jueves 13 de noviembre" + "9:30 a.m." in Saltillo time (es-MX), or null when the value isn't a date. */
+function formatWhen(v: unknown): { day: string; time: string } | null {
+  const raw = str(v);
+  const d = raw ? new Date(raw) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  // Monterrey has been UTC-6 all year since 2022, so the manual path is a safe fallback for Intl.
+  let parts: { weekday: number; day: number; month: number; hour: number; minute: number };
+  try {
+    const f = new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ, hourCycle: "h23", weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "numeric",
+    }).formatToParts(d);
+    const get = (t: string) => f.find((x) => x.type === t)?.value ?? "";
+    const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
+    parts = { weekday: wd, day: Number(get("day")), month: Number(get("month")) - 1, hour: Number(get("hour")) % 24, minute: Number(get("minute")) };
+    if (wd < 0 || Object.values(parts).some((n) => Number.isNaN(n))) throw new Error("bad parts");
+  } catch {
+    const l = new Date(d.getTime() - 6 * 3600_000);
+    parts = { weekday: l.getUTCDay(), day: l.getUTCDate(), month: l.getUTCMonth(), hour: l.getUTCHours(), minute: l.getUTCMinutes() };
+  }
+  const h12 = parts.hour % 12 === 0 ? 12 : parts.hour % 12;
+  return {
+    day: `${DAYS[parts.weekday]} ${parts.day} de ${MONTHS[parts.month]}`,
+    time: `${h12}:${String(parts.minute).padStart(2, "0")} ${parts.hour < 12 ? "a.m." : "p.m."}`,
+  };
+}
+
+const BRING = [
+  "INE (identificación oficial)",
+  "CURP",
+  "Comprobante de domicilio",
+  "Número de Seguro Social (NSS)",
+  "RFC, si lo tienes",
+  "Solicitud de empleo elaborada",
+];
+
+const FIRST_DAY_TIPS = [
+  "Llega 15 minutos antes de tu hora de entrada.",
+  "Lleva tu INE y los papeles que te pidan.",
+  "Pregunta por tu jefe o jefa directa al llegar.",
+  "Usa ropa y zapatos cómodos y cerrados.",
+  "Confirma por llamada o SMS tu hora y lugar de entrada.",
+];
+
+const bulletList = (items: string[]) =>
+  `<ul style="margin:6px 0 0 0;padding:0 0 0 20px;font-family:${FONT};font-size:15px;line-height:1.5;color:${INK};">${items
+    .map((i) => `<li style="margin:0 0 3px 0;">${esc(i)}</li>`)
+    .join("")}</ul>`;
+
+/** Company's own words, quoted. Value is escaped; newlines become line breaks. */
+const quoteBox = (title: string, msg: string) =>
+  `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;margin:0 0 18px 0;"><tr><td bgcolor="${LAVENDER}" style="background-color:${LAVENDER};border-left:4px solid ${VIOLET};border-radius:8px;padding:12px 14px;font-family:${FONT};font-size:15px;line-height:1.5;color:${INK};"><span style="display:block;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${MUTED};margin-bottom:4px;">${esc(title)}</span>${esc(msg).replace(/\r?\n/g, "<br>")}</td></tr></table>`;
+
 function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
   const status = str(p.status);
+  const rescheduled = p.rescheduled === true;
   const job = str(p.job_title) || "la vacante";
   const company = str(p.company_name) || "La empresa";
   const branch = str(p.branch_name);
   const colonia = str(p.colonia);
   const phone = formatPhone(str(p.phone));
   const jobId = str(p.job_id);
+  const place = str(p.interview_place);
+  const interviewNote = str(p.interview_note);
+  const companyMessage = str(p.company_message);
+  const when = formatWhen(p.interview_at);
   const where = [company, branch].filter(Boolean).join(" · ");
   const atBranch = branch ? ` en ${b(branch)}` : "";
   const atBranchText = branch ? ` en ${branch}` : "";
@@ -410,28 +474,69 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
   let bodyHtml: string;
   let bodyText: string;
   let preheader: string;
-  // The job phone is shown for interviews and hires only (a "seen" update shouldn't prompt calls).
-  let phoneLabel: string | null;
+  let phoneLabel: string | null = null;
+  let extraHtml = "";
+  let extraText: (string | null)[] = [];
+  let buttonLabel = "Ver mi postulación";
+  let buttonUrl = urls.applications;
+  let highlight = "";
+  let highlightText: (string | null)[] = [];
 
   switch (status) {
     case "vista":
       label = "Tu postulación";
       subject = `${company} vio tu postulación`;
       headingHtml = `${esc(company)} vio tu postulación`;
-      bodyHtml = `Tu postulación a ${b(job)}${atBranch} ya fue revisada. Si tu perfil les interesa, te van a contactar por llamada o SMS.`;
-      bodyText = `Tu postulación a ${job}${atBranchText} ya fue revisada. Si tu perfil les interesa, te van a contactar por llamada o SMS.`;
+      bodyHtml = `Tu postulación a ${b(job)}${atBranch} ya fue revisada. Es buena señal: si tu perfil les interesa, te van a contactar por llamada o SMS para la entrevista. Ten tu celular a la mano y contesta los números que no conoces.`;
+      bodyText = `Tu postulación a ${job}${atBranchText} ya fue revisada. Es buena señal: si tu perfil les interesa, te van a contactar por llamada o SMS para la entrevista. Ten tu celular a la mano y contesta los números que no conoces.`;
       preheader = `Ya revisaron tu postulación a ${job}. Ten tu celular a la mano.`;
-      phoneLabel = null;
+      extraHtml = note(`Mientras tanto, sigue buscando: ${link(urls.home, "mira más vacantes cerca de ti")}.`);
+      extraText = [`Mientras tanto, mira más vacantes cerca de ti: ${urls.home}`];
+      buttonLabel = "Ver mis postulaciones";
       break;
-    case "entrevista":
-      label = "¡Entrevista!";
-      subject = `¡${company} quiere entrevistarte!`;
-      headingHtml = `¡${esc(company)} quiere entrevistarte!`;
-      bodyHtml = `Les interesó tu perfil para ${b(job)}${atBranch}. Te van a llamar o mandar un SMS para ponerse de acuerdo en el día y la hora, así que ten tu celular a la mano.`;
-      bodyText = `Les interesó tu perfil para ${job}${atBranchText}. Te van a llamar o mandar un SMS para ponerse de acuerdo en el día y la hora, así que ten tu celular a la mano.`;
-      preheader = `Te van a llamar o mandar un SMS para agendar tu entrevista para ${job}.`;
-      phoneLabel = "¿No te llaman?";
+    case "entrevista": {
+      phoneLabel = "¿No puedes ir?";
+      const whenLine = when ? `${capitalize(when.day)}, ${when.time}` : "";
+      if (rescheduled) {
+        label = "Cambio de horario";
+        subject = `Cambio de horario: entrevista con ${company}`;
+        headingHtml = `Cambió el horario de tu entrevista`;
+        bodyHtml = `${b(company)} cambió el día u hora de tu entrevista para ${b(job)}${atBranch}. Este es el nuevo horario, ya no vale el anterior.`;
+        bodyText = `${company} cambió el día u hora de tu entrevista para ${job}${atBranchText}. Este es el nuevo horario, ya no vale el anterior.`;
+        preheader = whenLine ? `Nuevo horario: ${whenLine}.` : `Cambió el horario de tu entrevista con ${company}.`;
+      } else {
+        label = "¡Entrevista!";
+        subject = when ? `Entrevista con ${company}: ${when.day}, ${when.time}` : `¡${company} quiere entrevistarte!`;
+        headingHtml = `¡${esc(company)} quiere entrevistarte!`;
+        bodyHtml = `Les interesó tu perfil para ${b(job)}${atBranch}. ${when ? "Esta es tu cita." : "Te van a llamar o mandar un SMS para ponerse de acuerdo en el día y la hora; ten tu celular a la mano."}`;
+        bodyText = `Les interesó tu perfil para ${job}${atBranchText}. ${when ? "Esta es tu cita." : "Te van a llamar o mandar un SMS para ponerse de acuerdo en el día y la hora; ten tu celular a la mano."}`;
+        preheader = whenLine ? `${whenLine}${place ? ` · ${place}` : ""}. Revisa qué llevar.` : `Te van a llamar o mandar un SMS para agendar tu entrevista.`;
+      }
+      if (when) {
+        const prefix = rescheduled ? "Nuevo horario" : "Tu entrevista";
+        highlight = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;margin:4px 0 18px 0;"><tr><td bgcolor="${VIOLET}" style="background-color:${VIOLET};border:3px solid ${INK};border-radius:16px;padding:16px 18px;font-family:${FONT};color:#ffffff;"><p style="margin:0 0 4px 0;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${LIME};">${esc(prefix)}</p><p style="margin:0;font-size:22px;line-height:1.25;font-weight:800;color:#ffffff;">${esc(capitalize(when.day))}</p><p style="margin:2px 0 0 0;font-size:22px;line-height:1.25;font-weight:800;color:${LIME};">${esc(when.time)}</p>${place ? `<p style="margin:10px 0 0 0;font-size:15px;line-height:1.4;color:#ffffff;"><strong>Lugar:</strong> ${esc(place)}</p>` : ""}${interviewNote ? `<p style="margin:8px 0 0 0;font-size:15px;line-height:1.4;color:#ffffff;"><strong>Aviso de la empresa:</strong> ${esc(interviewNote).replace(/\r?\n/g, "<br>")}</p>` : ""}</td></tr></table>`;
+        highlightText = [
+          `${prefix.toUpperCase()}: ${whenLine}`,
+          place ? `Lugar: ${place}` : null,
+          interviewNote ? `Aviso de la empresa: ${interviewNote}` : null,
+        ];
+      } else {
+        if (place) highlightText.push(`Lugar: ${place}`);
+        if (interviewNote) highlightText.push(`Aviso de la empresa: ${interviewNote}`);
+        if (place || interviewNote) {
+          highlight = limeBox(
+            eyebrow("Entrevista") +
+              (place ? `<p style="margin:4px 0 0 0;font-size:15px;"><strong>Lugar:</strong> ${esc(place)}</p>` : "") +
+              (interviewNote ? `<p style="margin:6px 0 0 0;font-size:15px;"><strong>Aviso:</strong> ${esc(interviewNote)}</p>` : ""),
+          );
+        }
+      }
+      extraHtml = note(
+        `<strong style="color:${INK};">Qué llevar:</strong>${bulletList(BRING)}<p style="margin:10px 0 0 0;">Llega unos 10 minutos antes y contesta los números que no conoces estos días.</p>`,
+      );
+      extraText = ["QUÉ LLEVAR:", ...BRING.map((i) => `- ${i}`), "", "Llega unos 10 minutos antes y contesta los números que no conoces estos días."];
       break;
+    }
     case "contratada":
       label = "¡Te eligieron!";
       subject = `¡Felicidades! ${company} te eligió para ${job}`;
@@ -440,6 +545,26 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
       bodyText = `Pronto te van a contactar para darte los detalles de tu primer día${atBranchText}. ¡Mucho éxito en tu nueva chamba!`;
       preheader = `Pronto te contactan con los detalles de tu primer día. ¡Mucho éxito!`;
       phoneLabel = "¿Dudas?";
+      if (companyMessage) {
+        highlight = quoteBox(`Mensaje de ${company}`, companyMessage);
+        highlightText = [`Mensaje de ${company}:`, companyMessage];
+      }
+      extraHtml = note(`<strong style="color:${INK};">Para tu primer día:</strong>${bulletList(FIRST_DAY_TIPS)}`);
+      extraText = ["PARA TU PRIMER DÍA:", ...FIRST_DAY_TIPS.map((i) => `- ${i}`)];
+      break;
+    case "cerrada":
+      label = "Tu postulación";
+      subject = `Novedades de tu postulación a ${job}`;
+      headingHtml = `Novedades de tu postulación`;
+      bodyHtml = `Gracias por postularte a ${b(job)}${atBranch}. Esta vez la empresa decidió no continuar con tu postulación. No es un reflejo de lo que vales: hay más chamba cerca de ti y tu perfil sigue listo.`;
+      bodyText = `Gracias por postularte a ${job}${atBranchText}. Esta vez la empresa decidió no continuar con tu postulación. No es un reflejo de lo que vales: hay más chamba cerca de ti y tu perfil sigue listo.`;
+      preheader = `Hay más vacantes cerca de ti. Tu perfil sigue listo.`;
+      if (companyMessage) {
+        highlight = quoteBox(`Mensaje de ${company}`, companyMessage);
+        highlightText = [`Mensaje de ${company}:`, companyMessage];
+      }
+      buttonLabel = "Ver vacantes parecidas";
+      buttonUrl = urls.home;
       break;
     default:
       throw new Error(`unsupported application status ${status || "(empty)"}`);
@@ -460,29 +585,36 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
     prefsUrl: urls.candidatePrefs,
   };
 
-  const extra =
-    status === "vista"
-      ? note(`Mientras tanto, sigue buscando: ${link(urls.home, "mira más vacantes cerca de ti")}.`)
-      : status === "entrevista"
-        ? note(
-            `<strong style="color:${INK};">Tip:</strong> contesta números que no conoces estos días y lleva una identificación a la entrevista.`,
-          )
-        : "";
+  const isInterview = status === "entrevista";
+  const phoneCall =
+    phone && phoneLabel
+      ? isInterview
+        ? `¿No puedes ir? Llama o manda SMS al ${phone.display}`
+        : `${phoneLabel} Llama al ${phone.display}`
+      : null;
+  const phoneNote =
+    isInterview && phone
+      ? note(
+          `<strong style="color:${INK};">¿No puedes ir?</strong> Llama o manda SMS al <a href="${esc(phone.href)}" style="color:${INK};font-weight:800;text-decoration:underline;">${esc(phone.display)}</a>.`,
+        )
+      : "";
 
   const content = [
     h1(headingHtml),
     para(bodyHtml),
+    highlight,
     limeBox(
       eyebrow("Vacante") +
         boxTitle(job) +
         boxSub(where) +
-        facts(rows) +
+        facts(isInterview ? rows.filter(([l]) => l === "Colonia") : rows) +
         (jobId
           ? `<p style="margin:12px 0 0 0;font-family:${FONT};font-size:14px;">${link(urls.vacancy(jobId), "Ver la vacante", INK)}</p>`
           : ""),
     ),
-    extra,
-    button(urls.applications, status === "vista" ? "Ver mis postulaciones" : "Ver mi postulación"),
+    phoneNote,
+    extraHtml,
+    button(buttonUrl, buttonLabel),
   ].join("");
 
   const finalSubject = subjectLine(subject);
@@ -494,13 +626,17 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
       "",
       bodyText,
       "",
+      ...highlightText,
+      highlightText.length ? "" : null,
       `Vacante: ${job}`,
       where ? `Empresa: ${where}` : null,
       colonia ? `Colonia: ${colonia}` : null,
-      phone && phoneLabel ? `${phoneLabel} Llama al ${phone.display}` : null,
+      phoneCall,
       jobId ? `Ver la vacante: ${urls.vacancy(jobId)}` : null,
       "",
-      `Mis postulaciones: ${urls.applications}`,
+      ...extraText,
+      extraText.length ? "" : null,
+      `${buttonLabel}: ${buttonUrl}`,
       "",
       footerText(footer),
     ),

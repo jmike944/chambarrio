@@ -75,3 +75,72 @@ export type Application = {
   /** minutes since applying, for seeded demo data */
   minutesAgo: number;
 };
+
+// ------------------------------------------------------------------ hiring pipeline
+// The shapes of @/lib/pipeline (both modes). Timestamps are ISO-8601 instants (UTC); format them
+// with @/lib/pipeline/time, which always shows Saltillo time (America/Monterrey).
+
+/** Who made a change to an application. */
+export type PipelineActor = "candidato" | "empresa";
+
+/** The interview the company set. `at` is an ISO instant; place/note are free text from the company. */
+export type InterviewDetails = {
+  at: string;
+  /** ≤ 160 chars, e.g. "CEDIS Santa Mónica · Parque Industrial Santa Mónica". */
+  place: string | null;
+  /** ≤ 500 chars: what to bring, who to ask for. */
+  note: string | null;
+};
+
+/** One entry of an application's timeline (oldest first in `ApplicationPipeline.events`). */
+export type PipelineEvent = {
+  status: ApplicationStatus;
+  actor: PipelineActor;
+  at: string;
+  /** For "entrevista" events: the interview time set (a reschedule logs a new event). */
+  interviewAt?: string | null;
+};
+
+/** Everything both sides see about one application. */
+export type ApplicationPipeline = {
+  /** Application id (live: uuid; demo: "a1"… on the company side, "demo-<jobId>" on the candidate side). */
+  id: string;
+  jobId: string;
+  status: ApplicationStatus;
+  appliedAt: string;
+  /** First time the company opened it (stays set once seen). */
+  seenAt: string | null;
+  /** Kept after the interview (contratada / cerrada still carry it as history). */
+  interview: InterviewDetails | null;
+  /** Next steps or a courteous "no", ≤ 500 chars. Written with the latest status change. */
+  companyMessage: string | null;
+  hiredAt: string | null;
+  /** Set only while status is "cerrada": "empresa" = declined, "candidato" = withdrawn. */
+  closedBy: PipelineActor | null;
+  closedAt: string | null;
+  /** Oldest first. */
+  events: PipelineEvent[];
+  /** true while an optimistic change hasn't been confirmed by the server yet. */
+  pending?: boolean;
+};
+
+/** The light per-application row for lists and counters (company side). */
+export type PipelineSummary = Pick<
+  ApplicationPipeline,
+  "id" | "jobId" | "status" | "appliedAt" | "seenAt" | "hiredAt" | "closedBy" | "closedAt" | "pending"
+> & {
+  interviewAt: string | null;
+  interviewPlace: string | null;
+};
+
+/** A private note of the company about an applicant (never visible to the candidate). */
+export type RecruiterNote = {
+  id: string;
+  /** 1–1000 chars. */
+  body: string;
+  at: string;
+  /** Written by the signed-in user (only own notes can be deleted). */
+  mine: boolean;
+  /** Optimistic: not saved yet. */
+  pending?: boolean;
+};

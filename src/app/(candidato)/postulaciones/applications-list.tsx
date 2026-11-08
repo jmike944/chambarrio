@@ -1,148 +1,164 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  ArrowDown01Icon,
   ArrowRight01Icon,
   Bookmark01Icon,
   Calendar03Icon,
+  CalendarAdd01Icon,
+  Location01Icon,
   SentIcon,
-  Tick02Icon,
-  ViewIcon,
+  Store01Icon,
 } from "@hugeicons/core-free-icons";
-import { BLOCK_CLASS, HeroCard, Panel, PanelHeader, rotateTone, type BlockTone } from "@/components/chamba/primitives";
-import { CountUp, StageBars, Sticker, useConfetti } from "@/components/chamba/motion";
-import { CATEGORY_BLOCK, CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
-import { Mascot, type MascotMood } from "@/components/chamba/art/mascot";
+import { BLOCK_CLASS, Chip, HeroCard, Panel, PanelHeader, type BlockTone } from "@/components/chamba/primitives";
+import { CountUp, Sticker } from "@/components/chamba/motion";
+import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
+import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle } from "@/components/chamba/art/doodles";
-import { JobRow, companyLabel } from "@/components/chamba/job-row";
-import { Badge } from "@/components/ui/badge";
+import { JobRow } from "@/components/chamba/job-row";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
 import { useCatalog, useJob } from "@/lib/data/catalog";
-import { useSessionLoaded } from "@/lib/live/session";
-import type { Application, ApplicationStatus, CategoryId, Job } from "@/lib/data/types";
+import type { ApplicationPipeline } from "@/lib/data/types";
 import { distanceKm, formatKm } from "@/lib/geo";
-import { formatMinutesAgo, formatPay } from "@/lib/format";
+import { formatPay } from "@/lib/format";
+import {
+  STEP_META,
+  defaultInterviewPlace,
+  downloadIcs,
+  fmtDate,
+  fmtDayTime,
+  fmtTime,
+  interviewIcsFor,
+  stepOf,
+  useMyPipelines,
+  useNow,
+  type PipelineStep,
+} from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 import { HARD, HARD_SM, HazardTape, Rivets, STENCIL } from "./rugged";
 import { CatalogErrorPanel, InkSkeleton, LoadingNote, RowSkeletons } from "../vacantes/_seeker/states";
-
-type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
-
-const STEPS: { id: ApplicationStatus; label: string; short: string }[] = [
-  { id: "enviada", label: "Enviada", short: "Enviada" },
-  { id: "vista", label: "La empresa la vio", short: "Te vieron" },
-  { id: "entrevista", label: "Entrevista", short: "Entrevista" },
-  { id: "contratada", label: "Contratada", short: "¡Contratada!" },
-];
-
-const STATUS: Record<ApplicationStatus, { label: string; color: string; hint: string }> = {
-  enviada: { label: "Enviada", color: "var(--uva-ink)", hint: "La empresa suele responder en 1 o 2 días." },
-  vista: { label: "La empresa la vio", color: "var(--cielo)", hint: "Ten tu teléfono a la mano: pueden llamarte." },
-  entrevista: { label: "Entrevista", color: "var(--nopal)", hint: "Te esperan el jueves a las 10:00. Lleva tu INE y comprobante de domicilio." },
-  contratada: { label: "Contratada", color: "var(--nopal)", hint: "¡Felicidades! Acuerda tu primer día con la empresa." },
-  cerrada: { label: "Vacante cerrada", color: "var(--rosa)", hint: "Esta vacante ya se ocupó. Hay más cerca de ti." },
-};
-
-/** Hero copy per status — the most advanced application gets the violet block. */
-const HERO: Record<ApplicationStatus, { eyebrow: string; title: string; mood: MascotMood; sticker: React.ReactNode }> = {
-  contratada: { eyebrow: "¡Lo lograste!", title: "¡Te contrataron!", mood: "festeja", sticker: <><strong>¡Sí!</strong>Chamba</> },
-  entrevista: { eyebrow: "Tu siguiente paso", title: "¡Tienes entrevista!", mood: "saluda", sticker: <><strong>Jue</strong>10:00</> },
-  vista: { eyebrow: "Buenas noticias", title: "¡Ya te vieron!", mood: "saluda", sticker: <><strong>¡Ojo!</strong>Te vieron</> },
-  enviada: { eyebrow: "Vas bien", title: "¡Postulación enviada!", mood: "piensa", sticker: <><strong>1–2</strong>días</> },
-  cerrada: { eyebrow: "Sigue buscando", title: "Esta ya se ocupó", mood: "piensa", sticker: <><strong>+</strong>cerca</> },
-};
-
-/** Live: there's no interview scheduling yet, so no made-up day/time. */
-const LIVE_HINT: Partial<Record<ApplicationStatus, string>> = {
-  entrevista: "La empresa te llama o te manda SMS para acordar el día y la hora.",
-  cerrada: "Esta postulación ya no sigue. Hay más chamba cerca de ti.",
-};
-const LIVE_STICKER: Partial<Record<ApplicationStatus, React.ReactNode>> = {
-  entrevista: <><strong>¡Ya!</strong>Entrevista</>,
-};
-const hintFor = (status: ApplicationStatus, live: boolean) => (live ? LIVE_HINT[status] : undefined) ?? STATUS[status].hint;
-
-const RANK: Record<ApplicationStatus, number> = { contratada: 4, entrevista: 3, vista: 2, enviada: 1, cerrada: 0 };
+import { ago, byAttention, interviewState, listTones, type CSSVars } from "./_pipeline/model";
+import { MiniTrack, PipelineStatus, STEP_MOOD, StepChip } from "./_pipeline/status";
+import { useSimilarJobs } from "./_pipeline/similar";
 
 /** Stat tiles — three bold pastels (no pink). */
 const STAT_TONES = ["sol", "cielo", "menta"] as const satisfies readonly BlockTone[];
 
-/**
- * Category tint per card, nudged so neighbours never repeat a tone: the first card avoids the
- * stat tile right above it, the last card avoids the lila "Guardadas" panel below it.
- */
-function pickTones(categories: (CategoryId | undefined)[]): BlockTone[] {
-  const out: BlockTone[] = [];
-  categories.forEach((category, i) => {
-    const avoid = new Set<BlockTone>([out[i - 1], ...(i === 0 ? STAT_TONES : []), i === categories.length - 1 ? "lila" : undefined].filter(Boolean) as BlockTone[]);
-    let tone: BlockTone = category ? CATEGORY_BLOCK[category] : "cielo";
-    let k = i;
-    while (avoid.has(tone)) tone = rotateTone(++k);
-    out.push(tone);
-  });
-  return out;
-}
+type Filter = "todas" | "proceso" | "entrevistas" | "terminadas";
+const FILTERS: { id: Filter; label: string; match: (s: PipelineStep) => boolean }[] = [
+  { id: "todas", label: "Todas", match: () => true },
+  { id: "proceso", label: "En proceso", match: (s) => s === "enviada" || s === "vista" || s === "entrevista" },
+  { id: "entrevistas", label: "Entrevistas", match: (s) => s === "entrevista" },
+  { id: "terminadas", label: "Terminadas", match: (s) => s === "contratada" || s === "descartada" || s === "retirada" },
+];
+/** Show the filter chips from this many applications on. */
+const FILTER_FROM = 5;
+
+const cardId = (jobId: string) => `postulacion-${jobId}`;
 
 export function ApplicationsList() {
-  const allApplications = useApp((s) => s.applications);
+  const mine = useMyPipelines();
   const saved = useApp((s) => s.saved);
   const catalog = useCatalog();
   const live = catalog.source === "live";
-  const sessionLoaded = useSessionLoaded();
+  const now = useNow();
+  const [filter, setFilter] = useState<Filter>("todas");
+  /** Cards the person opened/closed (by jobId); the top card starts open when it needs attention. */
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
-  // Demo: only applications whose vacancy exists (as always). Live: every application; a vacancy
-  // that closed (or isn't visible anymore) shows as "Vacante cerrada" instead of disappearing.
-  const applications = live ? allApplications : allApplications.filter((a) => catalog.jobById[a.jobId]);
-  const hero = applications.reduce<Application | null>((best, a) => (!best || RANK[a.status] > RANK[best.status] ? a : best), null);
-  const rest = applications.filter((a) => a !== hero);
-  const tones = pickTones(rest.map((a) => catalog.jobById[a.jobId]?.category));
-  const seen = allApplications.filter((a) => RANK[a.status] >= 2).length;
+  // Demo: only applications whose vacancy exists. Live: every application; a vacancy that closed
+  // shows as "Vacante cerrada" but keeps its timeline.
+  const list = useMemo(() => {
+    const rows = live ? mine.data : mine.data.filter((p) => catalog.jobById[p.jobId]);
+    return now ? rows.toSorted(byAttention(now)) : rows;
+  }, [live, mine.data, catalog.jobById, now]);
 
-  // Live: the user's applications arrive with loadSession(); the vacancies with the catalog.
-  if (live && (catalog.status === "loading" || !sessionLoaded)) return <ApplicationsSkeleton />;
-  if (live && catalog.status === "error") return <CatalogErrorPanel error={catalog.error} title="No pudimos cargar tus postulaciones" className="mx-auto max-w-xl" />;
+  if (mine.loading || !now || (live && catalog.status === "loading")) return <ApplicationsSkeleton />;
+  if (live && catalog.status === "error" && list.length === 0) {
+    return <CatalogErrorPanel error={catalog.error} title="No pudimos cargar tus postulaciones" className="mx-auto max-w-xl" />;
+  }
+
+  const steps = list.map((p) => stepOf(p));
+  const hero = list[0] ?? null;
+  const autoOpen = hero && ["entrevista", "contratada", "vista"].includes(stepOf(hero)) ? hero.jobId : null;
+  const isOpen = (jobId: string) => toggled[jobId] ?? jobId === autoOpen;
+  const active = steps.filter((s) => s === "enviada" || s === "vista" || s === "entrevista").length;
+  // Same count as the "Entrevistas" filter chip (an interview that already happened still waits for an answer).
+  const interviews = steps.filter((s) => s === "entrevista").length;
+  const visible = list.filter((_, i) => FILTERS.find((f) => f.id === filter)!.match(steps[i]));
+  const tones = listTones(visible.map(stepOf));
+
+  function openCard(jobId: string) {
+    setToggled((t) => ({ ...t, [jobId]: true }));
+    setFilter("todas");
+    requestAnimationFrame(() => document.getElementById(cardId(jobId))?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
-      <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-7">
-        {hero ? <HeroSlot app={hero} live={live} /> : <EmptyHero />}
-
-        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-          <MiniStat tone={STAT_TONES[0]} icon={SentIcon} label="Enviadas" value={applications.length} index={1} />
-          <MiniStat tone={STAT_TONES[1]} icon={ViewIcon} label="Te vieron" value={seen} index={2} />
-          <MiniStat tone={STAT_TONES[2]} icon={Bookmark01Icon} label="Guardadas" value={saved.length} index={3} />
-        </div>
-
-        {rest.length > 0 ? (
-          <section aria-labelledby="en-camino">
-            <h2 id="en-camino" className="mb-3 flex items-center gap-2.5 font-display text-[1.45rem] font-extrabold tracking-[-0.03em]">
-              También en camino
-              <span className="grid h-7 min-w-7 -rotate-6 place-items-center rounded-md border-2 border-ink bg-[#FFD23F] px-2 font-sans text-[0.85rem] font-bold text-ink tabular-nums">
-                {rest.length}
-              </span>
-            </h2>
-            <ul className="pt-3">
-              {rest.map((a, i) => (
-                <li
-                  key={a.jobId}
-                  className={cn("relative animate-rise", i > 0 && "-mt-3")}
-                  style={{ "--i": Math.min(i + 3, 8), zIndex: i + 1 } as CSSVars}
-                >
-                  <CardSlot app={a} tone={tones[i]} live={live} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+      <div className="flex min-w-0 lg:col-span-7 lg:row-span-2">
+        {hero ? <AttentionHero p={hero} now={now} onDetails={() => openCard(hero.jobId)} /> : <EmptyHero />}
       </div>
 
-      <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-5">
-        <Panel tone="lila" className={cn("overflow-hidden animate-rise", HARD)} style={{ "--i": 4 } as CSSVars}>
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-3 lg:col-span-5">
+        <MiniStat tone={STAT_TONES[0]} icon={SentIcon} label="En proceso" value={active} index={1} />
+        <MiniStat tone={STAT_TONES[1]} icon={Calendar03Icon} label={interviews === 1 ? "Entrevista" : "Entrevistas"} value={interviews} index={2} />
+        <MiniStat tone={STAT_TONES[2]} icon={Bookmark01Icon} label="Guardadas" value={saved.length} index={3} />
+      </div>
+
+      {/* The list (full width on desktop, so expanding a card never unbalances two columns). */}
+      <section aria-labelledby="mis-postulaciones" className="min-w-0 lg:col-span-12 lg:row-start-3">
+        {list.length ? (
+          <>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 id="mis-postulaciones" className="flex items-center gap-2.5 font-display text-[1.45rem] font-extrabold tracking-[-0.03em]">
+                Tus postulaciones
+                <span className="grid h-7 min-w-7 -rotate-6 place-items-center rounded-md border-2 border-ink bg-block-sol px-2 font-sans text-[0.85rem] font-bold text-ink tabular-nums">
+                  {list.length}
+                </span>
+              </h2>
+              {mine.refreshing ? <span className="text-sm font-medium text-muted-foreground">Actualizando…</span> : null}
+            </div>
+            {list.length >= FILTER_FROM ? (
+              <div role="group" aria-label="Filtrar postulaciones" className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:px-0">
+                {FILTERS.map((f) => (
+                  <Chip key={f.id} active={filter === f.id} count={steps.filter(f.match).length} onClick={() => setFilter(f.id)}>
+                    {f.label}
+                  </Chip>
+                ))}
+              </div>
+            ) : null}
+            {visible.length ? (
+              <ul className="space-y-4">
+                {visible.map((p, i) => (
+                  <li key={p.jobId} className="animate-rise" style={{ "--i": Math.min(i + 3, 8) } as CSSVars}>
+                    <ApplicationCard
+                      p={p}
+                      now={now}
+                      tone={tones[i]}
+                      open={isOpen(p.jobId)}
+                      onToggle={() => setToggled((t) => ({ ...t, [p.jobId]: !isOpen(p.jobId) }))}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={cn("rounded-panel p-5 text-center font-semibold", BLOCK_CLASS.cielo, HARD)}>Nada por aquí con ese filtro.</p>
+            )}
+          </>
+        ) : (
+          <StartHere />
+        )}
+      </section>
+
+      <div className="flex min-w-0 flex-col gap-5 lg:col-span-5 lg:col-start-8 lg:row-start-2">
+        <Panel tone="lila" className={cn("flex-1 animate-rise overflow-hidden", HARD)} style={{ "--i": 4 } as CSSVars}>
           <PanelHeader icon={Bookmark01Icon} title="Guardadas" count={saved.length} />
           {saved.length === 0 ? (
             <div className="flex items-center gap-4 py-2">
@@ -161,10 +177,9 @@ export function ApplicationsList() {
         </Panel>
 
         <Link
-          href="/inicio"
+          href="/vacantes"
           className={cn(
-            "group lift press relative isolate flex min-h-44 flex-col justify-between overflow-hidden rounded-panel p-5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:p-6",
-            "animate-rise",
+            "group lift press relative isolate flex min-h-40 animate-rise flex-col justify-between overflow-hidden rounded-panel p-5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:p-6",
             HARD,
             BLOCK_CLASS.durazno,
           )}
@@ -174,40 +189,319 @@ export function ApplicationsList() {
           <HazardTape className="absolute inset-x-0 top-0 -z-10 h-3 border-t-0" />
           <div className="mt-2 max-w-[58%]">
             <p className="text-[0.72rem] font-semibold tracking-[0.14em] uppercase opacity-75">¡Ándale!</p>
-            <p className="mt-1 font-display text-[1.6rem] leading-[1.02] font-extrabold tracking-[-0.03em]">
-              Hay más chamba a la vuelta
-            </p>
+            <p className="mt-1 font-display text-[1.5rem] leading-[1.02] font-extrabold tracking-[-0.03em]">Hay más chamba a la vuelta</p>
           </div>
           <span className="mt-4 inline-flex h-11 w-fit items-center gap-1.5 rounded-full bg-ink px-4 text-[0.95rem] font-semibold text-white transition-transform group-hover:translate-x-1">
             Ver vacantes cerca
             <HugeiconsIcon icon={ArrowRight01Icon} className="size-4.5" strokeWidth={2.2} />
           </span>
-          <Scene name="radar" className="pointer-events-none absolute -right-6 -bottom-6 -z-10 w-44 rotate-6 sm:w-52" />
+          <Scene name="radar" className="pointer-events-none absolute -right-6 -bottom-6 -z-10 w-40 rotate-6 sm:w-48" />
         </Link>
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ catalog slots */
+/* ------------------------------------------------------------------ hero: what needs attention */
 
-/** Hero for the most advanced application; resolves its vacancy (live fetches it if it's far away). */
-function HeroSlot({ app, live }: { app: Application; live: boolean }) {
+function AttentionHero({ p, now, onDetails }: { p: ApplicationPipeline; now: number; onDetails: () => void }) {
   const home = useApp((s) => s.home);
-  const { status, job } = useJob(app.jobId);
-  if (job) return <ApplicationHero app={app} job={job} km={distanceKm(home, job.location)} live={live} />;
-  // "error" here is only a failed single-vacancy fetch (page-level errors are handled above): don't call it closed.
-  if (status !== "ready") return <HeroSkeleton />;
-  return <ClosedHero app={app} />;
+  const { job, company, branch, label } = useJob(p.jobId);
+  const step = stepOf(p);
+  const ist = interviewState(p, now);
+  const upcoming = ist === "upcoming" || ist === "today";
+  const companyName = company?.name ?? "La empresa";
+
+  const copy = (() => {
+    if (step === "entrevista" && upcoming && p.interview)
+      return {
+        eyebrow: ist === "today" ? "Hoy es tu entrevista" : "Tu próxima entrevista",
+        title: fmtDayTime(p.interview.at, { now, capitalize: true }),
+        body: null as string | null,
+      };
+    if (step === "entrevista") return { eyebrow: "Tu entrevista ya pasó", title: `¿Cómo te fue en ${companyName}?`, body: STEP_META.entrevista.typical };
+    if (step === "contratada")
+      return { eyebrow: "¡Lo lograste!", title: "¡Te contrataron!", body: p.companyMessage?.trim() || STEP_META.contratada.candidateNext };
+    if (step === "vista") return { eyebrow: "Buenas noticias", title: `${companyName} vio tu postulación`, body: STEP_META.vista.candidateNext };
+    if (step === "enviada") return { eyebrow: "Vas bien", title: "Tu postulación va en camino", body: STEP_META.enviada.candidateNext };
+    return { eyebrow: "Sigue buscando", title: "Hay más chamba cerca de ti", body: STEP_META[step].candidateNext };
+  })();
+
+  const place = p.interview ? (p.interview.place ?? (branch ? defaultInterviewPlace(branch, company?.name) : null)) : null;
+  const closedOnly = step === "descartada" || step === "retirada";
+
+  function addToCalendar() {
+    const cal = interviewIcsFor(p, { job, company, branch });
+    if (!cal) return;
+    try {
+      downloadIcs(cal.ics, cal.fileName);
+      toast.success("Listo: ábrelo para guardarla en tu calendario", { description: "Te recuerda 1 hora antes." });
+    } catch {
+      toast.error("No pudimos crear el archivo del calendario. Anota la fecha y la hora.");
+    }
+  }
+
+  return (
+    <HeroCard
+      eyebrow={copy.eyebrow}
+      title={copy.title}
+      className={cn(
+        "flex w-full flex-col animate-rise overflow-visible border-[2.5px] border-ink shadow-[6px_6px_0_0_var(--ink)]! dark:shadow-[6px_6px_0_0_rgb(255_255_255/0.16)]!",
+      )}
+      sticker={
+        upcoming && p.interview ? (
+          <Sticker variant="lime" dot rotate={12}>
+            <strong>{fmtTime(p.interview.at, { h24: true })}</strong>
+            {fmtDate(p.interview.at, { now })}
+          </Sticker>
+        ) : step === "contratada" ? (
+          <Sticker variant="lime" dot rotate={12}>
+            <strong>¡Sí!</strong>Chamba
+          </Sticker>
+        ) : null
+      }
+    >
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]">
+        <Doodle name="rayo" color="var(--limon)" className="absolute top-[38%] right-5 size-6 rotate-12" />
+        <Doodle name="zigzag" color="#FFD23F" className="absolute bottom-28 left-[46%] size-7" />
+        <HazardTape className="absolute inset-x-0 bottom-0 h-3 border-b-0" />
+      </span>
+      <Rivets className="text-white" />
+
+      <Link
+        href={`/vacantes/${p.jobId}`}
+        className="group press mt-4 flex items-center gap-3 rounded-tile bg-white/12 p-3 outline-none transition-colors hover:bg-white/20 focus-visible:ring-3 focus-visible:ring-limon"
+      >
+        {job ? (
+          <CategoryIcon category={job.category} size="md" />
+        ) : (
+          <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-tile border-2 border-dashed border-white/40">
+            <HugeiconsIcon icon={Store01Icon} className="size-5" strokeWidth={2} />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[1.08rem] leading-snug font-semibold">{job?.title ?? "Vacante cerrada"}</span>
+          <span className="line-clamp-2 text-[0.93rem] leading-snug text-primary-foreground/80">
+            {job ? `${label} · ${formatKm(distanceKm(home, job.location))}` : "Ya no recibe postulaciones"}
+          </span>
+        </span>
+        <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0 transition-transform group-hover:translate-x-1" strokeWidth={2} />
+      </Link>
+
+      {upcoming && place ? (
+        <p className="mt-3 flex items-start gap-2 text-[0.98rem] leading-snug text-primary-foreground/90">
+          <HugeiconsIcon icon={Location01Icon} className="mt-0.5 size-[1.1rem] shrink-0 text-limon" strokeWidth={2.2} />
+          {place}
+        </p>
+      ) : null}
+      {upcoming && p.interview?.note ? (
+        <p className="mt-2 rounded-tile bg-white/10 px-3 py-2 text-[0.95rem] leading-snug text-primary-foreground/90">“{p.interview.note}”</p>
+      ) : copy.body ? (
+        <p className="mt-3 text-[0.98rem] leading-snug text-primary-foreground/85">{copy.body}</p>
+      ) : null}
+
+      <div className="relative mt-4 flex items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-[0.72rem] font-semibold tracking-[0.14em] uppercase">
+            <span className="text-limon">{STEP_META[step].candidateLabel}</span>
+            <span className="text-primary-foreground/75"> · {ago(p.events.at(-1)?.at ?? p.appliedAt, now)}</span>
+          </p>
+          <MiniTrack p={p} inverse />
+        </div>
+        <Mascot mood={STEP_MOOD[step]} prop={step === "contratada" ? "trofeo" : "casco"} size={88} className="-mr-2 -mb-1 shrink-0 sm:-mr-3" />
+      </div>
+
+      <div className="mt-auto grid gap-2.5 pt-5 sm:grid-cols-2">
+        {closedOnly ? (
+          <Button variant="lime" size="xl" className="w-full sm:col-span-2" asChild>
+            <Link href="/vacantes">Ver vacantes cerca</Link>
+          </Button>
+        ) : upcoming && p.interview ? (
+          <>
+            <Button variant="lime" size="xl" className="w-full" onClick={addToCalendar}>
+              <HugeiconsIcon icon={CalendarAdd01Icon} className="size-5" strokeWidth={2.2} />
+              A mi calendario
+            </Button>
+            <Button size="xl" className="w-full border-2 border-white/70 bg-transparent text-white hover:bg-white/10" onClick={onDetails}>
+              Qué llevar y más
+              <HugeiconsIcon icon={ArrowDown01Icon} className="size-5" strokeWidth={2.2} />
+            </Button>
+          </>
+        ) : (
+          <Button variant="lime" size="xl" className="w-full sm:col-span-2" onClick={onDetails}>
+            Ver el detalle
+            <HugeiconsIcon icon={ArrowDown01Icon} className="size-5" strokeWidth={2.2} />
+          </Button>
+        )}
+      </div>
+    </HeroCard>
+  );
 }
 
-function CardSlot({ app, tone, live }: { app: Application; tone: BlockTone; live: boolean }) {
-  const home = useApp((s) => s.home);
-  const { status, job } = useJob(app.jobId);
-  if (job) return <ApplicationCard app={app} job={job} tone={tone} km={distanceKm(home, job.location)} live={live} />;
-  if (status !== "ready") return <CardSkeleton tone={tone} />;
-  return <ClosedCard app={app} tone={tone} />;
+function EmptyHero() {
+  return (
+    <HeroCard eyebrow="Tus postulaciones" title="Aún no te postulas a ninguna" className="flex w-full flex-col animate-rise">
+      <div className="mt-2 flex items-center gap-4">
+        <p className="min-w-0 flex-1 text-[1rem] leading-snug text-primary-foreground/85">
+          Un toque y listo, sin currículum. Aquí vas a ver cuándo la empresa vea tu postulación, tu entrevista y su respuesta.
+        </p>
+        <Scene name="busqueda" className="w-32 shrink-0 sm:w-40" />
+      </div>
+      <Button variant="lime" size="xl" className="mt-auto w-full" asChild>
+        <Link href="/vacantes">Ve las que están cerca de ti</Link>
+      </Button>
+    </HeroCard>
+  );
 }
+
+/** Empty list: a few vacancies near home to start with. */
+function StartHere() {
+  const jobs = useSimilarJobs(null, null, 4);
+  const radiusKm = useApp((s) => s.radiusKm);
+  return (
+    <Panel tone="cielo" className={cn("animate-rise", HARD)}>
+      <PanelHeader icon={Location01Icon} title="Para empezar, estas quedan cerca" />
+      {jobs.length ? (
+        <ul className="grid gap-x-6 lg:grid-cols-2">
+          {jobs.map((j) => (
+            <li key={j.id}>
+              <JobRow job={j} km={j.km} radiusKm={radiusKm} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">Busca en el mapa o amplía tu radio para ver más vacantes.</p>
+      )}
+    </Panel>
+  );
+}
+
+/* ------------------------------------------------------------------ list card */
+
+/** One-liner under the title: the interview day, or when the last step happened. */
+function summaryLine(p: ApplicationPipeline, step: PipelineStep, now: number): string {
+  const ist = interviewState(p, now);
+  if (step === "entrevista" && p.interview && ist !== "past") return `Entrevista ${fmtDayTime(p.interview.at, { now })}`;
+  if (step === "entrevista") return "Ya fue tu entrevista · esperando respuesta";
+  const last = p.events.at(-1)?.at ?? p.appliedAt;
+  const when = ago(last, now);
+  switch (step) {
+    case "enviada":
+      return `Te postulaste ${when}`;
+    case "vista":
+      return `La vieron ${when}`;
+    case "contratada":
+      return `Te contrataron ${when}`;
+    case "descartada":
+      return `Se cerró ${when}`;
+    default:
+      return `La retiraste ${when}`;
+  }
+}
+
+function ApplicationCard({
+  p,
+  now,
+  tone,
+  open,
+  onToggle,
+}: {
+  p: ApplicationPipeline;
+  now: number;
+  tone: BlockTone;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const home = useApp((s) => s.home);
+  const { status, job, company, branch, label } = useJob(p.jobId);
+  const step = stepOf(p);
+  const bodyId = `${cardId(p.jobId)}-detalle`;
+  const loadingJob = !job && status !== "ready";
+  const closedLook = step === "descartada" || step === "retirada";
+
+  return (
+    <article
+      id={cardId(p.jobId)}
+      aria-label={job?.title ?? "Vacante cerrada"}
+      className={cn("relative isolate scroll-mt-6 rounded-panel", BLOCK_CLASS[tone], HARD)}
+    >
+      {job ? (
+        <CategoryArt
+          category={job.category}
+          className={cn(
+            // Bleeds off the top edge on purpose (sticker), but stays clear of the expand button.
+            "pointer-events-none absolute -top-3 right-[4.5rem] -z-10 size-16 rotate-12 sm:right-[5.25rem] sm:size-20",
+            closedLook && "opacity-50 grayscale",
+          )}
+        />
+      ) : null}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={onToggle}
+        className="group flex w-full items-start gap-3 rounded-panel p-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ink/40 sm:gap-4 sm:p-5"
+      >
+        {job ? (
+          <CategoryIcon category={job.category} size="md" className={cn("shrink-0", HARD_SM)} />
+        ) : (
+          <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-tile border-2 border-dashed border-ink/40 bg-white/50">
+            <HugeiconsIcon icon={Store01Icon} className="size-5" strokeWidth={2} />
+          </span>
+        )}
+        <span className="min-w-0 flex-1 pr-1">
+          <span className="block pr-16 text-[1.12rem] leading-snug font-semibold sm:pr-20">
+            {loadingJob ? <InkSkeleton className="inline-block h-5 w-40" /> : (job?.title ?? "Vacante cerrada")}
+          </span>
+          <span className="block truncate text-[0.93rem] text-muted-foreground">
+            {job ? (
+              <>
+                <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span> · {label} · {formatKm(distanceKm(home, job.location))}
+              </>
+            ) : loadingJob ? (
+              "Cargando la vacante…"
+            ) : (
+              "Ya no recibe postulaciones"
+            )}
+          </span>
+          <span className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+            <StepChip p={p} />
+            <span className="text-[0.9rem] leading-snug font-medium">{summaryLine(p, step, now)}</span>
+            {p.pending ? <span className="text-[0.85rem] text-muted-foreground">Guardando…</span> : null}
+          </span>
+          <MiniTrack p={p} className="mt-3 max-w-[16rem]" />
+        </span>
+        <span
+          aria-hidden
+          className={cn(
+            "grid size-11 shrink-0 place-items-center rounded-full border-2 border-ink bg-white text-ink transition-transform duration-300 group-hover:scale-105",
+            open && "rotate-180 bg-ink text-white",
+          )}
+        >
+          <HugeiconsIcon icon={ArrowDown01Icon} className="size-5" strokeWidth={2.4} />
+        </span>
+        <span className="sr-only">{open ? "Ocultar detalle" : "Ver detalle"}</span>
+      </button>
+
+      {open ? (
+        <div id={bodyId} className="animate-rise border-t-2 border-ink/15 px-4 pt-4 pb-4 [--rise:8px] sm:px-5 sm:pb-5">
+          <PipelineStatus p={p} now={now} job={job} company={company} branch={branch} />
+          {job ? (
+            <Link
+              href={`/vacantes/${p.jobId}`}
+              className="press mt-3 inline-flex min-h-11 items-center gap-1.5 font-semibold underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ink/30"
+            >
+              Ver la vacante
+              <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" strokeWidth={2.4} />
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+/* ------------------------------------------------------------------ saved */
 
 function SavedRow({ id, live }: { id: string; live: boolean }) {
   const home = useApp((s) => s.home);
@@ -251,97 +545,32 @@ function SavedRow({ id, live }: { id: string; live: boolean }) {
   );
 }
 
-/** Live: the vacancy closed (or was paused) after the user applied. */
-function ClosedCard({ app, tone }: { app: Application; tone: BlockTone }) {
-  return (
-    <div className={cn("relative block rounded-panel p-5", BLOCK_CLASS[tone], HARD)}>
-      <div className="flex items-start gap-3">
-        <span aria-hidden className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl border-2 border-dashed border-ink/40 bg-white/50" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[1.1rem] leading-snug font-semibold">Vacante cerrada</p>
-          <p className="text-[0.93rem] text-muted-foreground">La empresa ya no recibe postulaciones para esta vacante.</p>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Badge variant="status" size="md" className="border-transparent bg-white text-ink" style={{ "--dot": STATUS.cerrada.color } as CSSVars}>
-          {STATUS.cerrada.label}
-        </Badge>
-        <span className="text-[0.88rem] text-muted-foreground">
-          Te postulaste {app.minutesAgo === 0 ? "justo ahora" : formatMinutesAgo(app.minutesAgo).toLowerCase()}
-        </span>
-      </div>
-      <Button asChild variant="white" size="lg" className="mt-4 w-full border-2 border-ink text-ink">
-        <Link href="/vacantes">Ver más vacantes cerca</Link>
-      </Button>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ skeleton */
 
-function ClosedHero({ app }: { app: Application }) {
-  const copy = HERO.cerrada;
-  return (
-    <HeroCard eyebrow={copy.eyebrow} title="Esta vacante ya cerró" className="animate-rise border-[2.5px] border-ink">
-      <div className="mt-2 flex items-center gap-4">
-        <p className="min-w-0 flex-1 text-[1rem] leading-snug text-primary-foreground/85">
-          Te postulaste {app.minutesAgo === 0 ? "justo ahora" : formatMinutesAgo(app.minutesAgo).toLowerCase()}, pero la empresa ya no
-          recibe postulaciones. Hay más chamba a unos pasos de tu casa.
-        </p>
-        <Mascot mood="piensa" prop="casco" size={96} className="shrink-0" />
-      </div>
-      <Button variant="lime" size="xl" className="mt-5 w-full" asChild>
-        <Link href="/vacantes">Ver vacantes cerca</Link>
-      </Button>
-    </HeroCard>
-  );
-}
-
-function HeroSkeleton() {
-  return (
-    <HeroCard eyebrow="Tus postulaciones" title="Cargando tus postulaciones…" className="animate-rise">
-      <LoadingNote>Cargando tus postulaciones…</LoadingNote>
-      <InkSkeleton className="mt-4 h-16 w-full rounded-tile bg-white/15!" />
-      <InkSkeleton className="mt-4 h-4 w-2/3 bg-white/20!" />
-      <InkSkeleton className="mt-5 h-20 w-full bg-white/15!" />
-      <InkSkeleton className="mt-5 h-14 w-full rounded-full bg-white/20!" />
-    </HeroCard>
-  );
-}
-
-function CardSkeleton({ tone }: { tone: BlockTone }) {
-  return (
-    <div aria-hidden className={cn("relative h-[15.5rem] rounded-panel p-5", BLOCK_CLASS[tone], HARD)}>
-      <div className="flex items-start gap-3">
-        <InkSkeleton className="size-10 shrink-0 rounded-xl" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <InkSkeleton className="h-5 w-3/5" />
-          <InkSkeleton className="h-4 w-2/5" />
-        </div>
-      </div>
-      <InkSkeleton className="mt-4 h-7 w-28 rounded-full" />
-      <InkSkeleton className="mt-4 h-10 w-full" />
-      <InkSkeleton className="mt-3 h-12 w-full rounded-tile" />
-    </div>
-  );
-}
-
-/** Live, before the session and catalog land: same two-column layout, placeholders only. */
+/** Before the store / live answer land: same layout, placeholders only. */
 function ApplicationsSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-6">
-      <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-7">
-        <HeroSkeleton />
-        <div aria-hidden className="grid grid-cols-3 gap-2.5 sm:gap-3">
-          {STAT_TONES.map((t) => (
-            <div key={t} className={cn("h-[7.6rem] rounded-tile p-3.5 sm:p-4", BLOCK_CLASS[t], HARD_SM)}>
-              <InkSkeleton className="size-8 rounded-lg" />
-              <InkSkeleton className="mt-2 h-9 w-10" />
-              <InkSkeleton className="mt-1.5 h-3.5 w-14" />
-            </div>
-          ))}
-        </div>
+      <div className="flex min-w-0 lg:col-span-7 lg:row-span-2">
+        <HeroCard eyebrow="Tus postulaciones" title="Cargando tus postulaciones…" className="w-full animate-rise">
+          <LoadingNote>Cargando tus postulaciones…</LoadingNote>
+          <InkSkeleton className="mt-4 h-16 w-full rounded-tile bg-white/15!" />
+          <InkSkeleton className="mt-4 h-4 w-2/3 bg-white/20!" />
+          <InkSkeleton className="mt-5 h-20 w-full bg-white/15!" />
+          <InkSkeleton className="mt-5 h-14 w-full rounded-full bg-white/20!" />
+        </HeroCard>
       </div>
-      <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-5">
-        <Panel tone="lila" className={cn("overflow-hidden", HARD)}>
+      <div aria-hidden className="grid grid-cols-3 gap-2.5 sm:gap-3 lg:col-span-5">
+        {STAT_TONES.map((t) => (
+          <div key={t} className={cn("h-[7.6rem] rounded-tile p-3.5 sm:p-4", BLOCK_CLASS[t], HARD_SM)}>
+            <InkSkeleton className="size-8 rounded-lg" />
+            <InkSkeleton className="mt-2 h-9 w-10" />
+            <InkSkeleton className="mt-1.5 h-3.5 w-14" />
+          </div>
+        ))}
+      </div>
+      <div className="min-w-0 lg:col-span-5 lg:col-start-8 lg:row-start-2">
+        <Panel tone="lila" className={cn("h-full overflow-hidden", HARD)}>
           <PanelHeader icon={Bookmark01Icon} title="Guardadas" />
           <RowSkeletons count={2} />
         </Panel>
@@ -354,10 +583,7 @@ function ApplicationsSkeleton() {
 
 function MiniStat({ tone, icon, label, value, index }: { tone: BlockTone; icon: typeof SentIcon; label: string; value: number; index: number }) {
   return (
-    <div
-      className={cn("relative min-w-0 animate-pop-in rounded-tile p-3.5 sm:p-4", BLOCK_CLASS[tone], HARD_SM)}
-      style={{ "--i": index } as CSSVars}
-    >
+    <div className={cn("relative min-w-0 animate-pop-in rounded-tile p-3.5 sm:p-4", BLOCK_CLASS[tone], HARD_SM)} style={{ "--i": index } as CSSVars}>
       <span className="grid size-8 place-items-center rounded-lg bg-ink text-white">
         <HugeiconsIcon icon={icon} className="size-4" strokeWidth={2.2} />
       </span>
@@ -366,195 +592,6 @@ function MiniStat({ tone, icon, label, value, index }: { tone: BlockTone; icon: 
       </p>
       <p className="mt-1 text-[0.82rem] leading-tight font-medium text-muted-foreground">{label}</p>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ hero */
-
-function ApplicationHero({ app, job, km, live }: { app: Application; job: Job; km: number; live: boolean }) {
-  const fire = useConfetti();
-  const [confirmed, setConfirmed] = useState(false);
-  const copy = HERO[app.status];
-  const stepIdx = STEPS.findIndex((s) => s.id === app.status);
-
-  return (
-    <HeroCard
-      eyebrow={copy.eyebrow}
-      title={copy.title}
-      className={cn("animate-rise overflow-visible border-[2.5px] border-ink shadow-[6px_6px_0_0_var(--ink)]! dark:shadow-[6px_6px_0_0_rgb(255_255_255/0.16)]!")}
-      sticker={
-        <Sticker variant="lime" dot rotate={12}>
-          {(live ? LIVE_STICKER[app.status] : undefined) ?? copy.sticker}
-        </Sticker>
-      }
-    >
-      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit]">
-        <Doodle name="rayo" color="var(--limon)" className="absolute top-[38%] right-5 size-6 rotate-12" />
-        <Doodle name="zigzag" color="#FFD23F" className="absolute bottom-28 left-[46%] size-7" />
-        <Doodle name="flecha" color="#5CC3FF" className="absolute right-[30%] bottom-6 size-5 -rotate-12" />
-        <HazardTape className="absolute inset-x-0 bottom-0 h-3 border-b-0" />
-      </span>
-      <Rivets className="text-white" />
-      <Link
-        href={`/vacantes/${job.id}`}
-        className="group press mt-4 flex items-center gap-3 rounded-tile bg-white/12 p-3 outline-none transition-colors hover:bg-white/20 focus-visible:ring-3 focus-visible:ring-limon"
-      >
-        <CategoryIcon category={job.category} size="md" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[1.08rem] leading-snug font-semibold">{job.title}</span>
-          <span className="line-clamp-2 text-[0.93rem] leading-snug text-primary-foreground/80">
-            {companyLabel(job)} · {formatKm(km)}
-          </span>
-        </span>
-        <HugeiconsIcon icon={ArrowRight01Icon} className="size-5 shrink-0 transition-transform group-hover:translate-x-1" strokeWidth={2} />
-      </Link>
-
-      <p className="mt-3 text-[0.98rem] leading-snug text-primary-foreground/85">{hintFor(app.status, live)}</p>
-
-      <div className="relative mt-4 flex items-end gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mb-2 text-[0.72rem] font-semibold tracking-[0.14em] uppercase">
-            <span className="text-limon">Etapa {Math.max(stepIdx, 0) + 1} de {STEPS.length}</span>
-            <span className="text-primary-foreground/75"> · {STEPS[Math.max(stepIdx, 0)].short}</span>
-          </p>
-          <StageBars
-            className="h-20"
-            total={STEPS.length}
-            current={Math.max(stepIdx, 0) + 1}
-            labels={STEPS.map((s) => s.label)}
-            tone="inverse"
-            label={`Avance de tu postulación a ${job.title}`}
-          />
-        </div>
-        <Mascot mood={copy.mood} prop={app.status === "contratada" ? "trofeo" : "casco"} size={96} className="-mr-2 -mb-1 shrink-0 sm:-mr-3" />
-      </div>
-
-      {app.status === "entrevista" && !live ? (
-        <Button
-          variant="lime"
-          size="xl"
-          className="mt-5 w-full"
-          disabled={confirmed}
-          onClick={(e) => {
-            fire({ origin: e.currentTarget });
-            setConfirmed(true);
-            toast.success("¡Ya quedó! Le avisamos a la empresa que vas.");
-          }}
-        >
-          <HugeiconsIcon icon={confirmed ? Tick02Icon : Calendar03Icon} className="size-5" strokeWidth={2} />
-          {confirmed ? "¡Ya quedó! Te esperan el jueves" : "Confirmar asistencia"}
-        </Button>
-      ) : (
-        <Button variant="lime" size="xl" className="mt-5 w-full" asChild>
-          <Link href={`/vacantes/${job.id}`}>Ver la vacante</Link>
-        </Button>
-      )}
-    </HeroCard>
-  );
-}
-
-function EmptyHero() {
-  return (
-    <HeroCard eyebrow="Tus postulaciones" title="Aún no te postulas a ninguna" className="animate-rise">
-      <div className="mt-2 flex items-center gap-4">
-        <p className="min-w-0 flex-1 text-[1rem] leading-snug text-primary-foreground/85">
-          Hay chamba a unos pasos de tu casa. ¡Échale un ojo!
-        </p>
-        <Scene name="busqueda" className="w-32 shrink-0 sm:w-40" />
-      </div>
-      <Button variant="lime" size="xl" className="mt-5 w-full" asChild>
-        <Link href="/inicio">Ve las que están cerca de ti</Link>
-      </Button>
-    </HeroCard>
-  );
-}
-
-/* ------------------------------------------------------------------ list card */
-
-function ApplicationCard({ app, job, tone, km, live }: { app: Application; job: Job; tone: BlockTone; km: number; live: boolean }) {
-  const st = STATUS[app.status];
-  const stepIdx = STEPS.findIndex((s) => s.id === app.status);
-  return (
-    <Link
-      href={`/vacantes/${job.id}`}
-      className={cn(
-        "group lift press relative block rounded-panel p-5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        BLOCK_CLASS[tone],
-        HARD,
-      )}
-    >
-      <CategoryArt
-        category={job.category}
-        className="pointer-events-none absolute -top-4 -right-2 size-20 rotate-12 transition-transform duration-300 ease-[var(--ease-spring)] group-hover:rotate-0 group-hover:scale-110"
-      />
-      <div className="flex items-start gap-3 pr-16">
-        <CategoryIcon category={job.category} size="sm" className="mt-0.5" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[1.1rem] leading-snug font-semibold">{job.title}</p>
-          <p className="truncate text-[0.93rem] text-muted-foreground">
-            <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span> · {companyLabel(job)}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Badge
-          variant="status"
-          size="md"
-          className="border-transparent bg-white text-ink"
-          style={{ "--dot": st.color } as CSSVars}
-        >
-          {st.label}
-        </Badge>
-        <span className="text-[0.88rem] text-muted-foreground">
-          {formatKm(km)} · {app.minutesAgo === 0 ? "Justo ahora" : formatMinutesAgo(app.minutesAgo)}
-        </span>
-      </div>
-
-      <StageStepper stepIdx={stepIdx} className="mt-4" />
-      <p className="mt-3 rounded-tile border-2 border-dashed border-ink/25 bg-tile px-3.5 py-2.5 text-[0.9rem] leading-snug">{hintFor(app.status, live)}</p>
-    </Link>
-  );
-}
-
-/** Horizontal stepper (desktop reference): done = lime check circles, current = violet dot, future = hatched. */
-function StageStepper({ stepIdx, className }: { stepIdx: number; className?: string }) {
-  return (
-    <ol className={cn("grid grid-cols-4", className)} aria-label="Avance de tu postulación">
-      {STEPS.map((s, i) => {
-        const state = i < stepIdx ? "done" : i === stepIdx ? "current" : "todo";
-        return (
-          <li key={s.id} className="relative flex flex-col items-center gap-1.5 text-center" aria-current={state === "current" ? "step" : undefined}>
-            {i > 0 ? (
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute top-4 right-1/2 left-[-50%] -z-0 mx-5 -translate-y-1/2",
-                  i <= stepIdx ? "h-1 rounded-full bg-ink" : "border-t-2 border-dashed border-ink/30",
-                )}
-              />
-            ) : null}
-            <span
-              aria-hidden
-              className={cn(
-                "relative grid size-8 place-items-center rounded-full border-2 animate-pop-in",
-                state === "done" && "border-ink bg-limon text-ink",
-                state === "current" && "border-ink bg-primary ring-4 ring-primary/25",
-                state === "todo" && "border-dashed border-ink/35 bg-hatch",
-              )}
-              style={{ "--i": i } as CSSVars}
-            >
-              {state === "done" ? <HugeiconsIcon icon={Tick02Icon} className="size-4.5" strokeWidth={3} /> : null}
-              {state === "current" ? <span className="size-2.5 rounded-full bg-white" /> : null}
-            </span>
-            <span className={cn("w-full truncate px-0.5 text-[0.74rem] leading-tight", state === "todo" ? "text-muted-foreground" : "font-semibold")}>
-              <span className="sr-only">{state === "done" ? "Hecho: " : state === "current" ? "Ahora: " : "Pendiente: "}</span>
-              {s.short}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
   );
 }
 

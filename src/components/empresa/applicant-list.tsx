@@ -1,16 +1,20 @@
 "use client";
 
+import { useCallback } from "react";
 import { motion, type MotionStyle } from "motion/react";
-import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AlertCircleIcon, RefreshIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { rotateTone, type BlockTone } from "@/components/chamba/primitives";
 import { springs } from "@/components/chamba/motion";
-import { ApplicantCard, ApplicantCardSkeleton, STATUS_LABEL, type ApplicantCardProps } from "@/components/empresa/applicant-card";
+import { ApplicantCard, ApplicantCardSkeleton, type ApplicantCardProps } from "@/components/empresa/applicant-card";
 import { HARD_SM, OUTLINE, WHITE_BUTTON } from "@/components/empresa/workwear";
-import type { ApplicationStatus } from "@/lib/data/types";
-import type { ApplicantProfile, ApplicantProfilesResult } from "@/lib/live/applicant-profiles";
+import { rememberOrder } from "@/components/empresa/applicant-toolbar";
+import { applicantHref, personFirst, usePlaceFor } from "@/components/empresa/pipeline/pipeline-kit";
+import { PipelineQuickAction } from "@/components/empresa/pipeline/quick-action";
+import type { MyJob } from "@/lib/data/catalog";
+import type { PipelineSummary } from "@/lib/data/types";
+import type { ApplicantProfile } from "@/lib/live/applicant-profiles";
 import { cn } from "@/lib/utils";
 
 /*
@@ -108,14 +112,40 @@ export function ApplicantDetailNote({ onRetry, className }: { onRetry: () => voi
   );
 }
 
-/** Status picker handler: moves the application along and confirms (errors are toasted by the hook). */
-export function changeApplicantStatus(setStatus: ApplicantProfilesResult["setStatus"], a: ApplicantProfile) {
-  return (next: ApplicationStatus) => {
-    if (next === a.status) return;
-    void setStatus(a.id, next).then((r) => {
-      if (!r.error) toast.success(`Postulación marcada como ${STATUS_LABEL[next].toLowerCase()}.`);
-    });
-  };
+/**
+ * Card extras for the hiring pipeline: the step (from the pipeline summary), the quick next action,
+ * and "Ver perfil completo" (which remembers the visible order of that vacancy for prev / next).
+ */
+export function usePipelineCardProps({
+  byId,
+  jobs,
+  visible,
+}: {
+  byId: Record<string, PipelineSummary>;
+  jobs: readonly MyJob[];
+  /** The list as shown (after filters and sort). */
+  visible: readonly ApplicantProfile[];
+}): (a: ApplicantProfile) => CardExtras {
+  const placeFor = usePlaceFor();
+  return useCallback(
+    (a: ApplicantProfile): CardExtras => {
+      const p = byId[a.id];
+      const jobId = a.jobId ?? p?.jobId;
+      if (!jobId) return {};
+      const job = jobs.find((j) => j.id === jobId);
+      return {
+        pipeline: p ?? null,
+        profileHref: applicantHref(jobId, a.id),
+        onOpenProfile: () =>
+          rememberOrder(
+            jobId,
+            visible.filter((v) => (v.jobId ?? byId[v.id]?.jobId) === jobId).map((v) => v.id),
+          ),
+        action: p ? <PipelineQuickAction summary={p} first={personFirst(a)} defaultPlace={placeFor(job)} /> : undefined,
+      };
+    },
+    [byId, jobs, visible, placeFor],
+  );
 }
 
 /** "más completos primero" etc., for list labels. */
@@ -123,4 +153,5 @@ export const SORT_PHRASE = {
   completos: "más completos primero",
   cercanos: "más cercanos primero",
   recientes: "más recientes primero",
+  etapa: "por etapa, nuevos primero",
 } as const;

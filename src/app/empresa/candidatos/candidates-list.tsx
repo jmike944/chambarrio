@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Add01Icon, ArrowRight01Icon, LockIcon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
@@ -18,10 +18,11 @@ import {
   ApplicantGrid,
   ApplicantGridSkeleton,
   SORT_PHRASE,
-  changeApplicantStatus,
+  usePipelineCardProps,
 } from "@/components/empresa/applicant-list";
 import type { MyJob } from "@/lib/data/catalog";
-import { useApplicantProfiles, type ApplicantProfile, type ApplicantProfilesResult } from "@/lib/live/applicant-profiles";
+import { useApplicantProfiles, type ApplicantProfile } from "@/lib/live/applicant-profiles";
+import { stepOf, usePipelineSummary, withPipelineStatus } from "@/lib/pipeline";
 import { isProfileComplete } from "@/lib/profile-strength";
 import type { RadiusKm } from "@/lib/geo";
 import { usePaymentsEnabled } from "@/lib/store";
@@ -53,10 +54,20 @@ type Group = {
 };
 
 function AllApplicants({ jobs }: { jobs: MyJob[] }) {
-  const { status, error, detailError, applicants, reload, setStatus } = useApplicantProfiles();
+  const { status, error, detailError, applicants: rows, reload } = useApplicantProfiles();
+  // Same steps as the vacancy pages and the applicant page (demo rows are always "enviada").
+  const pipe = usePipelineSummary();
+  const applicants = useMemo(() => withPipelineStatus(rows, pipe.byId), [rows, pipe.byId]);
+  const stepOfApplicant = useCallback(
+    (a: ApplicantProfile) => (pipe.byId[a.id] ? stepOf(pipe.byId[a.id]) : a.status ? stepOf({ status: a.status }) : null),
+    [pipe.byId],
+  );
   const [radius, setRadius] = useState<RadiusKm>(15);
-  const inRadius = applicants.filter((a) => a.km === null || a.km <= radius);
-  const controls = useApplicantControls(inRadius);
+  const inRadius = useMemo(() => applicants.filter((a) => a.km === null || a.km <= radius), [applicants, radius]);
+  const controls = useApplicantControls(inRadius, { scope: "all", stepOf: stepOfApplicant });
+  const pipelineProps = usePipelineCardProps({ byId: pipe.byId, jobs, visible: controls.visible });
+  const toReview = pipe.counts.enviada;
+  const interviews = pipe.counts.entrevista;
   const ready = status === "ready";
   const complete = completeCount(applicants);
 
@@ -79,13 +90,15 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:gap-6 xl:grid-cols-12 xl:items-start">
+      {/* Desktop: the hero and the privacy note travel together (sticky) beside the long list. */}
+      <div className="min-w-0 space-y-5 xl:sticky xl:top-6 xl:col-span-5 lg:space-y-6">
       {/* ------------------------------------------------ Hero: radius control (the one saturated block) */}
       <HeroCard
         tone="uva"
         decor={false}
         eyebrow="Tus postulantes"
         // Full width below xl: the art moves to the right so the block doesn't get tall and empty.
-        className={cn("animate-rise overflow-hidden sm:pr-[40%] xl:sticky xl:top-6 xl:col-span-5 xl:pr-7", RUG)}
+        className={cn("animate-rise overflow-hidden sm:pr-[40%] xl:pr-7", RUG)}
         title={
           ready ? (
             <>
@@ -103,7 +116,16 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
           <Doodle name="rayo" color="var(--block-sol)" className="absolute top-6 right-6 size-10 rotate-12 sm:hidden xl:block" />
         </span>
         <p className="mt-3 max-w-sm text-[1.02rem] leading-snug text-primary-foreground/80">
-          {ready && complete > 0 ? (
+          {ready && (toReview > 0 || interviews > 0) ? (
+            <>
+              <strong className="font-bold text-primary-foreground">
+                {[toReview > 0 ? countOf(toReview, "nuevo por revisar", "nuevos por revisar") : null, interviews > 0 ? countOf(interviews, "en entrevista", "en entrevista") : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </strong>
+              .{" "}
+            </>
+          ) : ready && complete > 0 ? (
             <>
               <strong className="font-bold text-primary-foreground">{countOf(complete, "tiene", "tienen")}</strong> el perfil
               completo.{" "}
@@ -136,6 +158,8 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
           </Burst>
         </div>
       </HeroCard>
+        <PrivacyNote className="hidden xl:flex" />
+      </div>
 
       <div className="min-w-0 space-y-5 xl:col-span-7">
         {status === "loading" ? (
@@ -178,7 +202,7 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
             {detailError ? <ApplicantDetailNote onRetry={reload} /> : null}
             {inRadius.length > 1 ? <ApplicantToolbar controls={controls} /> : null}
             {groups.length === 0 ? (
-              <ApplicantFilterEmpty onClear={controls.clear} />
+              <ApplicantFilterEmpty onClear={controls.clear} step={controls.step} quick={controls.filters.length > 0} />
             ) : (
               groups.map((g) => {
                 const start = toneStart;
@@ -190,7 +214,7 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
                     toneStart={start}
                     sortPhrase={SORT_PHRASE[controls.sort]}
                     radius={radius}
-                    setStatus={setStatus}
+                    cardProps={pipelineProps}
                   />
                 );
               })
@@ -198,21 +222,27 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
           </>
         )}
 
-        {/* ------------------------------------------------ Privacy note */}
-        <Panel tone="tinta" className={cn("flex items-start gap-3.5", RUG)}>
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl border-2 border-white/20 bg-block-sol text-ink">
-            <HugeiconsIcon icon={LockIcon} className="size-5" strokeWidth={2.2} />
-          </span>
-          <div>
-            <Eyebrow tone="lime">Privacidad</Eyebrow>
-            <p className="mt-1 text-[0.98rem] leading-snug">
-              Siempre ves la colonia, una distancia aproximada, la experiencia, las licencias y la disponibilidad. Nombre,
-              teléfono, foto y CV aparecen al desbloquear cada vacante. La dirección exacta de nadie se comparte.
-            </p>
-          </div>
-        </Panel>
+        <PrivacyNote className="xl:hidden" />
       </div>
     </div>
+  );
+}
+
+/** Who sees what (contact only after unlocking). */
+function PrivacyNote({ className }: { className?: string }) {
+  return (
+    <Panel tone="tinta" className={cn("flex items-start gap-3.5", RUG, className)}>
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl border-2 border-white/20 bg-block-sol text-ink">
+        <HugeiconsIcon icon={LockIcon} className="size-5" strokeWidth={2.2} />
+      </span>
+      <div>
+        <Eyebrow tone="lime">Privacidad</Eyebrow>
+        <p className="mt-1 text-[0.98rem] leading-snug">
+          Siempre ves la colonia, una distancia aproximada, la experiencia, las licencias y la disponibilidad. Nombre,
+          teléfono, foto y CV aparecen al desbloquear cada vacante. La dirección exacta de nadie se comparte.
+        </p>
+      </div>
+    </Panel>
   );
 }
 
@@ -221,13 +251,13 @@ function VacancyGroup({
   toneStart,
   sortPhrase,
   radius,
-  setStatus,
+  cardProps,
 }: {
   group: Group;
   toneStart: number;
   sortPhrase: string;
   radius: RadiusKm;
-  setStatus: ApplicantProfilesResult["setStatus"];
+  cardProps: ReturnType<typeof usePipelineCardProps>;
 }) {
   const payments = usePaymentsEnabled();
   const unlocked = all.length > 0 && all.every((a) => a.unlocked);
@@ -279,10 +309,7 @@ function VacancyGroup({
         label={`${title}: ${countOf(list.length, "postulante", "postulantes")}, ${sortPhrase}`}
         toneStart={toneStart}
         className="sm:grid-cols-2 xl:grid-cols-1"
-        cardProps={(a) => ({
-          radiusKm: radius,
-          onStatusChange: changeApplicantStatus(setStatus, a),
-        })}
+        cardProps={(a) => ({ radiusKm: radius, ...cardProps(a) })}
       />
     </section>
   );
