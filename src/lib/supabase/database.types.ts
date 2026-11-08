@@ -350,6 +350,8 @@ export type Database = {
         Returns: { id: string; email: string; role: E["team_role"]; branch_ids: string[] | null; created_at: string; last_sent_at: string; expires_at: string; invited_by: string | null; expired: boolean }[];
       };
       team_people: { Args: { p_company_id: string }; Returns: { user_id: string; name: string; role: E["team_role"] | null }[] };
+      /** Open, unexpired invitations (just the count, for every member): 20261108190000_team_pending_invites.sql. */
+      team_pending_invites: { Args: { p_company_id: string }; Returns: number };
       invite_preview: {
         Args: { p_token: string };
         Returns: {

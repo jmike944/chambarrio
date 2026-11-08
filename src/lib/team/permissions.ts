@@ -97,14 +97,31 @@ export function filterByScope<T extends { branchId: string }>(m: Scope, items: r
 }
 
 /** People counted toward the plan: members + pending (unexpired) invites. */
+export type TeamUsage = {
+  /** Members + pending (unexpired) invitations: the places they take on the plan. */
+  used: number;
+  /** null = no limit. */
+  limit: number | null;
+  full: boolean;
+  left: number | null;
+  /** How many of `used` are pending invitations; null = unknown (then `used` is the members alone). */
+  pending: number | null;
+};
+
+/**
+ * Places used on the plan. `pendingInvites`: the count for someone who can't see the invitations
+ * (anyone but the dueño); left out, the pending ones in `invites` are counted. null = unknown.
+ */
 export function teamUsage(
   members: readonly TeamMember[],
   invites: readonly TeamInvite[],
   plan: TeamPlan,
-): { used: number; limit: number | null; full: boolean; left: number | null } {
-  const used = members.length + invites.filter((i) => !i.expired).length;
+  pendingInvites?: number | null,
+): TeamUsage {
+  const pending = pendingInvites === undefined ? invites.filter((i) => !i.expired).length : pendingInvites;
+  const used = members.length + (pending ?? 0);
   const limit = teamLimit(plan);
-  return { used, limit, full: limit !== null && used >= limit, left: limit === null ? null : Math.max(0, limit - used) };
+  return { used, limit, full: limit !== null && used >= limit, left: limit === null ? null : Math.max(0, limit - used), pending };
 }
 
 export const normalizeEmail = (s: string) => s.trim().toLowerCase();

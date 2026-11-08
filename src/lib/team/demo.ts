@@ -95,6 +95,12 @@ export function demoInvites(s: DemoTeamState): TeamInvite[] {
   return s.invites.map((i) => ({ ...i, expired: Date.parse(i.expiresAt) <= now }));
 }
 
+/** Pending (unexpired) invites, counted for everyone (only the dueño sees who: demoInvites). */
+export function demoPendingInvites(s: DemoTeamState): number {
+  const now = Date.now();
+  return s.invites.filter((i) => Date.parse(i.expiresAt) > now).length;
+}
+
 /** `plan`: the demo business's plan (the store's), so the team limit matches the plan page. */
 export function demoMembership(s: DemoTeamState, companyName: string, plan: TeamPlan = DEMO_TEAM_PLAN): Membership | null {
   const m = s.members.find((x) => x.userId === meId(s));

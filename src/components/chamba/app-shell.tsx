@@ -27,7 +27,7 @@ import { springs } from "./motion";
 import { ThemeToggle } from "@/components/theme";
 import { isLiveAvailable, useApp, useEmployerLocations } from "@/lib/store";
 import { useSessionLoaded, useSessionReady } from "@/lib/live/session";
-import { DEMO_RECRUITER_ID, ROLE_META, setDemoViewAs, useMyMembership, useTeam, type TeamPermissions } from "@/lib/team";
+import { DEMO_RECRUITER_ID, ROLE_META, setDemoViewAs, useCandidateSwitch, useMyMembership, useTeam, type TeamPermissions } from "@/lib/team";
 import { INVITE_PATH } from "@/lib/team/types";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -389,6 +389,9 @@ export function AppShell({
   const kit = useDevKit();
   const employer = mode === "empresa";
   const items = useEmployerNav(nav, employer);
+  // One account, one type: a company team member gets no "Cambia a modo candidato" card.
+  const canBeCandidate = useCandidateSwitch();
+  const showSwitch = !employer || canBeCandidate;
   useDevDemoViewAs(employer && ready && appMode === "demo");
 
   useEffect(() => {
@@ -424,46 +427,48 @@ export function AppShell({
             ))}
           </nav>
           <div className="mt-auto space-y-3">
-            <Link
-              href={candidate ? "/empresa" : "/inicio"}
-              onClick={() => setRole(candidate ? "empresa" : "candidato")}
-              className={cn(
-                "group press lift relative block overflow-hidden rounded-[1.5rem] p-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                candidate ? "bg-limon text-ink" : "bg-primary text-primary-foreground shadow-pop",
-              )}
-            >
-              <span
-                aria-hidden
+            {showSwitch ? (
+              <Link
+                href={candidate ? "/empresa" : "/inicio"}
+                onClick={() => setRole(candidate ? "empresa" : "candidato")}
                 className={cn(
-                  "absolute -top-6 -right-6 size-20 rounded-full transition-[scale] duration-500 group-hover:scale-125",
-                  candidate ? "bg-ink/[0.06]" : "bg-white/10",
-                )}
-              />
-              <span
-                className={cn(
-                  "relative grid size-10 place-items-center rounded-full transition-[rotate] duration-300 group-hover:-rotate-12",
-                  candidate ? "bg-ink text-limon" : "bg-limon text-ink",
+                  "group press lift relative block overflow-hidden rounded-[1.5rem] p-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  candidate ? "bg-limon text-ink" : "bg-primary text-primary-foreground shadow-pop",
                 )}
               >
-                <HugeiconsIcon icon={candidate ? Building06Icon : UserIcon} className="size-5" strokeWidth={1.8} />
-              </span>
-              <span className="relative mt-3 block font-display text-[1.15rem] leading-tight font-extrabold tracking-[-0.02em]">
-                {candidate ? "¿Tienes un negocio?" : "¿Buscas trabajo?"}
-              </span>
-              <span
-                className={cn(
-                  "relative mt-1 flex items-center gap-1 text-sm",
-                  candidate ? "text-ink/75" : "text-primary-foreground/80",
-                )}
-              >
-                {candidate ? "Cambia a modo empresa" : "Cambia a modo candidato"}
-                <HugeiconsIcon
-                  icon={ArrowRight02Icon}
-                  className="size-4 transition-[translate] duration-300 group-hover:translate-x-1"
-                  strokeWidth={2}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute -top-6 -right-6 size-20 rounded-full transition-[scale] duration-500 group-hover:scale-125",
+                    candidate ? "bg-ink/[0.06]" : "bg-white/10",
+                  )}
                 />
-              </span>
-            </Link>
+                <span
+                  className={cn(
+                    "relative grid size-10 place-items-center rounded-full transition-[rotate] duration-300 group-hover:-rotate-12",
+                    candidate ? "bg-ink text-limon" : "bg-limon text-ink",
+                  )}
+                >
+                  <HugeiconsIcon icon={candidate ? Building06Icon : UserIcon} className="size-5" strokeWidth={1.8} />
+                </span>
+                <span className="relative mt-3 block font-display text-[1.15rem] leading-tight font-extrabold tracking-[-0.02em]">
+                  {candidate ? "¿Tienes un negocio?" : "¿Buscas trabajo?"}
+                </span>
+                <span
+                  className={cn(
+                    "relative mt-1 flex items-center gap-1 text-sm",
+                    candidate ? "text-ink/75" : "text-primary-foreground/80",
+                  )}
+                >
+                  {candidate ? "Cambia a modo empresa" : "Cambia a modo candidato"}
+                  <HugeiconsIcon
+                    icon={ArrowRight02Icon}
+                    className="size-4 transition-[translate] duration-300 group-hover:translate-x-1"
+                    strokeWidth={2}
+                  />
+                </span>
+              </Link>
+            ) : null}
             <div className="flex items-center justify-between rounded-full border border-border bg-card py-1 pr-1 pl-4 shadow-card">
               <span className="text-sm text-muted-foreground">Tema</span>
               <ThemeToggle className="size-10 border-0 bg-tile shadow-none" />

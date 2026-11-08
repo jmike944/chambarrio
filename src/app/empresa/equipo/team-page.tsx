@@ -359,7 +359,14 @@ function TeamHero({
   className?: string;
 }) {
   const can = useCan();
-  const { used, limit, full } = team.usage;
+  const { used, limit, full, pending } = team.usage;
+  // Unknown pending count (an admin / reclutador on a database without team_pending_invites): show
+  // the members and the plan's cap, never a "places left" it can't vouch for.
+  const exact = pending !== null;
+  const notes = [
+    pending ? (pending === 1 ? "Incluye 1 invitación pendiente." : `Incluye ${pending} invitaciones pendientes.`) : null,
+    can.manageTeam ? null : "Solo el dueño invita gente y cambia permisos.",
+  ].filter(Boolean);
   const role = team.me?.role ?? can.role;
   const n = team.members.length;
   return (
@@ -385,14 +392,14 @@ function TeamHero({
       <div className="mt-5 rounded-tile border-2 border-white/25 bg-white/10 p-3.5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <p className="font-display text-[1.5rem] leading-none font-extrabold tracking-[-0.03em] tabular-nums">
-            {limit === null ? `${used} ${used === 1 ? "persona" : "personas"}` : `${used} de ${limit} personas`}
+            {limit === null || !exact ? `${used} ${used === 1 ? "persona" : "personas"}` : `${used} de ${limit} personas`}
           </p>
           <p className="text-[0.88rem] font-semibold text-primary-foreground/80">
             Plan {PLAN_NAME[team.plan]}
-            {limit === null ? " · sin límite" : full ? " · completo" : ""}
+            {limit === null ? " · sin límite" : !exact ? ` · hasta ${limit}` : full ? " · completo" : ""}
           </p>
         </div>
-        {limit !== null ? (
+        {limit !== null && exact ? (
           <div
             role="progressbar"
             aria-label="Lugares de tu equipo"
@@ -410,9 +417,7 @@ function TeamHero({
             ))}
           </div>
         ) : null}
-        {!can.manageTeam ? (
-          <p className="mt-3 text-[0.88rem] leading-snug text-primary-foreground/80">Solo el dueño invita gente y cambia permisos.</p>
-        ) : null}
+        {notes.length ? <p className="mt-3 text-[0.88rem] leading-snug text-primary-foreground/80">{notes.join(" ")}</p> : null}
       </div>
 
       {can.manageTeam ? (

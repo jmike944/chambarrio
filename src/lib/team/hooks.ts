@@ -12,8 +12,10 @@
  * /unirse page shows their states inline.
  */
 import { useEffect, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { create } from "zustand";
 import { toast } from "sonner";
+import { randomAvatar, type AvatarConfig } from "@/components/avatar/config";
 import { COMPANY_BY_ID, DEMO_COMPANY_ID } from "@/lib/data/jobs";
 import { useMyCompany } from "@/lib/data/catalog";
 import { useLiveAuth } from "@/lib/live/auth-state";
@@ -25,12 +27,13 @@ import {
   lastMembershipSync,
   useApp,
   useHydrated,
+  useMyAvatar,
   useOwnApplicationIds,
   useStoredMembership,
 } from "@/lib/store";
 import * as api from "./api";
 import * as demo from "./demo";
-import { canSeeBranch, isValidEmail, normalizeScope, permissionsFor, teamUsage, type TeamPermissions } from "./permissions";
+import { canSeeBranch, isValidEmail, normalizeScope, permissionsFor, teamUsage, type TeamPermissions, type TeamUsage } from "./permissions";
 import type {
   AcceptedInvite,
   InviteCreated,
@@ -55,7 +58,16 @@ const STALE_MS = 60_000;
 
 /** The re-check of my membership (the value itself lives in the store: `membership`). */
 type MembershipEntry = { userId: string; status: LoadStatus; error?: string; fetchedAt: number };
-type TeamEntry = { status: LoadStatus; members: TeamMember[]; invites: TeamInvite[]; error?: string; fetchedAt: number; refreshing: boolean };
+type TeamEntry = {
+  status: LoadStatus;
+  members: TeamMember[];
+  invites: TeamInvite[];
+  /** Not the dueño: how many invitations are pending (null = unknown). */
+  pendingInvites: number | null;
+  error?: string;
+  fetchedAt: number;
+  refreshing: boolean;
+};
 type PeopleEntry = { status: LoadStatus; people: TeamPerson[]; error?: string; fetchedAt: number };
 
 type Cache = {
@@ -115,7 +127,7 @@ function loadTeam(companyId: string, withInvites: boolean, force = false): Promi
   if (!force && e?.status === "ready" && Date.now() - e.fetchedAt < STALE_MS) return Promise.resolve();
   const put = (v: TeamEntry) => useTeamCache.setState((s) => ({ teams: { ...s.teams, [key]: v } }));
   if (e?.status === "ready") put({ ...e, refreshing: true });
-  else if (!e || e.status === "error") put({ status: "loading", members: [], invites: [], fetchedAt: 0, refreshing: false });
+  else if (!e || e.status === "error") put({ status: "loading", members: [], invites: [], pendingInvites: null, fetchedAt: 0, refreshing: false });
   return run(`t:${key}`, force, async (isCurrent) => {
     const r = await api.fetchTeam(companyId, withInvites);
     if (!isCurrent()) return;
@@ -124,11 +136,11 @@ function loadTeam(companyId: string, withInvites: boolean, force = false): Promi
       put(
         cur?.status === "ready"
           ? { ...cur, error: r.error, refreshing: false }
-          : { status: "error", members: [], invites: [], error: r.error, fetchedAt: 0, refreshing: false },
+          : { status: "error", members: [], invites: [], pendingInvites: null, error: r.error, fetchedAt: 0, refreshing: false },
       );
       return;
     }
-    put({ status: "ready", members: r.data.members, invites: r.data.invites, fetchedAt: Date.now(), refreshing: false });
+    put({ status: "ready", ...r.data, fetchedAt: Date.now(), refreshing: false });
   });
 }
 
@@ -364,6 +376,33 @@ export function useCan(): Can {
   }, [my, company.jobs, ownIds]);
 }
 
+/**
+ * "Cambiar a modo candidato" is offered (company screens). One account, one type: never to someone in a
+ * company's team (live; hidden too while that's still being checked, so it doesn't flash). The demo's
+ * visitor tries both sides, except while "Ver como" previews a member.
+ */
+export function useCandidateSwitch(): boolean {
+  const my = useMyMembership();
+  const mode = useApp((s) => s.mode);
+  if (mode === "demo") return !my.viewingAs;
+  return my.status === "ready" && !my.membership;
+}
+
+/**
+ * The look of whoever is using the app: mine (useMyAvatar), except on the demo's company screens while
+ * "Ver como" previews another member: then theirs, the same look their row in "Tu equipo" has
+ * (MemberAvatar). For the account button and the mascot's part.
+ */
+export function useActingAvatar(): AvatarConfig {
+  const mine = useMyAvatar();
+  const demoMode = useApp((s) => s.mode === "demo");
+  const viewAs = demo.useDemoTeam((s) => s.viewAs);
+  const pathname = usePathname() ?? "";
+  const employer = pathname === "/empresa" || pathname.startsWith("/empresa/");
+  const other = demoMode && employer && viewAs && viewAs !== demo.DEMO_OWNER_ID ? viewAs : null;
+  return useMemo(() => (other ? randomAvatar(other) : mine), [other, mine]);
+}
+
 export type TeamView = {
   status: LoadStatus;
   error?: string;
@@ -374,8 +413,8 @@ export type TeamView = {
   invites: TeamInvite[];
   me: TeamMember | null;
   plan: TeamPlan;
-  /** used = members + pending (unexpired) invites; limit null = no limit. */
-  usage: { used: number; limit: number | null; full: boolean; left: number | null };
+  /** used = members + pending (unexpired) invites, counted for every role; limit null = no limit. */
+  usage: TeamUsage;
   reload: () => void;
 };
 
@@ -401,20 +440,29 @@ export function useTeam(): TeamView {
 
   return useMemo((): TeamView => {
     const plan: TeamPlan = my.membership?.plan ?? "por-vacante";
-    const view = (status: LoadStatus, members: TeamMember[], invites: TeamInvite[], extra: Partial<TeamView> = {}): TeamView => ({
+    // `pending`: for anyone but the dueño, the count of the invitations they can't see (null = unknown).
+    const view = (
+      status: LoadStatus,
+      members: TeamMember[],
+      invites: TeamInvite[],
+      extra: Partial<TeamView> = {},
+      pending?: number | null,
+    ): TeamView => ({
       ...EMPTY_TEAM,
       status,
       members,
       invites,
       me: members.find((m) => m.isMe) ?? null,
       plan,
-      usage: teamUsage(members, invites, plan),
+      usage: teamUsage(members, invites, plan, withInvites ? undefined : pending),
       reload: () => {},
       ...extra,
     });
     if (my.status !== "ready") return view(my.status, [], [], { error: my.error, reload: my.reload });
     if (!my.membership) return view("ready", [], []);
-    if (mode === "demo") return view("ready", demo.demoMembers(demoTeam, ownerName), demo.demoInvites(demoTeam));
+    if (mode === "demo") {
+      return view("ready", demo.demoMembers(demoTeam, ownerName), demo.demoInvites(demoTeam), {}, demo.demoPendingInvites(demoTeam));
+    }
     if (!my.teamsEnabled) {
       // Database without team accounts: just me, the owner.
       const me: TeamMember = { userId: userId ?? "", role: "dueno", branchIds: null, name: ownerName, email: email || null, joinedAt: "", invitedBy: null, isMe: true };
@@ -423,7 +471,7 @@ export function useTeam(): TeamView {
     const reload = () => void loadTeam(my.membership!.companyId, withInvites, true);
     if (!entry || entry.status === "loading") return view("loading", [], [], { reload });
     if (entry.status === "error") return view("error", [], [], { error: entry.error, reload });
-    return view("ready", entry.members, entry.invites, { error: entry.error, refreshing: entry.refreshing, reload });
+    return view("ready", entry.members, entry.invites, { error: entry.error, refreshing: entry.refreshing, reload }, entry.pendingInvites);
   }, [my, mode, demoTeam, ownerName, userId, email, entry, withInvites]);
 }
 

@@ -34,7 +34,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { setTheme, useTheme } from "@/components/theme";
 import { AvatarCircle } from "@/components/avatar";
-import { isLiveAvailable, useApp, useHydrated, useMyAvatar } from "@/lib/store";
+import { isLiveAvailable, useApp, useHydrated } from "@/lib/store";
+import { useActingAvatar, useCandidateSwitch } from "@/lib/team";
 import { signOutEverywhere, useLiveUser } from "@/lib/live/session";
 import { PasswordDialog } from "@/components/onboarding/password-dialog";
 
@@ -49,11 +50,12 @@ function reloadTo(href: string) {
 }
 
 /**
- * The user's illustrated avatar ("Crea tu avatar", else their deterministic look). Until the store has
- * hydrated it's a plain lime disc, so a random look never flashes before the saved one.
+ * The user's illustrated avatar ("Crea tu avatar", else their deterministic look; the demo's "Ver como":
+ * the previewed member's). Until the store has hydrated it's a plain lime disc, so a random look never
+ * flashes before the saved one.
  */
 function MyAvatar({ size }: { size: number }) {
-  const config = useMyAvatar();
+  const config = useActingAvatar();
   const hydrated = useHydrated();
   if (!hydrated) {
     return (
@@ -78,6 +80,9 @@ export function AccountMenu() {
   const role = useApp((s) => s.role);
   const exitDemo = useApp((s) => s.exitDemo);
   const { user, hasPassword } = useLiveUser();
+  // A company team member's account stays a company account: no "Cambiar a modo candidato".
+  const canBeCandidate = useCandidateSwitch();
+  const showSwitch = !isEmpresa || canBeCandidate;
   const { resolvedTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -146,10 +151,12 @@ export function AccountMenu() {
             </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="h-12 text-[0.95rem]" onSelect={switchMode}>
-            <HugeiconsIcon icon={isEmpresa ? UserSearch01Icon : Building06Icon} className="size-5" strokeWidth={1.6} />
-            {isEmpresa ? "Cambiar a modo candidato" : "Cambiar a modo empresa"}
-          </DropdownMenuItem>
+          {showSwitch ? (
+            <DropdownMenuItem className="h-12 text-[0.95rem]" onSelect={switchMode}>
+              <HugeiconsIcon icon={isEmpresa ? UserSearch01Icon : Building06Icon} className="size-5" strokeWidth={1.6} />
+              {isEmpresa ? "Cambiar a modo candidato" : "Cambiar a modo empresa"}
+            </DropdownMenuItem>
+          ) : null}
           {isEmpresa ? null : (
             <>
               <DropdownMenuItem className="h-12 text-[0.95rem]" onSelect={() => router.push("/perfil")}>

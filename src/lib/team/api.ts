@@ -144,17 +144,30 @@ export async function fetchMyMembership(): Promise<TeamResult<MembershipFetch>> 
 }
 
 /** The team (any member) and, for the dueño, the open invites. */
-export async function fetchTeam(companyId: string, withInvites: boolean): Promise<TeamResult<{ members: TeamMember[]; invites: TeamInvite[] }>> {
+/**
+ * The team. `withInvites` (the dueño): the open invitations too. Everyone else gets only how many are
+ * pending (`pendingInvites`; null when unknown: a database without team_pending_invites, or it failed),
+ * so their places counter still counts them.
+ */
+export async function fetchTeam(
+  companyId: string,
+  withInvites: boolean,
+): Promise<TeamResult<{ members: TeamMember[]; invites: TeamInvite[]; pendingInvites: number | null }>> {
   const sb = getSupabase();
   if (!sb) return unavailable();
   try {
-    const [members, invites] = await Promise.all([
+    const [members, invites, pending] = await Promise.all([
       sb.rpc("team_members", { p_company_id: companyId }),
       withInvites ? sb.rpc("team_invites", { p_company_id: companyId }) : Promise.resolve({ data: [] as InviteRow[], error: null }),
+      withInvites ? null : sb.rpc("team_pending_invites", { p_company_id: companyId }),
     ]);
     const err = members.error ?? invites.error;
     if (err) return fail(err, MSG.load);
-    return { data: { members: (members.data ?? []).map(memberFromRow), invites: (invites.data ?? []).map(inviteFromRow) } };
+    // The count is extra: if it can't be read, the counter shows the members alone (the page still loads).
+    const pendingInvites = pending && !pending.error && typeof pending.data === "number" ? pending.data : null;
+    return {
+      data: { members: (members.data ?? []).map(memberFromRow), invites: (invites.data ?? []).map(inviteFromRow), pendingInvites },
+    };
   } catch (e) {
     return fail(e as DbError, MSG.load);
   }
