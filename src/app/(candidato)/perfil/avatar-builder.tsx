@@ -540,6 +540,17 @@ function Panel({ tab, cfg, edit }: { tab: TabId; cfg: AvatarConfig; edit: (p: Pa
           <Group id="avb-outfitcolor" label={COLOR_HINT[cfg.outfit]} current={labelOf(OPTIONS.color, cfg.outfitColor)}>
             <SwatchGrid label={COLOR_HINT[cfg.outfit]} options={OPTIONS.color} hex={(v) => PALETTE[v]} value={cfg.outfitColor} onChange={(outfitColor) => edit({ outfitColor })} />
           </Group>
+          <Group id="avb-build" label="Complexión" current={labelOf(OPTIONS.complexion, cfg.complexion ?? "recta")}>
+            <ThumbGrid
+              label="Complexión"
+              options={OPTIONS.complexion}
+              value={cfg.complexion ?? "recta"}
+              onChange={(complexion) => edit({ complexion })}
+              current={cfg}
+              variant={(complexion) => ({ ...cfg, complexion })}
+              crop="cuerpo"
+            />
+          </Group>
         </>
       );
     case "extra":
@@ -650,16 +661,18 @@ function RadioGroup<T extends string | boolean, O extends { value: T; label: str
   );
 }
 
-type Crop = "busto" | "cara" | "ropa" | "extra";
+type Crop = "busto" | "cara" | "ropa" | "extra" | "cuerpo";
 
 /**
  * Square windows into a framing's view box: [framing, centre y, side] in view-box units (centred on x = 0).
- * cara: the face · ropa: chin to waist (collars, vests, aprons) · extra: hair to chest (headset, badge, radio).
+ * cara: the face · ropa: chin to waist (collars, vests, aprons) · extra: hair to chest (headset, badge, radio) ·
+ * cuerpo: eyes to hips, shoulder to shoulder (the build).
  */
 const CROPS: Record<Exclude<Crop, "busto">, readonly ["busto" | "medio", number, number]> = {
   cara: ["busto", -4, 126],
   ropa: ["medio", 66, 224],
   extra: ["medio", 36, 214],
+  cuerpo: ["medio", 100, 290],
 };
 
 /** The user's own avatar with one option applied (the thumbnail IS the preview). */

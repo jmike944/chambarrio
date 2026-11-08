@@ -52,6 +52,10 @@ export type Expression = (typeof EXPRESSIONS)[number];
 export const ACCESSORIES = ["ninguno", "gafete", "radio", "audifonos"] as const;
 export type Accessory = (typeof ACCESSORIES)[number];
 
+/** Body build. recta: straight · curvas: a subtle chest / waist / hip shape · robusta: broader, with a belly. */
+export const COMPLEXIONS = ["recta", "curvas", "robusta"] as const;
+export type Complexion = (typeof COMPLEXIONS)[number];
+
 export const POSES = ["neutral", "saluda", "festeja", "pulgar", "senala", "brazos-cruzados"] as const;
 export type AvatarPose = (typeof POSES)[number];
 
@@ -75,6 +79,11 @@ export type AvatarConfig = {
   outfitColor: PaletteKey;
   expression: Expression;
   accessory: Accessory;
+  /**
+   * Body build (added after v1 shipped: optional so older literals and saved rows stay valid;
+   * sanitizeAvatar always fills it, default "recta").
+   */
+  complexion?: Complexion;
 };
 
 /* ── colour tables ───────────────────────────────────────────────────── */
@@ -154,6 +163,7 @@ export const OPTIONS = {
   }),
   expression: opts(EXPRESSIONS, { sonrisa: "Sonrisa", seria: "Seria", guino: "Guiño", emocion: "Emoción" }),
   accessory: opts(ACCESSORIES, { ninguno: "Nada", gafete: "Gafete", radio: "Radio", audifonos: "Audífonos" }),
+  complexion: opts(COMPLEXIONS, { recta: "Recta", curvas: "Con curvas", robusta: "Robusta" }),
   pose: opts(POSES, {
     neutral: "Normal",
     saluda: "Saluda",
@@ -207,6 +217,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "naranja",
       expression: "sonrisa",
       accessory: "ninguno",
+      complexion: "recta",
     }),
   },
   construccion: {
@@ -223,6 +234,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "naranja",
       expression: "sonrisa",
       accessory: "radio",
+      complexion: "curvas",
     }),
   },
   chofer: {
@@ -239,6 +251,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "cielo",
       expression: "sonrisa",
       accessory: "ninguno",
+      complexion: "robusta",
     }),
   },
   restaurante: {
@@ -255,6 +268,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "blanco",
       expression: "guino",
       accessory: "ninguno",
+      complexion: "curvas",
     }),
   },
   limpieza: {
@@ -271,6 +285,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "menta",
       expression: "sonrisa",
       accessory: "gafete",
+      complexion: "recta",
     }),
   },
   seguridad: {
@@ -287,6 +302,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "tinta",
       expression: "seria",
       accessory: "radio",
+      complexion: "curvas",
     }),
   },
   almacen: {
@@ -303,6 +319,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "limon",
       expression: "sonrisa",
       accessory: "gafete",
+      complexion: "robusta",
     }),
   },
   montacargas: {
@@ -319,6 +336,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "cielo",
       expression: "guino",
       accessory: "ninguno",
+      complexion: "curvas",
     }),
   },
   produccion: {
@@ -335,6 +353,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "cielo",
       expression: "sonrisa",
       accessory: "gafete",
+      complexion: "recta",
     }),
   },
   caja: {
@@ -351,6 +370,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "chile",
       expression: "sonrisa",
       accessory: "gafete",
+      complexion: "curvas",
     }),
   },
   ventas: {
@@ -367,6 +387,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "blanco",
       expression: "guino",
       accessory: "gafete",
+      complexion: "recta",
     }),
   },
   oficina: {
@@ -383,6 +404,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "violeta",
       expression: "sonrisa",
       accessory: "audifonos",
+      complexion: "curvas",
     }),
   },
   mantenimiento: {
@@ -399,6 +421,7 @@ export const AVATAR_PRESETS: Record<AvatarPresetId, AvatarPreset> = {
       outfitColor: "denim",
       expression: "sonrisa",
       accessory: "ninguno",
+      complexion: "robusta",
     }),
   },
 };
@@ -427,6 +450,9 @@ export function sanitizeAvatar(input: unknown, fallback: AvatarConfig = DEFAULT_
     }
   }
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  // A look saved before `complexion` existed keeps the original (straight) build; only an unreadable
+  // input takes the fallback's build along with the rest of the fallback look.
+  const build = Object.keys(o).length && o.complexion === undefined ? "recta" : (fallback.complexion ?? "recta");
   return {
     v: 1,
     skin: pick(SKIN_TONES, o.skin, fallback.skin),
@@ -440,12 +466,15 @@ export function sanitizeAvatar(input: unknown, fallback: AvatarConfig = DEFAULT_
     outfitColor: pick(PALETTE_KEYS, o.outfitColor, fallback.outfitColor),
     expression: pick(EXPRESSIONS, o.expression, fallback.expression),
     accessory: pick(ACCESSORIES, o.accessory, fallback.accessory),
+    complexion: pick(COMPLEXIONS, o.complexion, build),
   };
 }
 
 /** True when two configs draw the same avatar. */
 export function sameAvatar(a: AvatarConfig, b: AvatarConfig): boolean {
-  return (Object.keys(DEFAULT_AVATAR) as (keyof AvatarConfig)[]).every((k) => a[k] === b[k]);
+  return (Object.keys(DEFAULT_AVATAR) as (keyof AvatarConfig)[]).every((k) =>
+    k === "complexion" ? (a.complexion ?? "recta") === (b.complexion ?? "recta") : a[k] === b[k],
+  );
 }
 
 /* ── deterministic random looks ──────────────────────────────────────── */
@@ -525,6 +554,17 @@ export function randomAvatar(seed: string): AvatarConfig {
   let headwearColor: PaletteKey =
     headwear === "cofia" ? "blanco" : headwear === "casco" ? (r() < 0.6 ? "sol" : "blanco") : WORK_COLORS[Math.floor(r() * WORK_COLORS.length)];
   if (headwearColor === outfitColor && headwear !== "cofia") headwearColor = outfitColor === "sol" ? "violeta" : "sol";
+  const glasses = r() < 0.2;
+  const expression = weighted(r(), [["sonrisa", 5], ["guino", 1.5], ["emocion", 1.5], ["seria", 1.5]] as const);
+  const accessory = weighted(r(), [["ninguno", 6], ["gafete", 1.5], ["radio", 1], ["audifonos", 1]] as const);
+  // Drawn last so every look generated before the field existed keeps all its other traits.
+  const tied = hair === "largo" || hair === "chongo" || hair === "coleta";
+  const complexion: Complexion = weighted(
+    r(),
+    tied || (facialHair === "ninguno" && hair !== "rapado" && hair !== "calvo" && r() < 0.35)
+      ? ([["curvas", 6], ["recta", 2.5], ["robusta", 1.5]] as const)
+      : ([["recta", 5.5], ["robusta", 3.5], ["curvas", 1]] as const),
+  );
   return {
     v: 1,
     skin,
@@ -533,10 +573,11 @@ export function randomAvatar(seed: string): AvatarConfig {
     headwear,
     headwearColor,
     facialHair,
-    glasses: r() < 0.2,
+    glasses,
     outfit,
     outfitColor,
-    expression: weighted(r(), [["sonrisa", 5], ["guino", 1.5], ["emocion", 1.5], ["seria", 1.5]] as const),
-    accessory: weighted(r(), [["ninguno", 6], ["gafete", 1.5], ["radio", 1], ["audifonos", 1]] as const),
+    expression,
+    accessory,
+    complexion,
   };
 }

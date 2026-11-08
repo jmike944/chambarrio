@@ -33,8 +33,10 @@ import "./avatar.css";
 /** viewBox per framing: [minX, minY, width, height]. */
 export const AVATAR_VIEWBOX: Record<AvatarFraming, readonly [number, number, number, number]> = {
   busto: [-82, -88, 164, 164],
-  medio: [-150, -100, 300, 382],
-  completo: [-150, -100, 300, 530],
+  // Same aspect ratios as before (so avatarHeight() and every layout are unchanged), zoomed onto the
+  // stockier figure: medio is cut just under the belt, completo ends at the soles.
+  medio: [-142, -98, 284, 361.6],
+  completo: [-142, -96, 284, 502],
 };
 
 const BUST_TIGHT = [-72, -80, 144, 144] as const;
@@ -96,8 +98,6 @@ export function Avatar({
   const left = flip ? spec.R : spec.L;
   const topSide: 1 | -1 = (spec.top === "R") !== flip ? 1 : -1;
   const armPart: ArmPart = bust ? "upper" : "full";
-  const tucked = cfg.outfit === "camisa" || cfg.outfit === "uniforme" || cfg.outfit === "overol" || cfg.outfit === "filipina";
-  const bottom = framing === "completo" ? (tucked ? 206 : 218) : bust ? 120 : 300;
   const nod = realPose === "brazos-cruzados";
 
   const headWrap = (node: ReactNode) =>
@@ -112,15 +112,15 @@ export function Avatar({
     );
 
   const armL: Draw = (k) =>
-    placeArm(-1, paintArm(k, left, L, armPart, realPose === "festeja" ? -0.45 : undefined));
-  const armR: Draw = (k) => placeArm(1, paintArm(k, right, L, armPart));
+    placeArm(-1, L.B, paintArm(k, left, L, armPart, realPose === "festeja" ? -0.45 : undefined));
+  const armR: Draw = (k) => placeArm(1, L.B, paintArm(k, right, L, armPart));
 
   const figureKey = `${JSON.stringify(cfg)}|${realPose}|${framing}|${flip ? 1 : 0}|${expression ?? ""}|${px}`;
   const layers: { key: string; draw: Draw; shadow?: number }[] = [
     { key: "hairBack", draw: (k) => headWrap(paintHairBack(k, L)) },
     ...(framing === "completo" ? [{ key: "legs", draw: ((k) => paintLegs(k, L)) as Draw }] : []),
     { key: "neck", draw: (k) => paintNeck(k, L) },
-    { key: "torso", draw: (k) => paintTorso(k, L, bottom) },
+    { key: "torso", draw: (k) => paintTorso(k, L, framing) },
     ...(L.accessory === "gafete" || L.accessory === "radio" ? [{ key: "acc", draw: ((k) => paintChestAccessory(k, L)) as Draw }] : []),
     { key: "head", draw: (k) => headWrap(paintHead(k, L)) },
     ...(L.accessory === "audifonos" ? [{ key: "band", draw: ((k) => headWrap(paintHeadsetBand(k, L))) as Draw }] : []),
@@ -144,7 +144,7 @@ export function Avatar({
       data-animated={animated || undefined}
     >
       {title ? <title>{title}</title> : null}
-      {framing === "completo" ? <ellipse cx={0} cy={425} rx={92} ry={7} fill={INK} opacity={0.16} /> : null}
+      {framing === "completo" ? <ellipse cx={0} cy={401} rx={90} ry={6.5} fill={INK} opacity={0.16} /> : null}
       {/* Keyed by the look: a change remounts the whole figure, so the shadow, outline and colour
           copies of an animated arm restart their CSS motion together and stay in step. */}
       <g key={figureKey} className={cn("avA", realPose === "festeja" ? "avHop" : "avBob")}>

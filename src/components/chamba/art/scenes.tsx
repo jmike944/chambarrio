@@ -337,6 +337,7 @@ const CREW_CENTER: AvatarConfig = {
   outfitColor: "limon",
   expression: "sonrisa",
   accessory: "ninguno",
+  complexion: "curvas",
 };
 const CREW_RIGHT: AvatarConfig = {
   v: 1,
@@ -365,6 +366,7 @@ const CUSTOMER: AvatarConfig = {
   outfitColor: "chile",
   expression: "sonrisa",
   accessory: "ninguno",
+  complexion: "curvas",
 };
 
 /* ------------------------------------------------------------------ */

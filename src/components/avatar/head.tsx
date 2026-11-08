@@ -15,11 +15,13 @@ export const HEAD_D = "M-37-8C-37-34-21-46 0-46C21-46 37-34 37-8L37 6C37 30 22 4
 
 /* ── neck ────────────────────────────────────────────────────────────── */
 
+/** A short, thick neck sized by the build; its base hides under the collar (torso layer). */
 export function paintNeck(k: Kit, L: Look) {
+  const n = L.B.nk;
   return (
     <>
-      {k.part({ d: "M-15.5 24L15.5 24L16.5 68L-16.5 68Z" }, L.skin)}
-      {k.flat({ d: "M-16 28L16 28L16 40Q0 50-16 40Z" }, L.skinShade)}
+      {k.part({ d: `M${-n + 2} 24L${n - 2} 24L${n} 68L${-n} 68Z` }, L.skin)}
+      {k.flat({ d: `M${-n + 2.5} 28L${n - 2.5} 28L${n - 1.5} 41Q0 51 ${-n + 1.5} 41Z` }, L.skinShade)}
     </>
   );
 }

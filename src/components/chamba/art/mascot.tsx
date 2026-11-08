@@ -12,13 +12,13 @@
  * avatar.css (pivots at shoulder / elbow) + mascot.css, only with `data-animated` and never
  * under prefers-reduced-motion.
  *
- * viewBox: -225 -110 450 540 (engine figure units: face centre at 0,0, soles at y 422).
+ * viewBox: -213 -105.5 426 511.2 (engine figure units: face centre at 0,0, soles at y 400).
  * The viewer-RIGHT arm does the mood gesture; the viewer-LEFT arm holds the hand prop
  * (lupa, trofeo, paquete, telefono) or falls back to the mood's own pose.
  */
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { type ArmPose, POSE_SPECS, paintArm, placeArm } from "@/components/avatar/arms";
+import { type ArmPose, L1, L2, POSE_SPECS, paintArm, placeArm } from "@/components/avatar/arms";
 import { paintLegs, paintTorso } from "@/components/avatar/body";
 import { AVATAR_PRESETS, type AvatarConfig, type Expression } from "@/components/avatar/config";
 import { paintHairBack, paintHead, paintHeadwear, paintNeck } from "@/components/avatar/head";
@@ -57,7 +57,7 @@ const CREMA = "#FFF6E0";
 const CARTON = "#F2B36B";
 const TINTA = "#2B2452";
 
-const VB = [-225, -110, 450, 540] as const;
+const VB = [-213, -105.5, 426, 511.2] as const;
 
 /* ── looks ───────────────────────────────────────────────────────────── */
 
@@ -129,12 +129,13 @@ const rrect = (x: number, y: number, w: number, h: number, r: number) =>
  * Something held in a hand, drawn in that hand's frame (wrist at 0,0, "up" = the hand's up) and
  * wrapped in the same shoulder / elbow animation groups as the arm, so it moves with the hand.
  */
-function inHand(side: 1 | -1, A: ArmPose, node: ReactNode) {
-  const E = polar(A.a1, 66);
-  const F = polar(A.a2, 58);
+function inHand(side: 1 | -1, A: ArmPose, L: Look, node: ReactNode) {
+  const E = polar(A.a1, L1);
+  const F = polar(A.a2, L2);
   const theta = A.screen ?? A.a2 + 90 + (A.hb ?? 0);
   return placeArm(
     side,
+    L.B,
     <g className={A.arm ? `avA ${A.arm}` : undefined}>
       <g transform={`translate(${pt(E)})`}>
         <g className={A.fore ? `avA ${A.fore}` : undefined}>
@@ -316,10 +317,10 @@ function Extras({ mood, prop }: { mood: MascotMood; prop: MascotProp }) {
         ))}
         {(
           [
-            [-86, 418, 18],
-            [86, 418, 18],
-            [-122, 410, 12],
-            [122, 410, 12],
+            [-84, 395, 17],
+            [84, 395, 17],
+            [-118, 388, 11.5],
+            [118, 388, 11.5],
           ] as const
         ).map(([x, y, r], i) => (
           <circle key={i} className="mscDust" style={{ animationDelay: `${(i % 2) * 0.05}s` }} cx={x} cy={y} r={r} fill={CREMA} stroke={INK} strokeWidth={7} />
@@ -401,8 +402,6 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
   // Outline weight: the engine's 5 units, a bit heavier when small so the sticker edge survives.
   const sw = Math.min(9, Math.max(5, (1.8 * VB[2]) / size));
   const ctx: PaintCtx = { sw, sep: sw * 0.62, lo: size < 80 };
-  const tucked = cfg.outfit === "overol" || cfg.outfit === "filipina";
-  const bottom = tucked ? 206 : 218;
 
   const headWrap = (node: ReactNode) =>
     spec.nod ? (
@@ -426,8 +425,8 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
     );
 
   const festejaDelay = mood === "festeja" && !held ? -0.45 : undefined;
-  const drawL: Draw = (k) => placeArm(-1, paintArm(k, armL, L, "full", festejaDelay));
-  const drawR: Draw = (k) => placeArm(1, paintArm(k, armR, L, "full"));
+  const drawL: Draw = (k) => placeArm(-1, L.B, paintArm(k, armL, L, "full", festejaDelay));
+  const drawR: Draw = (k) => placeArm(1, L.B, paintArm(k, armR, L, "full"));
 
   const layers: { key: string; draw: Draw; shadow?: number }[] = [
     { key: "hairBack", draw: (k) => headWrap(paintHairBack(k, L)) },
@@ -437,7 +436,7 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       key: "torso",
       draw: (k) => (
         <>
-          {paintTorso(k, L, bottom)}
+          {paintTorso(k, L, "completo")}
           {prop === "chef" ? (
             <g transform="translate(-27 88) scale(1.1)">
               {k.part({ d: "M0 18C-4.2 13-7 10-7 6.5A7 7 0 0 1 7 6.5C7 10 4.2 13 0 18Z" }, VIOLETA, k.sep / 1.1)}
@@ -463,7 +462,7 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       ? [
           {
             key: "held",
-            draw: ((k) => inHand(-1, armL, held === "lupa" ? paintLupa(k) : held === "trofeo" ? paintTrofeo(k) : paintPhone(k))) as Draw,
+            draw: ((k) => inHand(-1, armL, L, held === "lupa" ? paintLupa(k) : held === "trofeo" ? paintTrofeo(k) : paintPhone(k))) as Draw,
             shadow: 3,
           },
         ]
@@ -485,7 +484,7 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       data-animated={animated || undefined}
     >
       {title ? <title>{title}</title> : null}
-      <ellipse className="mscGround" cx={0} cy={426} rx={98} ry={8} fill={INK} opacity={0.16} />
+      <ellipse className="mscGround" cx={0} cy={401} rx={94} ry={7.5} fill={INK} opacity={0.16} />
       {/* keyed by mood + prop: a change remounts the figure so every copy of an animated arm restarts in step */}
       <g key={`${mood}|${prop}|${size}`} className={cn("avA", mood === "festeja" ? "avHop" : "avBob")}>
         <ShadowOf ctx={ctx} layers={layers} offset={sw} />

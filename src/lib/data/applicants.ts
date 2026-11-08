@@ -42,7 +42,7 @@ const av = (
   [headwear, headwearColor]: [AvatarConfig["headwear"], AvatarConfig["headwearColor"]],
   facialHair: AvatarConfig["facialHair"],
   [outfit, outfitColor]: [AvatarConfig["outfit"], AvatarConfig["outfitColor"]],
-  extra: Partial<Pick<AvatarConfig, "glasses" | "expression" | "accessory">> = {},
+  extra: Partial<Pick<AvatarConfig, "glasses" | "expression" | "accessory" | "complexion">> = {},
 ): AvatarConfig => ({
   v: 1,
   skin,
@@ -56,6 +56,7 @@ const av = (
   outfitColor,
   expression: extra.expression ?? "sonrisa",
   accessory: extra.accessory ?? "ninguno",
+  ...(extra.complexion ? { complexion: extra.complexion } : {}),
 });
 
 const job = (
@@ -118,7 +119,7 @@ export const DEMO_PROFILES = {
     experiences: [job("Ayudante general", "Autopartes Arteaga", "produccion", "2023-03", "2024-04")],
   },
   arturo: {
-    avatar: av("tono-2", "rapado", "castano", ["gorra", "violeta"], "barba", ["overol", "cielo"]),
+    avatar: av("tono-2", "rapado", "castano", ["gorra", "violeta"], "barba", ["overol", "cielo"], { complexion: "robusta" }),
     photo: true,
     phone: "8445550104",
     interests: ["montacargas", "almacen"],
@@ -172,10 +173,10 @@ export const DEMO_PROFILES = {
     availableFrom: "inmediata",
     transport: ["moto"],
   },
-  ricardo: { phone: "8445550107", interests: [], avatar: av("tono-4", "calvo", "negro", ["ninguno", "sol"], "barba", ["playera", "tinta"], { expression: "seria" }) },
+  ricardo: { phone: "8445550107", interests: [], avatar: av("tono-4", "calvo", "negro", ["ninguno", "sol"], "barba", ["playera", "tinta"], { expression: "seria", complexion: "robusta" }) },
   ivan: { phone: "8445550108", interests: ["almacen"], avatar: av("tono-1", "rizado", "castano", ["ninguno", "sol"], "ninguno", ["playera", "menta"], { accessory: "audifonos" }) },
   daniela: {
-    avatar: av("tono-2", "chongo", "castano", ["ninguno", "sol"], "ninguno", ["playera", "violeta"], { accessory: "gafete" }),
+    avatar: av("tono-2", "chongo", "castano", ["ninguno", "sol"], "ninguno", ["playera", "violeta"], { accessory: "gafete", complexion: "curvas" }),
     photo: true,
     phone: "8445550109",
     interests: ["almacen", "caja"],
@@ -197,7 +198,7 @@ export const DEMO_PROFILES = {
     cv: true,
   },
   monica: {
-    avatar: av("tono-1", "largo", "miel", ["ninguno", "sol"], "ninguno", ["camisa", "blanco"], { glasses: true }),
+    avatar: av("tono-1", "largo", "miel", ["ninguno", "sol"], "ninguno", ["camisa", "blanco"], { glasses: true, complexion: "curvas" }),
     photo: true,
     phone: "8445550110",
     interests: ["almacen", "oficina"],
@@ -214,7 +215,7 @@ export const DEMO_PROFILES = {
     experiences: [job("Auxiliar de inventarios", "Tienda departamental · Saltillo", "almacen", "2023-02", "2025-06")],
   },
   karla: {
-    avatar: av("tono-5", "coleta", "negro", ["gorra", "limon"], "ninguno", ["playera", "sol"]),
+    avatar: av("tono-5", "coleta", "negro", ["gorra", "limon"], "ninguno", ["playera", "sol"], { complexion: "curvas" }),
     phone: "8445550111",
     interests: ["almacen"],
     shifts: ["Vespertino"],
@@ -231,7 +232,7 @@ export const DEMO_PROFILES = {
     experiences: [job("Cargador", "Mudanzas del Valle", "almacen", "2024-01", "2024-09")],
   },
   rosa: {
-    avatar: av("tono-4", "chongo", "negro", ["ninguno", "sol"], "ninguno", ["chaleco", "naranja"], { accessory: "radio" }),
+    avatar: av("tono-4", "chongo", "negro", ["ninguno", "sol"], "ninguno", ["chaleco", "naranja"], { accessory: "radio", complexion: "curvas" }),
     photo: true,
     phone: "8445550113",
     interests: ["almacen", "limpieza"],
@@ -248,10 +249,10 @@ export const DEMO_PROFILES = {
     expectedPeriod: "semana",
     experiences: [job("Almacenista", "Distribuidora de abarrotes · Centro", "almacen", "2019-08", "2024-12")],
   },
-  brenda: { phone: "8445550114", interests: ["almacen"], avatar: av("tono-6", "rizado", "negro", ["paliacate", "violeta"], "ninguno", ["playera", "menta"]) },
-  lucia: { phone: "8445550115", interests: ["almacen", "caja"], avatar: av("tono-3", "coleta", "castano", ["ninguno", "sol"], "ninguno", ["playera", "limon"], { expression: "guino" }) },
+  brenda: { phone: "8445550114", interests: ["almacen"], avatar: av("tono-6", "rizado", "negro", ["paliacate", "violeta"], "ninguno", ["playera", "menta"], { complexion: "curvas" }) },
+  lucia: { phone: "8445550115", interests: ["almacen", "caja"], avatar: av("tono-3", "coleta", "castano", ["ninguno", "sol"], "ninguno", ["playera", "limon"], { expression: "guino", complexion: "curvas" }) },
   andrea: {
-    avatar: av("tono-2", "largo", "negro", ["gorra", "denim"], "ninguno", ["playera", "naranja"]),
+    avatar: av("tono-2", "largo", "negro", ["gorra", "denim"], "ninguno", ["playera", "naranja"], { complexion: "curvas" }),
     phone: "8445550116",
     interests: ["almacen"],
     about: "Trabajé medio año en una paquetería separando envíos. Quiero un trabajo de tiempo completo cerca de Valle de las Flores.",
@@ -292,7 +293,7 @@ export const DEMO_PROFILES = {
     experiences: [job("Operador de producción", "Maquiladora de arneses · Derramadero", "produccion", "2026-05", null)],
   },
   patricia: {
-    avatar: av("tono-2", "largo", "castano", ["ninguno", "sol"], "ninguno", ["camisa", "violeta"], { glasses: true, accessory: "audifonos" }),
+    avatar: av("tono-2", "largo", "castano", ["ninguno", "sol"], "ninguno", ["camisa", "violeta"], { glasses: true, accessory: "audifonos", complexion: "curvas" }),
     photo: true,
     phone: "8445550119",
     interests: ["almacen", "oficina"],
@@ -310,7 +311,7 @@ export const DEMO_PROFILES = {
     experiences: [job("Analista de inventarios", "Refaccionaria industrial", "almacen", "2021-09", null)],
   },
   oscar: {
-    avatar: av("tono-3", "corto", "canoso", ["gorra", "tinta"], "bigote", ["camisa", "blanco"], { expression: "seria" }),
+    avatar: av("tono-3", "corto", "canoso", ["gorra", "tinta"], "bigote", ["camisa", "blanco"], { expression: "seria", complexion: "robusta" }),
     phone: "8445550120",
     interests: ["chofer"],
     certifications: ["Licencia tipo B"],
@@ -318,7 +319,7 @@ export const DEMO_PROFILES = {
     availableFrom: "1_semana",
     experiences: [job("Chofer de taxi", "Sitio Alameda", "chofer", "2016-01", "2023-05")],
   },
-  gabriela: { phone: "8445550121", interests: ["produccion"], avatar: av("tono-6", "coleta", "negro", ["paliacate", "chile"], "ninguno", ["uniforme", "menta"]) },
+  gabriela: { phone: "8445550121", interests: ["produccion"], avatar: av("tono-6", "coleta", "negro", ["paliacate", "chile"], "ninguno", ["uniforme", "menta"], { complexion: "curvas" }) },
 } satisfies Record<string, DemoProfile>;
 
 export type DemoPersonKey = keyof typeof DEMO_PROFILES;
