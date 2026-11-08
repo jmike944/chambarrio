@@ -32,6 +32,7 @@ import { ApplicantsPreview } from "@/components/empresas-landing/applicants-prev
 import { CompanyDemoButton } from "@/components/empresas-landing/company-demo-button";
 import { CATEGORIES } from "@/lib/data/categories";
 import { cn } from "@/lib/utils";
+import { AudienceSwitch } from "@/components/landing/audience-switch";
 
 /*
  * The page for companies: pitch, how it works, what the panel does, plans and FAQ. The landing ("/")
@@ -164,7 +165,8 @@ export default function EmpresasPage() {
   return (
     <div className="min-h-dvh overflow-x-clip [--hard:var(--ink)] dark:[--hard:#2c2464]">
       {/* Nav */}
-      <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 sm:px-6 lg:px-10">
+      <AudienceSwitch active="empresa" />
+      <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 pb-4 sm:px-6 lg:px-10">
         <Link href="/" aria-label="Chambarrio, inicio" className="group inline-flex min-h-11 items-center rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
           <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
         </Link>
@@ -183,12 +185,6 @@ export default function EmpresasPage() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 whitespace-nowrap">
-          <Link
-            href="/"
-            className="hidden h-11 items-center rounded-full px-3 text-[0.9rem] font-semibold text-muted-foreground outline-none transition-colors hover:bg-card hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 lg:inline-flex"
-          >
-            Busco trabajo
-          </Link>
           <ThemeToggle className="size-11" />
           <Link href="/entrar" className={chunky("white", "md")}>
             Entrar

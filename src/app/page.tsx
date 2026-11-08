@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowRight02Icon, Building06Icon, CheckmarkCircle02Icon, LockIcon } from "@hugeicons/core-free-icons";
+import { ArrowRight02Icon, CheckmarkCircle02Icon, LockIcon } from "@hugeicons/core-free-icons";
 import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { Reveal, Sticker, Stagger, StaggerItem, CountUp } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
@@ -23,6 +23,7 @@ import type { CategoryId } from "@/lib/data/types";
 import { CITY_AVG_KM, monthlySavings } from "@/lib/geo";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { AudienceSwitch } from "@/components/landing/audience-switch";
 
 /*
  * The landing is for people looking for work. Everything for companies (pitch, plans, FAQ) lives on
@@ -87,7 +88,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-dvh overflow-x-clip [--hard:var(--ink)] dark:[--hard:#2c2464]">
       {/* Nav */}
-      <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 sm:px-6 lg:px-10">
+      <AudienceSwitch active="candidato" />
+      <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 pb-4 sm:px-6 lg:px-10">
         <Link href="/" aria-label="Chambarrio, inicio" className="group inline-flex min-h-11 items-center rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
           <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
         </Link>
@@ -103,13 +105,6 @@ export default function LandingPage() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <Link
-            href="/empresas"
-            className="hidden h-11 items-center gap-1.5 rounded-full px-3 text-[0.9rem] font-semibold text-muted-foreground outline-none transition-colors hover:bg-card hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 sm:inline-flex"
-          >
-            <HugeiconsIcon icon={Building06Icon} className="size-4.5" strokeWidth={2} />
-            Para empresas
-          </Link>
           <a
             href="#demo"
             className="hidden h-11 items-center rounded-full px-4 text-[0.95rem] font-bold outline-none transition-colors hover:bg-card focus-visible:ring-3 focus-visible:ring-ring/50 sm:inline-flex"
