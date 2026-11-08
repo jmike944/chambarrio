@@ -15,9 +15,9 @@
 --  3. application_events / application_notes keep only the grants the app uses (they had Supabase's
 --     default ALL for anon and authenticated, TRUNCATE included, which RLS doesn't cover).
 --
--- Replaces: policy "events: candidate or company reads" (20261107233000_hiring_pipeline.sql).
+-- Replaces: policy "events: candidate or company reads" (20261107223917_hiring_pipeline.sql).
 -- New: function applied_to_job(text), policy "jobs: applicant reads".
--- NOT APPLIED. Review, then apply together with 20261108010100_pipeline_notify_v3.sql.
+-- Applied 2026-11-08 together with 20261108041400_pipeline_notify_v3.sql.
 
 -- ---------------------------------------------------------------- 1. timeline read
 drop policy if exists "events: candidate or company reads" on public.application_events;

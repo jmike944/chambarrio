@@ -11,10 +11,10 @@ export type Database = {
   };
   public: {
     Tables: {
-      // Hiring pipeline (20261107233000): the timeline, written only by a trigger; readable by the
+      // Hiring pipeline (20261107223917): the timeline, written only by a trigger; readable by the
       // candidate and the vacancy's company.
       application_events: {
-        // change / message: 20261108010100_pipeline_notify_v3.sql (not applied yet; live.ts falls back without them).
+        // change / message: 20261108041400_pipeline_notify_v3.sql (not applied yet; live.ts falls back without them).
         Row: { actor: "candidato" | "empresa"; application_id: string; change: EventChange | null; created_at: string; id: number; interview_at: string | null; message: string | null; status: E["application_status"] };
         Insert: { actor: "candidato" | "empresa"; application_id: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status: E["application_status"] };
         Update: { actor?: "candidato" | "empresa"; application_id?: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status?: E["application_status"] };
@@ -225,7 +225,7 @@ export type Database = {
           expected_period: E["pay_period"] | null;
           avatar_path: string | null;
           cv_path: string | null;
-          /** 20261108000000_avatar_config.sql (app AvatarConfig; absent from `select *` until applied). */
+          /** 20261108002840_avatar_config.sql (app AvatarConfig; absent from `select *` until applied). */
           avatar_config: Json | null;
           role: E["app_role"];
           unsubscribe_token: string;

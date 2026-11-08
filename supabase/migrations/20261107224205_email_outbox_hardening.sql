@@ -1,6 +1,6 @@
--- Chambarrio · email outbox follow-ups (review of 20261107213000_email_notifications.sql)
+-- Chambarrio · email outbox follow-ups (review of 20261107210635_email_notifications.sql)
 --
---  (pg_net moving out of `public` is its own migration, 20261107233500_pg_net_schema.sql.)
+--  (pg_net moving out of `public` is its own migration, 20261107230633_pg_net_schema.sql.)
 --  1. The outbox is service-role only: drop the default table grants to anon/authenticated too
 --     (RLS without policies already hid every row; this also hides the table itself).
 --  2. One wake-up per INSERT statement that actually added rows (statement triggers fire even when

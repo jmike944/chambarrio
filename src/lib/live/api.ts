@@ -86,7 +86,7 @@ export type LiveProfile = {
   avatar: AvatarConfig | null;
   /**
    * false when the row came back without an avatar_config column (migration
-   * 20261108000000_avatar_config.sql not applied yet): the store then keeps the avatar on the device.
+   * 20261108002840_avatar_config.sql not applied yet): the store then keeps the avatar on the device.
    */
   avatarStored: boolean;
 };
@@ -411,7 +411,7 @@ export async function fetchCatalog(point: LatLng): Promise<Result<CatalogData>> 
 /**
  * One vacancy by id (for links to a vacancy outside the 50 km catalog). Null when it doesn't exist
  * or isn't visible (closed/paused vacancies are only visible to their company and, once
- * 20261108010000_candidate_reads_after_close.sql is applied, to the people who applied).
+ * 20261108041320_candidate_reads_after_close.sql is applied, to the people who applied).
  */
 export async function fetchJob(id: string): Promise<Result<Job | null>> {
   const sb = client();

@@ -1,6 +1,6 @@
 -- Chambarrio · hiring pipeline v3: what the candidate is told always matches what happened
 --
--- Review of 20261107233000_hiring_pipeline.sql (applied). Problems this fixes:
+-- Review of 20261107223917_hiring_pipeline.sql (applied). Problems this fixes:
 --   a. "Deshacer" after Descartar didn't undo anything for the candidate: the decline email went out
 --      at once, the timeline kept "Esta vez no quedaste", the reopen logged a second "entrevista"
 --      (read as "Cambiaron la hora"), and a later real decline sent no email (dedupe key per status).
@@ -31,10 +31,10 @@
 --     The trigger now also fires on interview_place, interview_note and company_message.
 --
 -- Replaces the deployed bodies of: claim_email_batch, email_retry_tick, on_email_enqueued
--- (20261107233100_email_outbox_hardening.sql); guard_application_status, log_application_event,
--- enqueue_application_status and trigger applications_notify_candidate (20261107233000).
+-- (20261107224205_email_outbox_hardening.sql); guard_application_status, log_application_event,
+-- enqueue_application_status and trigger applications_notify_candidate (20261107223917).
 -- The payload gains "change" (send-emails renders it; deploy that function with this migration).
--- NOT APPLIED. Review, then apply together with 20261108010000_candidate_reads_after_close.sql.
+-- Applied 2026-11-08 together with 20261108041320_candidate_reads_after_close.sql.
 
 -- ---------------------------------------------------------------- 1. send_after
 alter table public.email_outbox add column if not exists send_after timestamptz not null default now();

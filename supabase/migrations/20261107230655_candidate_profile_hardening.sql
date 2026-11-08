@@ -1,4 +1,4 @@
--- Chambarrio · candidate profile follow-ups (review of 20261107223000_candidate_profiles.sql)
+-- Chambarrio · candidate profile follow-ups (review of 20261107211254_candidate_profiles.sql)
 --
 --  1. profiles.avatar_path / cv_path are client-writable, so a candidate could claim a photo or CV
 --     that doesn't exist (+10 strength, "Foto"/"CV" promised on locked cards, nothing after the

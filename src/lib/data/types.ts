@@ -74,7 +74,7 @@ export type Job = {
   phone: string;
   /**
    * Paused or closed: no longer takes applications. Live, only its applicants (and its company) can
-   * still read it (20261108010000_candidate_reads_after_close.sql).
+   * still read it (20261108041320_candidate_reads_after_close.sql).
    */
   closed?: boolean;
 };

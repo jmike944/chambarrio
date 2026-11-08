@@ -175,7 +175,7 @@ export function eventChange(events: readonly PipelineEvent[], i: number): Pipeli
 
 /**
  * A company decline can be undone without a trace for this long ("Deshacer" / "Reabrir"): the
- * candidate's email waits as long (20261108010100_pipeline_notify_v3.sql decline_undoable()).
+ * candidate's email waits as long (20261108041400_pipeline_notify_v3.sql decline_undoable()).
  */
 export const DECLINE_UNDO_MS = 10 * 60_000;
 

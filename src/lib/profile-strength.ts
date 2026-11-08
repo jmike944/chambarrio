@@ -2,7 +2,7 @@ import type { CategoryId, PayPeriod, Shift } from "@/lib/data/types";
 
 /*
  * Candidate profile strength (0–100): a TypeScript port of the SQL function
- * public.profile_strength(profiles) in supabase/migrations/20261107223000_candidate_profiles.sql.
+ * public.profile_strength(profiles) in supabase/migrations/20261107211254_candidate_profiles.sql.
  * Keep the weights in sync with it. Server-safe (no hooks, no client APIs): the candidate's profile
  * editor uses it for the live meter + tips, the employer's applicant cards for demo data and badges.
  *

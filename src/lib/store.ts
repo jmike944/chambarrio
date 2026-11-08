@@ -112,7 +112,7 @@ type UserData = {
   avatarSaved: boolean;
   /**
    * The avatar is only on this device: a visitor's draft, or live while the database can't store it yet
-   * (migration 20261108000000_avatar_config.sql pending). Uploaded on the next session load that can.
+   * (migration 20261108002840_avatar_config.sql pending). Uploaded on the next session load that can.
    */
   avatarLocalOnly: boolean;
 } & CandidateProfileExtras;

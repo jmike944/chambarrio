@@ -3,7 +3,7 @@
 ## `send-emails`
 
 Sends Chambarrio's notification emails through [Resend](https://resend.com) from the
-`public.email_outbox` queue (see `supabase/migrations/20261107213000_email_notifications.sql`).
+`public.email_outbox` queue (see `supabase/migrations/20261107210635_email_notifications.sql`).
 
 | File | What it is |
 | --- | --- |

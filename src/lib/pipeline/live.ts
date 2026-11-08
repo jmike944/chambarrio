@@ -32,7 +32,7 @@ type DbError = { message?: string; code?: string; details?: string | null; hint?
 
 const APP_COLS =
   "id, job_id, status, created_at, seen_at, interview_at, interview_place, interview_note, company_message, hired_at, closed_by, closed_at";
-/** change / message come with 20261108010100_pipeline_notify_v3.sql; until it's applied, the legacy columns. */
+/** change / message come with 20261108041400_pipeline_notify_v3.sql; until it's applied, the legacy columns. */
 const EVENT_COLS_V3 = "id, status, actor, interview_at, created_at, change, message";
 const EVENT_COLS_V2 = "id, status, actor, interview_at, created_at";
 let eventColsV3 = true;

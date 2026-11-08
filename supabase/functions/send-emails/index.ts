@@ -100,7 +100,7 @@ async function finish(db: SupabaseClient, row: OutboxRow, ok: boolean, error: st
 /**
  * A claimed row this run never tried (time budget, rate limit, prefs lookup failure): back to
  * pending without spending one of its 5 attempts. Falls back to finish_email (which does spend one)
- * if release_email isn't there yet (migration 20261107233000 not applied).
+ * if release_email isn't there yet (migration 20261107223917 not applied).
  */
 async function release(db: SupabaseClient, row: OutboxRow, reason: string) {
   const { error } = await db.rpc("release_email", { p_id: row.id, p_reason: reason });

@@ -1,6 +1,6 @@
 /*
  * The company-side state machine, mirroring the database guard trigger
- * (supabase/migrations/20261107233000_hiring_pipeline.sql), so demo mode behaves like live and live
+ * (supabase/migrations/20261107223917_hiring_pipeline.sql), so demo mode behaves like live and live
  * can show the result optimistically. Pure.
  */
 import type { ApplicationPipeline, ApplicationStatus, PipelineEvent, PipelineSummary } from "@/lib/data/types";

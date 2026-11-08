@@ -25,7 +25,7 @@ comment on column public.profiles.avatar_config is
   'Illustrated avatar (app AvatarConfig JSON, sanitized on read). Non-identifying: shown to companies before unlock.';
 
 -- ---------------------------------------------------------------- 2. employer view
--- Same as 20261107223000_candidate_profiles.sql, plus 'avatar' in the non-identifying profile.
+-- Same as 20261107211254_candidate_profiles.sql, plus 'avatar' in the non-identifying profile.
 create or replace function public.job_applicants_detail(p_job_id text)
 returns table (
   application_id uuid, status public.application_status, applied_at timestamptz, colonia text, km double precision,

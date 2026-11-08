@@ -705,7 +705,7 @@ function DeclineForm({ applicationId, first, editing, message: current, afterInt
           // Long enough to read and react (the default 4 s isn't).
           duration: 10_000,
           // Deshacer erases the decline for the candidate too: live, its email waits 10 minutes and
-          // the undo cancels it (20261108010100_pipeline_notify_v3.sql).
+          // the undo cancels it (20261108041400_pipeline_notify_v3.sql).
           action: {
             label: "Deshacer",
             onClick: () =>
