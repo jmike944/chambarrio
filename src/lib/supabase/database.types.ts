@@ -2,6 +2,8 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 type E = Database["public"]["Enums"];
+/** application_events.change (check constraint, not an enum). */
+type EventChange = "hora" | "lugar" | "indicaciones" | "mensaje" | "reabierta";
 
 export type Database = {
   __InternalSupabase: {
@@ -12,9 +14,10 @@ export type Database = {
       // Hiring pipeline (20261107233000): the timeline, written only by a trigger; readable by the
       // candidate and the vacancy's company.
       application_events: {
-        Row: { actor: "candidato" | "empresa"; application_id: string; created_at: string; id: number; interview_at: string | null; status: E["application_status"] };
-        Insert: { actor: "candidato" | "empresa"; application_id: string; created_at?: string; id?: never; interview_at?: string | null; status: E["application_status"] };
-        Update: { actor?: "candidato" | "empresa"; application_id?: string; created_at?: string; id?: never; interview_at?: string | null; status?: E["application_status"] };
+        // change / message: 20261108010100_pipeline_notify_v3.sql (not applied yet; live.ts falls back without them).
+        Row: { actor: "candidato" | "empresa"; application_id: string; change: EventChange | null; created_at: string; id: number; interview_at: string | null; message: string | null; status: E["application_status"] };
+        Insert: { actor: "candidato" | "empresa"; application_id: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status: E["application_status"] };
+        Update: { actor?: "candidato" | "empresa"; application_id?: string; change?: EventChange | null; created_at?: string; id?: never; interview_at?: string | null; message?: string | null; status?: E["application_status"] };
         Relationships: [
           { foreignKeyName: "application_events_application_id_fkey"; columns: ["application_id"]; isOneToOne: false; referencedRelation: "applications"; referencedColumns: ["id"] },
         ];
@@ -316,6 +319,7 @@ export type Database = {
       is_company_owner: { Args: { cid: string }; Returns: boolean };
       /** The signed-in user owns the company of this application's vacancy. */
       owns_application: { Args: { p_app: string }; Returns: boolean };
+      applied_to_job: { Args: { p_job: string }; Returns: boolean };
       job_applicants: {
         Args: { p_job_id: string };
         Returns: {

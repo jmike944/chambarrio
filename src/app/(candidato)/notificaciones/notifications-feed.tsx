@@ -9,7 +9,10 @@ import {
   Award01Icon,
   Calendar03Icon,
   Cancel01Icon,
+  Location01Icon,
+  Message01Icon,
   Notification01Icon,
+  RefreshIcon,
   Settings02Icon,
   ViewIcon,
 } from "@hugeicons/core-free-icons";
@@ -21,7 +24,7 @@ import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { Mascot } from "@/components/chamba/art/mascot";
 import { Button } from "@/components/ui/button";
-import { useCatalog, useCatalogSource, useJobsByDistance } from "@/lib/data/catalog";
+import { useCatalog, useCatalogSource, useJobsById, useJobsByDistance } from "@/lib/data/catalog";
 import { useApp } from "@/lib/store";
 import { formatKm } from "@/lib/geo";
 import { formatPay } from "@/lib/format";
@@ -43,18 +46,24 @@ const DEMO_FRESH = ["barista-alameda", "repartidor-desierto"];
 const KIND_ICON: Record<Exclude<NoticeKind, "vacante">, typeof Calendar03Icon> = {
   entrevista: Calendar03Icon,
   reagendada: Alert02Icon,
+  cambio: Location01Icon,
   vista: ViewIcon,
   contratada: Award01Icon,
+  mensaje: Message01Icon,
   cerrada: Cancel01Icon,
+  reabierta: RefreshIcon,
 };
 /** Preferred block per kind (no pink); neighbours get nudged so they never repeat. */
 const KIND_TONE: Record<NoticeKind, BlockTone> = {
   vacante: "sol",
   entrevista: "limon",
   reagendada: "durazno",
+  cambio: "durazno",
   vista: "cielo",
   contratada: "menta",
+  mensaje: "menta",
   cerrada: "lila",
+  reabierta: "sol",
 };
 const ROTATE: BlockTone[] = ["sol", "cielo", "limon", "durazno", "menta", "lila"];
 
@@ -113,11 +122,14 @@ export function NotificationsFeed() {
   const live = source === "live";
   const loading = source === null || !now || mine.loading || (live && catalog.status === "loading");
   const vacancies = useFreshVacancies(now, live);
+  // The vacancies I applied to, also the ones outside the nearby list (closed / far): one request.
+  const appliedIds = useMemo(() => mine.data.map((p) => p.jobId), [mine.data]);
+  const jobById = useJobsById(appliedIds);
   const items = useMemo(() => {
     if (loading) return [];
-    const apps = pipelineNotices(mine.data, catalog, now);
+    const apps = pipelineNotices(mine.data, { ...catalog, jobById: { ...catalog.jobById, ...jobById } }, now);
     return [...apps, ...vacancies].toSorted((a, b) => b.at - a.at);
-  }, [loading, mine.data, catalog, now, vacancies]);
+  }, [loading, mine.data, catalog, jobById, now, vacancies]);
   return <Feed items={items} loading={loading} live={live} now={now} />;
 }
 
@@ -339,10 +351,19 @@ function NoticeCard({ n, tone, now }: { n: Notice; tone: BlockTone; now: number 
           </span>
         ) : null}
         <span className="mt-1.5 block text-[0.95rem] leading-snug text-muted-foreground">{n.body}</span>
-        <span className="mt-auto flex items-center justify-between gap-2 pt-3 text-[0.85rem] font-medium">
-          <span className="text-muted-foreground">{ago(n.at, now, true)}</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-white transition-transform group-hover:translate-x-1">
-            {app ? "Ver mi postulación" : "Ver vacante"}
+        {/* Never break inside the time or the button: when both don't fit, the button wraps whole. */}
+        <span className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-2 pt-3 text-[0.85rem] font-medium">
+          <span className="whitespace-nowrap text-muted-foreground">{ago(n.at, now, true)}</span>
+          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 whitespace-nowrap text-white transition-transform group-hover:translate-x-1">
+            {app ? (
+              <>
+                {/* Phones: the short label keeps "Hace 41 min" and the button on one line. */}
+                <span className="min-[420px]:hidden">Ver postulación</span>
+                <span className="max-[419px]:hidden">Ver mi postulación</span>
+              </>
+            ) : (
+              "Ver vacante"
+            )}
             <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" strokeWidth={2.2} />
           </span>
         </span>

@@ -228,6 +228,7 @@ export function PipelineStatus({
               p={p}
               now={now}
               job={job}
+              company={company}
               title={st === "past" ? "¿Tienes dudas?" : "¿No puedes ir? Llama o manda SMS"}
               hint={st === "past" ? "Pregunta cómo va tu proceso." : undefined}
               smsBody={st === "past" ? `Hola, tuve entrevista para ${job?.title ?? "la vacante"}. ¿Ya saben algo de mi proceso? Gracias.` : undefined}
@@ -264,6 +265,7 @@ export function PipelineStatus({
             p={p}
             now={now}
             job={job}
+            company={company}
             title="Confirma tu primer día"
             hint="Llama o manda SMS para acordar día y hora."
             smsBody={`Hola, gracias por contratarme para ${job?.title ?? "la vacante"}. ¿Qué día y a qué hora me presento? ¿Qué documentos llevo?`}
@@ -271,6 +273,8 @@ export function PipelineStatus({
           />
           <Checklist id={`${p.id}:primer-dia`} title="Tu primer día" items={FIRST_DAY_ITEMS} />
           <HistoryTile p={p} now={now} />
+          {/* Quiet way out: turning the job down tells the company (no call needed). */}
+          <div className="@3xl:order-last @3xl:col-span-2">{withdraw}</div>
         </div>
       </div>
     );
@@ -298,12 +302,14 @@ export function PipelineStatus({
     );
   }
 
-  // retirada
+  // retirada (also: turned the job down after being hired)
+  const turnedDown = p.events.filter((e) => e.status !== "cerrada").at(-1)?.status === "contratada";
   return (
     <div className={cn(TILE, "flex flex-wrap items-center gap-x-4 gap-y-3")}>
       <p className="min-w-0 flex-1 basis-56 text-[0.98rem] leading-snug">
-        Retiraste tu postulación{p.closedAt ? ` ${ago(p.closedAt, now)}` : ""}. {companyName ?? "La empresa"} ya no te tiene en
-        su lista para esta vacante.
+        {turnedDown
+          ? `Le avisaste a ${companyName ?? "la empresa"} que ya no vas a tomar el trabajo${p.closedAt ? ` ${ago(p.closedAt, now)}` : ""}. Gracias por avisar a tiempo.`
+          : `Retiraste tu postulación${p.closedAt ? ` ${ago(p.closedAt, now)}` : ""}. ${companyName ?? "La empresa"} ya no te tiene en su lista para esta vacante.`}
       </p>
       <Link href="/vacantes" className={cn(WHITE_BTN, "shrink-0")}>
         Ver vacantes cerca

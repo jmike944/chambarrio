@@ -47,22 +47,31 @@ type Row = { p: PipelineSummary; a: ApplicantProfile | null; job: MyJob | undefi
 /** Pipeline rows + profiles + vacancies for the dashboards. */
 export function useDashboardPipeline() {
   const pipe = usePipelineSummary();
-  const profiles = useApplicantProfiles();
   const my = useMyCompany();
   const now = useNow();
+  // Who shows on the panels (statuses come from the one summary query).
+  const lanes = useMemo(() => {
+    const review = pipe.data.filter((p) => p.status === "enviada").toSorted((x, y) => Date.parse(x.appliedAt) - Date.parse(y.appliedAt));
+    const interviews = now ? upcomingInterviews(pipe.data, now) : [];
+    const hires = pipe.data
+      .filter((p) => p.status === "contratada" && p.hiredAt && (!now || now - Date.parse(p.hiredAt) < HIRE_WINDOW))
+      .toSorted((x, y) => Date.parse(y.hiredAt!) - Date.parse(x.hiredAt!));
+    return { review, interviews, hires };
+  }, [pipe.data, now]);
+  // Full profiles (photo, avatar, name) only for the vacancies with someone on the panels, not one
+  // RPC + signed links per vacancy on every dashboard load.
+  const panelJobs = useMemo(
+    () => [...new Set([...lanes.review, ...lanes.interviews, ...lanes.hires].map((p) => p.jobId))],
+    [lanes],
+  );
+  const profiles = useApplicantProfiles(undefined, { detailsFor: panelJobs });
   return useMemo(() => {
     const byId = Object.fromEntries(profiles.applicants.map((a) => [a.id, a]));
     const jobById = Object.fromEntries(my.jobs.map((j) => [j.id, j]));
     const row = (p: PipelineSummary): Row => ({ p, a: byId[p.id] ?? null, job: jobById[p.jobId] });
-    const review = pipe.data
-      .filter((p) => p.status === "enviada")
-      .toSorted((x, y) => Date.parse(x.appliedAt) - Date.parse(y.appliedAt))
-      .map(row);
-    const interviews = (now ? upcomingInterviews(pipe.data, now) : []).map(row);
-    const hires = pipe.data
-      .filter((p) => p.status === "contratada" && p.hiredAt && (!now || now - Date.parse(p.hiredAt) < HIRE_WINDOW))
-      .toSorted((x, y) => Date.parse(y.hiredAt!) - Date.parse(x.hiredAt!))
-      .map(row);
+    const review = lanes.review.map(row);
+    const interviews = lanes.interviews.map(row);
+    const hires = lanes.hires.map(row);
     const week = now ? pipe.data.filter((p) => now - Date.parse(p.appliedAt) < 7 * DAY).length : 0;
     const month = (t: string | number) => {
       const w = mtyWall(t);
@@ -80,7 +89,7 @@ export function useDashboardPipeline() {
       hiresThisMonth,
       now,
     };
-  }, [pipe.data, pipe.loading, pipe.error, pipe.counts, profiles.applicants, profiles.status, my.jobs, now]);
+  }, [pipe.data, pipe.loading, pipe.error, pipe.counts, lanes, profiles.applicants, profiles.status, my.jobs, now]);
 }
 
 export type DashboardPipeline = ReturnType<typeof useDashboardPipeline>;
@@ -151,7 +160,8 @@ export function TodayPanel({ data, className }: { data: DashboardPipeline; class
           </Lane>
           <Lane
             step="entrevista"
-            title="Entrevistas"
+            // Not only today's: the next ones too (each row says its day).
+            title={interviews.length > 0 && interviews.every((r) => now && relativeDayWord(r.p.interviewAt!, now) === "hoy") ? "Entrevistas de hoy" : "Próximas entrevistas"}
             count={interviews.length}
             onAll={() => open("entrevista")}
             empty="Sin entrevistas próximas. Agéndalas desde el perfil de cada postulante."

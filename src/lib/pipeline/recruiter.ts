@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { APPLICANTS } from "@/lib/data/applicants";
 import { useMyCompany, type MyJob } from "@/lib/data/catalog";
 import type { ApplicationPipeline, ApplicationStatus, PipelineSummary, RecruiterNote } from "@/lib/data/types";
-import { emitLive, onLive } from "@/lib/live/events";
+import { onLive } from "@/lib/live/events";
 import { useApp, useHydrated, type WriteResult } from "@/lib/store";
 import { demoRecruiterNotes, demoRecruiterPipeline, patchDemo, useDemoPipeline } from "./demo-store";
 import { deleteNote as deleteNoteLive, fetchNotes, fetchPipeline, fetchSummaries, insertNote, updateApplication } from "./live";
@@ -141,13 +141,49 @@ function refetchActive() {
   }));
 }
 
+/**
+ * After our own writes: confirm with the server what's on screen, once for a burst of taps (five
+ * "Marcar como vista" in a row → one list request). Only the pipeline rows: every list and counter
+ * takes its status from them (withPipelineStatus), so the applicant lists and profiles (one RPC per
+ * vacancy, and freshly signed photo links) aren't refetched for a status change.
+ */
+const confirmIds = new Set<string>();
+let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+const CONFIRM_DELAY_MS = 700;
+
+function scheduleConfirm(applicationId: string) {
+  confirmIds.add(applicationId);
+  if (confirmTimer) clearTimeout(confirmTimer);
+  confirmTimer = setTimeout(() => {
+    confirmTimer = null;
+    const ids = new Set(confirmIds);
+    confirmIds.clear();
+    const lists = cache().lists;
+    for (const id of ids) if (activeApps.has(id)) void loadApp(id, true);
+    for (const [key, jobIds] of activeLists) {
+      if (lists[key]?.list.some((r) => ids.has(r.id))) void loadList(key, jobIds, true);
+    }
+    // Not on screen: refetched next time they mount.
+    useLiveCache.setState((s) => ({
+      apps: Object.fromEntries(Object.entries(s.apps).map(([k, v]) => [k, ids.has(k) && !activeApps.has(k) ? { ...v, fetchedAt: 0 } : v])),
+      lists: Object.fromEntries(
+        Object.entries(s.lists).map(([k, v]) => [k, !activeLists.has(k) && v.list.some((r) => ids.has(r.id)) ? { ...v, fetchedAt: 0 } : v]),
+      ),
+    }));
+  }, CONFIRM_DELAY_MS);
+}
+
 if (typeof window !== "undefined") {
   onLive("reset", () => {
     resetSeq++;
     appFlights.clear();
     listFlights.clear();
+    confirmIds.clear();
+    if (confirmTimer) clearTimeout(confirmTimer);
+    confirmTimer = null;
     useLiveCache.setState({ apps: {}, lists: {} }, true);
   });
+  // Someone else's change (a new applicant, an unlock…): refetch what's mounted.
   onLive("applicants", refetchActive);
 }
 
@@ -224,21 +260,26 @@ async function run(applicationId: string, change: PipelineChange): Promise<Write
   const snap = snapshot(applicationId);
   bump(applicationId);
   applyLocal({ ...t.next, pending: true });
-  const r = await updateApplication(applicationId, t.patch);
+  // Only from the status this change was computed from: a stale screen (the candidate withdrew,
+  // another tab moved it) writes nothing instead of overwriting.
+  const r = await updateApplication(applicationId, t.patch, current.status);
   bump(applicationId);
   if (r.error) {
     restore(applicationId, snap);
+    if (r.stale) {
+      // Show the real state, and say what it is when it's a withdrawal.
+      await loadApp(applicationId, true);
+      for (const [key, jobIds] of activeLists) if (cache().lists[key]?.list.some((x) => x.id === applicationId)) void loadList(key, jobIds, true);
+      // "Seen" runs by itself when the page opens: if it had moved on already, there's nothing to say.
+      if (change.kind === "seen") return { error: r.error };
+      const now = cache().apps[applicationId]?.data;
+      return fail(now?.status === "cerrada" && now.closedBy === "candidato" ? PIPELINE_MSG.withdrawn : r.error);
+    }
     void loadApp(applicationId, true); // e.g. "retiró su postulación": show the real state
     return fail(r.error);
   }
   applyLocal(t.next);
-  if (t.statusChanged) emitLive("applicants"); // every applicant list / counter refetches (ours too)
-  else {
-    void loadApp(applicationId, true);
-    for (const [key, e] of Object.entries(cache().lists)) {
-      if (e.list.some((x) => x.id === applicationId)) void loadList(key, key ? key.split(",") : [], true);
-    }
-  }
+  scheduleConfirm(applicationId);
   return {};
 }
 
@@ -248,8 +289,8 @@ export function markSeen(applicationId: string): Promise<WriteResult> {
 }
 
 /**
- * Sets the interview (→ entrevista). Calling it again on an "entrevista" reschedules: a new time
- * logs a new timeline event and re-emails the candidate; changing only place/note doesn't.
+ * Sets the interview (→ entrevista). Calling it again on an "entrevista" changes it: a new time,
+ * place or instructions each log a timeline event and email the candidate (live, v3 trigger).
  */
 export function scheduleInterview(applicationId: string, input: InterviewInput): Promise<WriteResult> {
   return run(applicationId, { kind: "interview", ...input });

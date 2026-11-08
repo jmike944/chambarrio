@@ -319,6 +319,7 @@ function jobRowToJob(r: JobRow, branch: { colonia: string; location: LatLng }, a
     applicants,
     urgent: r.urgent || undefined,
     phone: r.phone ?? "",
+    ...(r.status !== "abierta" ? { closed: true } : {}),
   };
 }
 
@@ -379,7 +380,7 @@ export async function fetchCatalog(point: LatLng): Promise<Result<CatalogData>> 
   try {
     const [near, companies, branches] = await Promise.all([
       sb.rpc("jobs_near", { lat: point.lat, lng: point.lng, radius_km: 50 }),
-      sb.from("companies").select("id, name, kind, size, verified, about, employees"),
+      sb.from("companies").select("id, name, kind, size, verified, about, employees, phone, plan"),
       sb.from("branches_view").select("id, company_id, name, colonia, sort, lat, lng").order("sort"),
     ]);
     const err = near.error ?? companies.error ?? branches.error;
@@ -398,7 +399,8 @@ export async function fetchCatalog(point: LatLng): Promise<Result<CatalogData>> 
       const locations = byCompany.get(c.id);
       // A company is created a moment before its first branch; until then it has nothing to show.
       if (!locations?.length) continue;
-      list.push({ ...c, locations });
+      const { phone, plan, ...rest } = c;
+      list.push({ ...rest, locations, phone: phone?.replace(/\D/g, "") || undefined, plan });
     }
     return { data: { jobs: (near.data ?? []).map((r) => nearJobToJob(r, now)), companies: list } };
   } catch (e) {
@@ -408,7 +410,8 @@ export async function fetchCatalog(point: LatLng): Promise<Result<CatalogData>> 
 
 /**
  * One vacancy by id (for links to a vacancy outside the 50 km catalog). Null when it doesn't exist
- * or isn't visible (closed/paused vacancies are only visible to their company).
+ * or isn't visible (closed/paused vacancies are only visible to their company and, once
+ * 20261108010000_candidate_reads_after_close.sql is applied, to the people who applied).
  */
 export async function fetchJob(id: string): Promise<Result<Job | null>> {
   const sb = client();
@@ -424,6 +427,32 @@ export async function fetchJob(id: string): Promise<Result<Job | null>> {
     const near = await sb.rpc("jobs_near", { lat: location.lat, lng: location.lng, radius_km: 0.05 });
     const applicants = Number(near.data?.find((r) => r.id === id)?.applicants ?? 0) || 0;
     return { data: jobRowToJob(data as unknown as JobRow, { colonia: branch.colonia, location }, applicants, Date.now()) };
+  } catch (e) {
+    return { error: friendlyError(e as DbError, MSG.load) };
+  }
+}
+
+/**
+ * Several vacancies by id in ONE request (the ones I applied to that aren't in the nearby list).
+ * Every id asked for gets an entry: null when it doesn't exist or isn't visible. Applicant counts
+ * aren't included (0): they're only public through jobs_near, one call per branch.
+ */
+export async function fetchJobsByIds(ids: string[]): Promise<Result<Record<string, Job | null>>> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  const out: Record<string, Job | null> = Object.fromEntries(ids.map((id) => [id, null]));
+  if (ids.length === 0) return { data: out };
+  try {
+    const { data, error } = await sb.from("jobs").select("*, branches(colonia, location)").in("id", ids);
+    if (error) return { error: friendlyError(error, MSG.load) };
+    const now = Date.now();
+    for (const row of data ?? []) {
+      const branch = row.branches as { colonia: string; location: unknown } | null;
+      const location = parsePoint(branch?.location);
+      if (!branch || !location) continue;
+      out[row.id] = jobRowToJob(row as unknown as JobRow, { colonia: branch.colonia, location }, 0, now);
+    }
+    return { data: out };
   } catch (e) {
     return { error: friendlyError(e as DbError, MSG.load) };
   }
@@ -761,20 +790,22 @@ export async function apply(jobId: string): Promise<WriteResult> {
 }
 
 /** The candidate withdraws (status → cerrada; the only change a candidate may make). */
-export async function withdraw(jobId: string): Promise<WriteResult> {
+/**
+ * `expected`: the status the person saw when they tapped (a stale tab must not withdraw an
+ * application that was just hired); nothing changes when the server has another one.
+ */
+export async function withdraw(jobId: string, expected?: ApplicationStatus): Promise<WriteResult> {
   const sb = client();
   if (!sb) return { error: MSG.unavailable };
   try {
     const id = await currentUserId();
     if (!id) return { error: MSG.session };
-    const { data, error } = await sb
-      .from("applications")
-      .update({ status: "cerrada" })
-      .eq("job_id", jobId)
-      .eq("candidate_id", id)
-      .select("id");
+    let q = sb.from("applications").update({ status: "cerrada" }).eq("job_id", jobId).eq("candidate_id", id).neq("status", "cerrada");
+    if (expected) q = q.eq("status", expected);
+    const { data, error } = await q.select("id");
     if (error) return { error: friendlyError(error) };
-    return data?.length ? {} : { error: "No encontramos esa postulación." };
+    if (data?.length) return {};
+    return { error: expected ? "Tu postulación cambió hace un momento. Revisa cómo va antes de retirarla." : "No encontramos esa postulación." };
   } catch (e) {
     return { error: friendlyError(e as DbError) };
   }

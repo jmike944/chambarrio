@@ -7,7 +7,7 @@
  * The database stores 5 statuses; "cerrada" splits into two steps by `closedBy`.
  */
 import type { BlockTone } from "@/components/chamba/primitives";
-import type { ApplicationPipeline, ApplicationStatus, PipelineActor } from "@/lib/data/types";
+import type { ApplicationPipeline, ApplicationStatus, PipelineActor, PipelineEvent, PipelineEventChange } from "@/lib/data/types";
 
 export type PipelineStep = "enviada" | "vista" | "entrevista" | "contratada" | "descartada" | "retirada";
 
@@ -155,6 +155,29 @@ export function trackIndex(p: Pick<ApplicationPipeline, "status" | "seenAt" | "i
   else if (p.seenAt) reached = Math.max(reached, 1);
   return reached;
 }
+
+/**
+ * What a timeline event was beyond its status: a new interview time / place / instructions, a
+ * message after the hire, or a reopened decline. Live rows say it (application_events.change); for
+ * older rows and the demo it's inferred: right after a decline = reopened; a later "entrevista" = new
+ * time (before v3 only time changes were logged); a later "contratada" = a message.
+ */
+export function eventChange(events: readonly PipelineEvent[], i: number): PipelineEventChange | null {
+  const e = events[i];
+  if (!e) return null;
+  if (e.change) return e.change;
+  const prev = events[i - 1];
+  if (prev?.status === "cerrada" && e.status !== "cerrada") return "reabierta";
+  if (e.status === "entrevista" && events.slice(0, i).some((x) => x.status === "entrevista")) return "hora";
+  if (e.status === "contratada" && prev?.status === "contratada") return "mensaje";
+  return null;
+}
+
+/**
+ * A company decline can be undone without a trace for this long ("Deshacer" / "Reabrir"): the
+ * candidate's email waits as long (20261108010100_pipeline_notify_v3.sql decline_undoable()).
+ */
+export const DECLINE_UNDO_MS = 10 * 60_000;
 
 export const isClosed = (p: StatusLike) => p.status === "cerrada";
 export const isWithdrawn = (p: StatusLike) => p.status === "cerrada" && p.closedBy === "candidato";

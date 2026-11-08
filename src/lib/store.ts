@@ -128,8 +128,11 @@ type Actions = {
   setHome: (home: LatLng, colonia: string, source: "colonia" | "gps") => Promise<WriteResult>;
   toggleSaved: (jobId: string) => Promise<WriteResult>;
   apply: (jobId: string) => Promise<WriteResult>;
-  /** The candidate withdraws an application (status → cerrada). */
-  withdraw: (jobId: string) => Promise<WriteResult>;
+  /**
+   * The candidate withdraws an application (status → cerrada). `expected`: the status they saw;
+   * live, nothing changes if the server has another one by now (a stale tab).
+   */
+  withdraw: (jobId: string, expected?: ApplicationStatus) => Promise<WriteResult>;
   setName: (name: string) => Promise<WriteResult>;
   setPhone: (phone: string) => Promise<WriteResult>;
   setRole: (role: Role) => Promise<WriteResult>;
@@ -375,7 +378,7 @@ export const useApp = create<State>()(
         );
       },
 
-      withdraw: (jobId) => {
+      withdraw: (jobId, expected) => {
         const prev = get().applications.find((a) => a.jobId === jobId);
         if (!prev || prev.status === "cerrada") return DONE;
         const patchStatus = (status: ApplicationStatus) =>
@@ -383,7 +386,7 @@ export const useApp = create<State>()(
         patchStatus("cerrada");
         if (!isLive()) return DONE;
         return sync(
-          () => api.withdraw(jobId),
+          () => api.withdraw(jobId, expected),
           () => patchStatus(prev.status),
         );
       },

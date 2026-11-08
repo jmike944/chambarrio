@@ -392,7 +392,6 @@ function renderNewApplicant(p: Obj, token: string | null): RenderedEmail {
 
 // ------------------------------------------------------------------------------- application_status
 
-const TZ = "America/Monterrey";
 const DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MONTHS = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -404,20 +403,11 @@ function formatWhen(v: unknown): { day: string; time: string } | null {
   const raw = str(v);
   const d = raw ? new Date(raw) : null;
   if (!d || Number.isNaN(d.getTime())) return null;
-  // Monterrey has been UTC-6 all year since 2022, so the manual path is a safe fallback for Intl.
-  let parts: { weekday: number; day: number; month: number; hour: number; minute: number };
-  try {
-    const f = new Intl.DateTimeFormat("en-US", {
-      timeZone: TZ, hourCycle: "h23", weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "numeric",
-    }).formatToParts(d);
-    const get = (t: string) => f.find((x) => x.type === t)?.value ?? "";
-    const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(get("weekday"));
-    parts = { weekday: wd, day: Number(get("day")), month: Number(get("month")) - 1, hour: Number(get("hour")) % 24, minute: Number(get("minute")) };
-    if (wd < 0 || Object.values(parts).some((n) => Number.isNaN(n))) throw new Error("bad parts");
-  } catch {
-    const l = new Date(d.getTime() - 6 * 3600_000);
-    parts = { weekday: l.getUTCDay(), day: l.getUTCDate(), month: l.getUTCMonth(), hour: l.getUTCHours(), minute: l.getUTCMinutes() };
-  }
+  // Saltillo (America/Monterrey) is UTC-6 all year since Mexico dropped DST in 2022. A fixed offset,
+  // like the app's src/lib/pipeline/time.ts, so the email and the app never disagree by an hour on a
+  // runtime with an old tz database.
+  const l = new Date(d.getTime() - 6 * 3600_000);
+  const parts = { weekday: l.getUTCDay(), day: l.getUTCDate(), month: l.getUTCMonth(), hour: l.getUTCHours(), minute: l.getUTCMinutes() };
   const h12 = parts.hour % 12 === 0 ? 12 : parts.hour % 12;
   return {
     day: `${DAYS[parts.weekday]} ${parts.day} de ${MONTHS[parts.month]}`,
@@ -451,9 +441,24 @@ const bulletList = (items: string[]) =>
 const quoteBox = (title: string, msg: string) =>
   `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;margin:0 0 18px 0;"><tr><td bgcolor="${LAVENDER}" style="background-color:${LAVENDER};border-left:4px solid ${VIOLET};border-radius:8px;padding:12px 14px;font-family:${FONT};font-size:15px;line-height:1.5;color:${INK};"><span style="display:block;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${MUTED};margin-bottom:4px;">${esc(title)}</span>${esc(msg).replace(/\r?\n/g, "<br>")}</td></tr></table>`;
 
+/**
+ * What a non-status email is about (payload.change, from the v3 trigger): a new time ("hora", same as
+ * the older `rescheduled: true`), a new place, new instructions, a message after the hire, or a
+ * declined application the company opened again.
+ */
+type StatusChange = "hora" | "lugar" | "indicaciones" | "mensaje" | "reabierta" | null;
+
+function statusChange(p: Obj): StatusChange {
+  const c = str(p.change);
+  if (c === "hora" || c === "lugar" || c === "indicaciones" || c === "mensaje" || c === "reabierta") return c;
+  return p.rescheduled === true ? "hora" : null;
+}
+
 function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
   const status = str(p.status);
-  const rescheduled = p.rescheduled === true;
+  const change = statusChange(p);
+  const rescheduled = change === "hora";
+  const detailsChanged = change === "lugar" || change === "indicaciones";
   const job = str(p.job_title) || "la vacante";
   const company = str(p.company_name) || "La empresa";
   const branch = str(p.branch_name);
@@ -504,6 +509,15 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
         bodyHtml = `${b(company)} cambió el día u hora de tu entrevista para ${b(job)}${atBranch}. Este es el nuevo horario, ya no vale el anterior.`;
         bodyText = `${company} cambió el día u hora de tu entrevista para ${job}${atBranchText}. Este es el nuevo horario, ya no vale el anterior.`;
         preheader = whenLine ? `Nuevo horario: ${whenLine}.` : `Cambió el horario de tu entrevista con ${company}.`;
+      } else if (detailsChanged) {
+        const what = change === "lugar" ? "el lugar" : "las indicaciones";
+        label = "Cambio en tu entrevista";
+        subject = `Cambio en tu entrevista con ${company}`;
+        headingHtml = change === "lugar" ? `Cambió el lugar de tu entrevista` : `Hay cambios en tu entrevista`;
+        bodyHtml = `${b(company)} cambió ${what} de tu entrevista para ${b(job)}${atBranch}.${when ? " El día y la hora siguen igual." : ""} Revisa los datos nuevos antes de ir.`;
+        bodyText = `${company} cambió ${what} de tu entrevista para ${job}${atBranchText}.${when ? " El día y la hora siguen igual." : ""} Revisa los datos nuevos antes de ir.`;
+        preheader =
+          change === "lugar" && place ? `Nuevo lugar: ${place}.` : whenLine ? `Tu entrevista sigue el ${whenLine}. Revisa los cambios.` : `Revisa los cambios de tu entrevista.`;
       } else {
         label = "¡Entrevista!";
         subject = when ? `Entrevista con ${company}: ${when.day}, ${when.time}` : `¡${company} quiere entrevistarte!`;
@@ -514,10 +528,10 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
       }
       if (when) {
         const prefix = rescheduled ? "Nuevo horario" : "Tu entrevista";
-        highlight = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;margin:4px 0 18px 0;"><tr><td bgcolor="${VIOLET}" style="background-color:${VIOLET};border:3px solid ${INK};border-radius:16px;padding:16px 18px;font-family:${FONT};color:#ffffff;"><p style="margin:0 0 4px 0;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${LIME};">${esc(prefix)}</p><p style="margin:0;font-size:22px;line-height:1.25;font-weight:800;color:#ffffff;">${esc(capitalize(when.day))}</p><p style="margin:2px 0 0 0;font-size:22px;line-height:1.25;font-weight:800;color:${LIME};">${esc(when.time)}</p>${place ? `<p style="margin:10px 0 0 0;font-size:15px;line-height:1.4;color:#ffffff;"><strong>Lugar:</strong> ${esc(place)}</p>` : ""}${interviewNote ? `<p style="margin:8px 0 0 0;font-size:15px;line-height:1.4;color:#ffffff;"><strong>Aviso de la empresa:</strong> ${esc(interviewNote).replace(/\r?\n/g, "<br>")}</p>` : ""}</td></tr></table>`;
+        highlight = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:separate;margin:4px 0 18px 0;"><tr><td bgcolor="${VIOLET}" style="background-color:${VIOLET};border:3px solid ${INK};border-radius:16px;padding:16px 18px;font-family:${FONT};color:#ffffff;"><p style="margin:0 0 4px 0;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${LIME};">${esc(prefix)}</p><p style="margin:0;font-size:22px;line-height:1.25;font-weight:800;color:#ffffff;">${esc(capitalize(when.day))}</p><p style="margin:2px 0 0 0;font-size:22px;line-height:1.25;font-weight:800;color:${LIME};">${esc(when.time)}</p>${place ? `<p style="margin:10px 0 0 0;font-size:15px;line-height:1.4;color:#ffffff;"><strong>${change === "lugar" ? "Nuevo lugar:" : "Lugar:"}</strong> ${esc(place)}</p>` : ""}${interviewNote ? `<p style="margin:8px 0 0 0;font-size:15px;line-height:1.4;color:#ffffff;"><strong>Aviso de la empresa:</strong> ${esc(interviewNote).replace(/\r?\n/g, "<br>")}</p>` : ""}</td></tr></table>`;
         highlightText = [
           `${prefix.toUpperCase()}: ${whenLine}`,
-          place ? `Lugar: ${place}` : null,
+          place ? `${change === "lugar" ? "Nuevo lugar" : "Lugar"}: ${place}` : null,
           interviewNote ? `Aviso de la empresa: ${interviewNote}` : null,
         ];
       } else {
@@ -570,6 +584,32 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
       throw new Error(`unsupported application status ${status || "(empty)"}`);
   }
 
+  if (change === "mensaje" && status === "contratada") {
+    // A welcome message written after the hire email: only the message is new.
+    label = "Mensaje de la empresa";
+    subject = `${company} te dejó un mensaje`;
+    headingHtml = `${esc(company)} te dejó un mensaje`;
+    bodyHtml = `Es sobre tu contratación para ${b(job)}${atBranch}.`;
+    bodyText = `Es sobre tu contratación para ${job}${atBranchText}.`;
+    preheader = companyMessage ? companyMessage.slice(0, 110) : `Sobre tu contratación para ${job}.`;
+  } else if (change === "reabierta" && status !== "cerrada") {
+    // The company declined (that email may have gone out) and then opened it again.
+    const still =
+      status === "entrevista"
+        ? when
+          ? "Tu entrevista sigue en pie."
+          : "Te van a llamar o mandar un SMS para acordar la entrevista."
+        : status === "contratada"
+          ? "Tu contratación sigue en pie. Pronto te contactan para tu primer día."
+          : "Sigues en el proceso: si tu perfil les interesa, te contactan por llamada o SMS.";
+    label = "Buenas noticias";
+    subject = `${company} retomó tu postulación a ${job}`;
+    headingHtml = `${esc(company)} retomó tu postulación`;
+    bodyHtml = `Volvieron a abrir tu postulación a ${b(job)}${atBranch}. Olvida el aviso anterior. ${esc(still)}`;
+    bodyText = `Volvieron a abrir tu postulación a ${job}${atBranchText}. Olvida el aviso anterior. ${still}`;
+    preheader = `Olvida el aviso anterior: sigues en el proceso.`;
+  }
+
   const rows: [string, string][] = [];
   if (colonia) rows.push(["Colonia", esc(colonia)]);
   if (phone && phoneLabel) {
@@ -592,10 +632,12 @@ function renderApplicationStatus(p: Obj, token: string | null): RenderedEmail {
         ? `¿No puedes ir? Llama o manda SMS al ${phone.display}`
         : `${phoneLabel} Llama al ${phone.display}`
       : null;
+  // tel: and sms: links side by side (no WhatsApp).
+  const smsHref = phone ? phone.href.replace(/^tel:/, "sms:") : "";
   const phoneNote =
     isInterview && phone
       ? note(
-          `<strong style="color:${INK};">¿No puedes ir?</strong> Llama o manda SMS al <a href="${esc(phone.href)}" style="color:${INK};font-weight:800;text-decoration:underline;">${esc(phone.display)}</a>.`,
+          `<strong style="color:${INK};">¿No puedes ir?</strong> <a href="${esc(phone.href)}" style="color:${INK};font-weight:800;text-decoration:underline;">Llama</a> o <a href="${esc(smsHref)}" style="color:${INK};font-weight:800;text-decoration:underline;">manda SMS</a> al <a href="${esc(phone.href)}" style="color:${INK};font-weight:800;text-decoration:underline;">${esc(phone.display)}</a>.`,
         )
       : "";
 

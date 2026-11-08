@@ -19,8 +19,8 @@ import type { ApplicationPipeline } from "@/lib/data/types";
 import { withdrawApplication } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 
-/** Withdraw shows only while the process is open (not hired, not closed). */
-export const canWithdrawHere = (p: Pick<ApplicationPipeline, "status">) => p.status !== "cerrada" && p.status !== "contratada";
+/** Withdraw shows while it isn't closed; once hired it reads "Ya no voy a tomar el trabajo". */
+export const canWithdrawHere = (p: Pick<ApplicationPipeline, "status">) => p.status !== "cerrada";
 
 /**
  * "Retirar mi postulación" with an AlertDialog confirm. The store rolls back and toasts on error;
@@ -40,12 +40,17 @@ export function WithdrawButton({
   const [busy, setBusy] = useState(false);
   if (!canWithdrawHere(p)) return null;
   const company = companyName ?? "La empresa";
+  const hired = p.status === "contratada";
 
   async function confirm() {
     setBusy(true);
-    const r = await withdrawApplication(p.jobId);
+    // The status on screen: if it changed meanwhile (another tab, the company just moved it), nothing
+    // is withdrawn and the real state shows instead.
+    const r = await withdrawApplication(p.jobId, p.status);
     setBusy(false);
-    if (!r.error) toast("Retiraste tu postulación", { description: jobTitle ? `${jobTitle} ya no está en proceso.` : undefined });
+    if (r.error) return;
+    if (hired) toast("Le avisamos que ya no vas a tomar el trabajo", { description: `${company} ya lo ve en su lista.` });
+    else toast("Retiraste tu postulación", { description: jobTitle ? `${jobTitle} ya no está en proceso.` : undefined });
   }
 
   return (
@@ -60,17 +65,18 @@ export function WithdrawButton({
           )}
         >
           <HugeiconsIcon icon={Logout03Icon} className="size-4.5" strokeWidth={2.2} />
-          Retirar mi postulación
+          {hired ? "Ya no voy a tomar el trabajo" : "Retirar mi postulación"}
         </button>
       </AlertDialogTrigger>
       <AlertDialogContent className="border-2 border-ink shadow-[6px_6px_0_0_var(--ink)]">
         <AlertDialogHeader>
           <AlertDialogTitle className="font-display text-[1.4rem] leading-tight font-extrabold tracking-[-0.02em]">
-            ¿Retirar tu postulación?
+            {hired ? "¿Ya no vas a tomar el trabajo?" : "¿Retirar tu postulación?"}
           </AlertDialogTitle>
           <AlertDialogDescription className="text-[0.98rem] leading-snug">
-            {company} verá que ya no sigues en el proceso{jobTitle ? ` de ${jobTitle}` : ""}
-            {p.status === "entrevista" ? " y se cancela tu entrevista" : ""}. No se puede deshacer ni volver a postularte a esta vacante.
+            {hired
+              ? `Le avisamos a ${company} que ya no vas a tomar el trabajo${jobTitle ? ` de ${jobTitle}` : ""}, así puede buscar a alguien más. No se puede deshacer.`
+              : `${company} verá que ya no sigues en el proceso${jobTitle ? ` de ${jobTitle}` : ""}${p.status === "entrevista" ? " y se cancela tu entrevista" : ""}. No se puede deshacer ni volver a postularte a esta vacante.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -78,7 +84,7 @@ export function WithdrawButton({
             Mejor no
           </AlertDialogCancel>
           <AlertDialogAction size="lg" variant="destructive" onClick={confirm} className="border-2 border-ink">
-            Sí, retirarme
+            {hired ? "Sí, avisarles" : "Sí, retirarme"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

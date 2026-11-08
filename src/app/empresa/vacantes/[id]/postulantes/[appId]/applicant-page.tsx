@@ -11,6 +11,7 @@ import {
   Clock01Icon,
   ComingSoon01Icon,
   Location01Icon,
+  LockIcon,
   RefreshIcon,
   SquareUnlock02Icon,
   UserIcon,
@@ -33,7 +34,7 @@ import type { ApplicationPipeline, RecruiterNote } from "@/lib/data/types";
 import { useApplicantProfiles, type ApplicantProfile } from "@/lib/live/applicant-profiles";
 import { stepOf, useApplicationPipeline, useNow, usePipelineSummary } from "@/lib/pipeline";
 import { formatKm } from "@/lib/geo";
-import { useIsUnlocked, usePaymentsEnabled } from "@/lib/store";
+import { useApp, useIsUnlocked, usePaymentsEnabled } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { PipelineCard } from "./pipeline-card";
 import { NotesPanel, TimelinePanel } from "./notes-timeline";
@@ -140,6 +141,18 @@ function ApplicantView({
   // Pages stay mounted after navigating away; don't come back to an open dialog.
   useLayoutEffect(() => () => setUnlockOpen(false), []);
 
+  // Opening a new application is seeing it: no extra "Marcar como vista" tap (once per application;
+  // a failed write leaves the button on the card).
+  const { markSeen } = pipeline.actions;
+  const seenFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (data.status !== "enviada" || data.pending || seenFor.current === data.id) return;
+    seenFor.current = data.id;
+    void markSeen();
+  }, [data.id, data.status, data.pending, markSeen]);
+  const businessPhone = useApp((s) => s.business?.phone ?? null);
+  const noPhone = !!job && !job.phone?.trim() && !businessPhone?.trim();
+
   // Prev / next: the order the vacancy list showed when this card was opened, else the list's order.
   const snapshot = useControlsStore((s) => s.orders[jobId]);
   const scopeSort = useControlsStore((s) => s.scopes[jobId]?.sort ?? null);
@@ -199,6 +212,7 @@ function ApplicantView({
             actions={pipeline.actions}
             now={now}
             onLocked={locked ? openUnlock : null}
+            noPhone={noPhone}
           />
           {timelineLeft ? null : <TimelinePanel className="order-4" data={data} first={first} now={now} />}
           <NotesPanel
@@ -397,6 +411,12 @@ function HeaderCard({
       <div className="mt-5">
         {a && open ? (
           <ContactActions applicant={a} first={first === "esta persona" ? "esta persona" : first} />
+        ) : a && step === "retirada" ? (
+          // Nothing to unlock for someone who left: no paying to contact them.
+          <p className="flex items-start gap-2 rounded-tile border-2 border-dashed border-ink/35 bg-white/55 px-3.5 py-3 text-[0.92rem] leading-snug">
+            <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-4 shrink-0" strokeWidth={2.4} />
+            Se retiró de esta vacante, así que su nombre y su contacto se quedan ocultos.
+          </p>
         ) : a ? (
           <LockedReveal applicant={a} className="bg-white/55">
             <p className="mt-2.5 text-[0.88rem] leading-snug">

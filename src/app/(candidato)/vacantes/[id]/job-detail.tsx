@@ -25,6 +25,7 @@ import {
   WalkingIcon,
   Message01Icon,
   LockIcon,
+  SquareUnlock02Icon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -39,7 +40,7 @@ import { useCatalog, useJob } from "@/lib/data/catalog";
 import type { ApplicationPipeline, Branch, Company, Job } from "@/lib/data/types";
 import { bandColor, bandFor, BAND_LABEL, commuteOptions, distanceKm, formatKm, type CommuteMode, type LatLng } from "@/lib/geo";
 import { formatMinutesAgo, formatMXN, formatNumber, formatPay, PERIOD_LONG } from "@/lib/format";
-import { useApp } from "@/lib/store";
+import { useApp, useMyAvatar } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import {
   STEP_META,
@@ -372,10 +373,12 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const { status, error, job, company, branch } = useJob(jobId);
   const { jobsAtBranch, source } = useCatalog();
   const mine = useMyPipeline(jobId);
-  if (job && company) {
+  // A paused / closed vacancy is shown only to the people who applied (their process continues).
+  if (job && company && (!job.closed || mine.data)) {
     return <JobDetailView job={job} company={company} branch={branch} jobsAtBranch={jobsAtBranch} live={source === "live"} />;
   }
-  if (status === "loading") return <DetailSkeleton />;
+  // Closed vacancy: wait for my applications before saying it's gone.
+  if (status === "loading" || (job?.closed && mine.loading)) return <DetailSkeleton />;
   if (status === "error") {
     return (
       <div className="pt-5 pb-28 lg:pt-10">
@@ -462,13 +465,21 @@ function StatusBlock({
   );
 }
 
-/** Right after applying: what the company sees now, and a gentle nudge to complete the profile. */
+/**
+ * Right after applying: what the company sees now (exactly what job_applicants_detail gives it), and a
+ * gentle nudge to complete the profile. Every company sees the profile right away: the avatar the
+ * person built, colonia and distance, experience and work history, "Sobre mí", studies, skills,
+ * shifts and expected pay. Name, phone, photo and CV: right away on the Pyme / Industrial plans,
+ * else once the company opens (unlocks) the vacancy's applicants.
+ */
 function ApplyConfirmation({ company, km, tone }: { company: Company; km: number; tone: BlockTone }) {
   const colonia = useApp((s) => (s.hasHome && s.colonia ? s.colonia : null));
   const experience = useApp((s) => s.experience);
   const jobsBefore = useApp((s) => s.workExperiences.length);
+  const look = useMyAvatar();
   const strength = useMyStrength();
   const level = strengthLevel(strength.value);
+  const seesContact = company.plan === "pyme" || company.plan === "industrial";
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -509,12 +520,15 @@ function ApplyConfirmation({ company, km, tone }: { company: Company; km: number
         <div className="@container min-w-0 rounded-tile border-2 border-ink bg-white p-4 text-ink shadow-[4px_4px_0_0_var(--ink)] @2xl:col-start-2 @2xl:row-span-2 @2xl:row-start-1">
           <p className="text-[0.72rem] font-extrabold tracking-[0.14em] uppercase">Esto ve {company.name} ahora</p>
           <div className="mt-3 flex items-center gap-3">
-            <ApplicantAvatar name={null} locked />
+            {/* Their own look: the avatar is what every company sees, before anything is unlocked. */}
+            <ApplicantAvatar name={null} locked={!seesContact} art={look} />
             <div className="min-w-0">
               <p className="font-display text-[1.15rem] leading-tight font-extrabold">Tu ficha</p>
               <p className="flex items-start gap-1.5 text-[0.88rem] leading-snug text-ink/70">
-                <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.4} />
-                Tu nombre y teléfono se ven cuando abren tus datos
+                <HugeiconsIcon icon={seesContact ? SquareUnlock02Icon : LockIcon} className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.4} />
+                {seesContact
+                  ? "También ve tu nombre, teléfono, foto y CV, para llamarte."
+                  : "Tu nombre, teléfono, foto y CV los ve cuando la empresa abra tus datos."}
               </p>
             </div>
           </div>
@@ -526,6 +540,13 @@ function ApplyConfirmation({ company, km, tone }: { company: Company; km: number
               </div>
             ))}
           </dl>
+          <p className="mt-3 text-[0.88rem] leading-snug text-ink/75">
+            También ve tu perfil: experiencia (dónde trabajaste y qué hacías), «Sobre mí», estudios, habilidades, turnos y el sueldo que
+            buscas.{" "}
+            <Link href="/perfil" className="font-semibold text-ink underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ink/30">
+              Revisar mi perfil
+            </Link>
+          </p>
           <div className="mt-3">
             <p className="flex items-baseline justify-between gap-2 text-[0.88rem]">
               <span className="font-semibold">Tu perfil</span>
@@ -616,7 +637,9 @@ function JobDetailView({
 
   // Live visitors without a session can't apply or save: send them to sign in instead.
   const needsAccount = live && !signedIn;
-  const hasPhone = !!job.phone;
+  /** The vacancy's phone, else the company's. */
+  const phone = job.phone || company.phone || "";
+  const hasPhone = !!phone;
 
   async function onApply(e: React.MouseEvent<HTMLButtonElement>) {
     const origin = e.currentTarget;
@@ -684,13 +707,13 @@ function JobDetailView({
         {hasPhone ? (
           <>
             <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-              <a href={`sms:+52${job.phone}?&body=${smsText}`}>
+              <a href={`sms:+52${phone}?&body=${smsText}`}>
                 <HugeiconsIcon icon={Message01Icon} className="size-5 text-nopal" strokeWidth={2} />
                 SMS
               </a>
             </Button>
             <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-              <a href={`tel:+52${job.phone}`}>
+              <a href={`tel:+52${phone}`}>
                 <HugeiconsIcon icon={Call02Icon} className="size-5" strokeWidth={2} />
                 Llamar
               </a>
@@ -951,7 +974,18 @@ function JobDetailView({
                   tone={tones[i]}
                   icon={s.icon}
                   label={s.label}
-                  value={<span className="block text-[1.2rem] leading-tight break-words sm:text-[1.7rem]">{s.value}</span>}
+                  value={
+                    // Three tiles share a 390 px row: long words ("Vespertino") step down a size
+                    // instead of breaking mid-word.
+                    <span
+                      className={cn(
+                        "block leading-tight break-words hyphens-auto sm:text-[1.7rem]",
+                        typeof s.value === "string" && s.value.length > 8 ? "text-[1rem] min-[400px]:text-[1.1rem]" : "text-[1.2rem]",
+                      )}
+                    >
+                      {s.value}
+                    </span>
+                  }
                   hint={s.hint}
                   className={cn("h-full border-2 border-ink p-3 sm:p-4", HARD_SM)}
                 />
@@ -1021,6 +1055,14 @@ function JobDetailView({
           <div className="lg:col-span-12">
             <ApplyConfirmation company={company} km={km} tone={successTone} />
           </div>
+        ) : null}
+
+        {/* ------------------------------------------------ paused / closed after applying */}
+        {job.closed && applied ? (
+          <p className={cn("flex items-center gap-2.5 rounded-panel border-2 border-ink px-4 py-3 font-semibold lg:col-span-12", surface("cielo"), HARD_SM)}>
+            <HugeiconsIcon icon={Store01Icon} className="size-5 shrink-0" strokeWidth={2.2} />
+            Esta vacante ya no recibe postulaciones. Tu proceso sigue aquí.
+          </p>
         ) : null}
 
         {/* ------------------------------------------------ this person's application, state-aware */}

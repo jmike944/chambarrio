@@ -247,7 +247,7 @@ export function ApplicantToolbar({ controls, className }: { controls: ApplicantC
                 )}
                 {key === "todos" ? "Todos" : STEP_FILTER_LABEL[key]}
                 <CountBadge n={n} on={on} />
-                <span className="sr-only"> postulantes</span>
+                <span className="sr-only"> {n === 1 ? "postulante" : "postulantes"}</span>
               </button>
             );
           })}
@@ -323,7 +323,7 @@ export function ApplicantToolbar({ controls, className }: { controls: ApplicantC
                 <HugeiconsIcon icon={f.icon} className={cn("size-4.5", on && "text-limon")} strokeWidth={2.2} />
                 {f.label}
                 <CountBadge n={counts[f.id]} on={on} />
-                <span className="sr-only"> postulantes</span>
+                <span className="sr-only"> {counts[f.id] === 1 ? "postulante" : "postulantes"}</span>
               </button>
             );
           })}

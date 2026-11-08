@@ -9,7 +9,7 @@ import { Mascot } from "@/components/chamba/art/mascot";
 import { FIELD, HARD, OUTLINE } from "@/components/empresa/workwear";
 import { STEP_COLOR, ago } from "@/components/empresa/pipeline/pipeline-kit";
 import type { ApplicationPipeline, PipelineEvent, RecruiterNote } from "@/lib/data/types";
-import { PIPELINE_LIMITS, capitalize, fmtDayTime, stepOf, validateNote, type PipelineActions } from "@/lib/pipeline";
+import { PIPELINE_LIMITS, capitalize, eventChange, fmtDayTime, stepOf, validateNote, type PipelineActions } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 
 /*
@@ -203,9 +203,8 @@ export function NotesPanel({
 // ------------------------------------------------------------------ timeline
 
 function eventLabel(e: PipelineEvent, i: number, events: PipelineEvent[], first: string, now: number): string {
-  const prev = events[i - 1];
-  const reopened = prev?.status === "cerrada" && e.status !== "cerrada";
-  if (reopened) return "Reabriste la postulación";
+  const change = eventChange(events, i);
+  if (change === "reabierta") return "Reabriste la postulación";
   switch (e.status) {
     case "enviada":
       return "Se postuló";
@@ -213,13 +212,19 @@ function eventLabel(e: PipelineEvent, i: number, events: PipelineEvent[], first:
       return "Viste su postulación";
     case "entrevista": {
       const when = e.interviewAt && now ? fmtDayTime(e.interviewAt, { now }) : null;
-      const again = events.slice(0, i).some((x) => x.status === "entrevista");
-      return again ? `Cambiaste la entrevista${when ? ` a ${when}` : ""}` : `Agendaste entrevista${when ? ` para ${when}` : ""}`;
+      if (change === "hora") return `Cambiaste la entrevista${when ? ` a ${when}` : ""}`;
+      if (change === "lugar") return "Cambiaste el lugar de la entrevista";
+      if (change === "indicaciones") return "Cambiaste las indicaciones de la entrevista";
+      return `Agendaste entrevista${when ? ` para ${when}` : ""}`;
     }
     case "contratada":
+      if (change === "mensaje") return "Le dejaste un mensaje";
       return first === "esta persona" ? "La contrataste" : `Contrataste a ${first}`;
-    case "cerrada":
-      return e.actor === "candidato" ? "Retiró su postulación" : "La descartaste";
+    case "cerrada": {
+      const hiredBefore = events.slice(0, i).findLast((x) => x.status !== "cerrada")?.status === "contratada";
+      if (e.actor === "candidato") return hiredBefore ? "Ya no va a tomar el trabajo" : "Retiró su postulación";
+      return hiredBefore ? "Cancelaste la contratación" : "La descartaste";
+    }
   }
 }
 

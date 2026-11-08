@@ -10,6 +10,7 @@ export type {
   InterviewDetails,
   PipelineActor,
   PipelineEvent,
+  PipelineEventChange,
   PipelineSummary,
   RecruiterNote,
 } from "@/lib/data/types";
@@ -48,7 +49,9 @@ export {
   RESCHEDULE_NOTICE,
   STEP_META,
   UNHIRE_COPY,
+  DECLINE_UNDO_MS,
   canWithdraw,
+  eventChange,
   isClosed,
   isWithdrawn,
   recruiterCan,
@@ -58,7 +61,7 @@ export {
   wasHiredBeforeClose,
 } from "./steps";
 export type { MainStep, PipelineStep, StepMeta } from "./steps";
-export { PIPELINE_MSG, transition, validateInterview, validateMessage, validateNote } from "./transitions";
+export { PIPELINE_MSG, declineUndoable, transition, validateInterview, validateMessage, validateNote } from "./transitions";
 export type { InterviewInput } from "./transitions";
 
 // Time (always America/Monterrey, es-MX)

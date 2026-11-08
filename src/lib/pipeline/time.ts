@@ -38,20 +38,13 @@ const MONTH_LONG = [
   "noviembre",
   "diciembre",
 ];
-const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-
-// en-US only to read numeric parts reliably; nothing user-facing comes from this formatter.
-const PARTS = new Intl.DateTimeFormat("en-US", {
-  timeZone: MTY_TZ,
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  weekday: "short",
-});
+/**
+ * Saltillo's UTC offset. Mexico dropped daylight saving time in October 2022 and America/Monterrey has
+ * been UTC−6 all year since, so the offset is fixed here instead of read from the device's tz
+ * database: phones with tzdata older than 2022 still apply DST to America/Monterrey (April–October)
+ * and would book or show interviews an hour off. The send-emails templates use the same −6 h.
+ */
+const MTY_OFFSET_MS = -6 * HOUR;
 
 /** Epoch ms of an input; NaN when it can't be parsed. */
 export function toMs(t: DateInput): number {
@@ -65,32 +58,22 @@ const valid = (ms: number) => Number.isFinite(ms);
 /** Saltillo wall-clock fields of an instant. */
 export function mtyWall(t: DateInput): MtyWall {
   const ms = toMs(t);
-  const out: MtyWall = { year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0, weekday: 0 };
-  for (const p of PARTS.formatToParts(new Date(ms))) {
-    if (p.type === "year") out.year = Number(p.value);
-    else if (p.type === "month") out.month = Number(p.value);
-    else if (p.type === "day") out.day = Number(p.value);
-    else if (p.type === "hour") out.hour = Number(p.value) % 24;
-    else if (p.type === "minute") out.minute = Number(p.value);
-    else if (p.type === "second") out.second = Number(p.value);
-    else if (p.type === "weekday") out.weekday = WEEKDAY_INDEX[p.value] ?? 0;
-  }
-  return out;
+  if (!valid(ms)) return { year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0, weekday: 0 };
+  const l = new Date(ms + MTY_OFFSET_MS);
+  return {
+    year: l.getUTCFullYear(),
+    month: l.getUTCMonth() + 1,
+    day: l.getUTCDate(),
+    hour: l.getUTCHours(),
+    minute: l.getUTCMinutes(),
+    second: l.getUTCSeconds(),
+    weekday: l.getUTCDay(),
+  };
 }
 
-/** Saltillo's UTC offset at an instant, in ms (−6 h → −21 600 000). */
-function offsetAt(ms: number): number {
-  const w = mtyWall(ms);
-  const asUtc = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second);
-  return asUtc - Math.floor(ms / 1000) * 1000;
-}
-
-/** The instant (epoch ms) of a Saltillo wall-clock time. Handles a DST rule should one ever return. */
+/** The instant (epoch ms) of a Saltillo wall-clock time. */
 export function mtyInstant(year: number, month: number, day: number, hour = 0, minute = 0): number {
-  const guess = Date.UTC(year, month - 1, day, hour, minute);
-  const first = guess - offsetAt(guess);
-  const second = guess - offsetAt(first);
-  return second;
+  return Date.UTC(year, month - 1, day, hour, minute) - MTY_OFFSET_MS;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");

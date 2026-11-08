@@ -33,6 +33,7 @@ import {
   fmtDayTime,
   fmtDayTimeLong,
   mapsLink,
+  declineUndoable,
   recruiterCan,
   stepOf,
   trackIndex,
@@ -44,7 +45,8 @@ import { cn } from "@/lib/utils";
 /*
  * The applicant page's one saturated block: where this application is (Enviada → Vista →
  * Entrevista → Contratada, or Descartada / Se retiró), what to do now, and every company action.
- * Opening the page never changes the status: "Marcar como vista" is suggested, one tap.
+ * Opening the page marks a new application as seen (applicant-page); "Marcar como vista" stays as
+ * the fallback when that write failed.
  *
  * Locked vacancy (payments on, not unlocked): "Marcar como vista" and "Descartar" stay free, but
  * scheduling or hiring would hand the person's day/time/place over without paying, so those open
@@ -62,6 +64,7 @@ export function PipelineCard({
   actions,
   now,
   onLocked,
+  noPhone,
   className,
 }: {
   data: ApplicationPipeline;
@@ -77,6 +80,8 @@ export function PipelineCard({
    * interview / hire dialog, with what to open once it's unlocked.
    */
   onLocked?: ((then: () => void) => void) | null;
+  /** Neither the vacancy nor the company has a phone (the interview dialog warns). */
+  noPhone?: boolean;
   className?: string;
 }) {
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -133,10 +138,19 @@ export function PipelineCard({
 
   async function reopen() {
     if (busy) return;
+    // Within the undo window the decline is erased for the candidate (its email never goes out);
+    // later, the candidate is told the company picked it up again.
+    const quiet = declineUndoable(data);
     setBusy("reopen");
     const r = await actions.reopen();
     setBusy(null);
-    if (!r.error) toast.success("Reabriste la postulación.", { description: "Vuelve a la etapa en la que estaba." });
+    if (!r.error) {
+      toast.success("Reabriste la postulación.", {
+        description: quiet
+          ? "Vuelve a la etapa en la que estaba. No le llega ningún aviso del descarte."
+          : `Vuelve a la etapa en la que estaba. ${who} recibe un aviso de que sigue en el proceso.`,
+      });
+    }
   }
 
   const map = interview ? mapsLink({ place: interview.place, branch, companyName }) : null;
@@ -264,8 +278,8 @@ export function PipelineCard({
           ) : null}
           {can.reschedule ? (
             <Button size="lg" className={cn("mt-3 h-11 w-full px-4", INK_BUTTON)} onClick={() => setDialog("interview")}>
-              <HugeiconsIcon icon={Edit02Icon} className="size-4.5 text-limon" strokeWidth={2.2} />
-              Cambiar fecha, hora o lugar
+              <HugeiconsIcon icon={done ? CalendarAdd01Icon : Edit02Icon} className="size-4.5 text-limon" strokeWidth={2.2} />
+              {done ? "Agendar otra entrevista" : "Cambiar fecha, hora o lugar"}
             </Button>
           ) : null}
         </div>
@@ -298,8 +312,17 @@ export function PipelineCard({
           <HugeiconsIcon icon={Logout03Icon} className="mt-0.5 size-5 shrink-0 text-limon" strokeWidth={2.2} />
           <p className="text-[0.95rem] leading-snug">
             {/* fmtDayTime ends in "a.m." / "p.m.", so no period right after it. */}
-            {who} retiró su postulación{data.closedAt && now ? ` ${fmtDayTime(data.closedAt, { now })}` : ""}: ya no puedes cambiar su
-            estado. Tus notas se quedan aquí.
+            {data.events.filter((e) => e.status !== "cerrada").at(-1)?.status === "contratada" ? (
+              <>
+                {who} avisó que ya no va a tomar el trabajo{data.closedAt && now ? ` ${fmtDayTime(data.closedAt, { now })}` : ""}: puedes
+                buscar a alguien más entre tus postulantes. Tus notas se quedan aquí.
+              </>
+            ) : (
+              <>
+                {who} retiró su postulación{data.closedAt && now ? ` ${fmtDayTime(data.closedAt, { now })}` : ""}: ya no puedes cambiar
+                su estado. Tus notas se quedan aquí.
+              </>
+            )}
           </p>
         </div>
       ) : null}
@@ -414,6 +437,8 @@ export function PipelineCard({
         first={first}
         interview={step === "entrevista" ? interview : null}
         defaultPlace={defaultPlace}
+        again={step === "entrevista" && done}
+        noPhone={noPhone}
         returnFocus={titleRef}
       />
       <HireDialog

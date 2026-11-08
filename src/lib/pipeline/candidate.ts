@@ -262,11 +262,14 @@ export function useMyPipeline(jobId: string | null | undefined): MyPipelineResul
 
 /**
  * Withdraw through the store (optimistic, rolls back + toasts on error) and refetch the pipeline
- * once it landed. Same as calling `useApp.getState().withdraw(jobId)` directly; this one just
- * resolves after the refreshed timeline is in.
+ * once it landed (one request: the store observer's delayed refresh is folded into it).
+ * `expected`: the status on screen; live, a stale tab never withdraws an application that moved on
+ * meanwhile (e.g. was just hired) — it errors and shows the real state instead.
  */
-export async function withdrawApplication(jobId: string): Promise<WriteResult> {
-  const r = await useApp.getState().withdraw(jobId);
-  if (!r.error) await refreshMyPipelines();
+export async function withdrawApplication(jobId: string, expected?: ApplicationPipeline["status"]): Promise<WriteResult> {
+  const r = await useApp.getState().withdraw(jobId, expected);
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+  await refreshMyPipelines();
   return r;
 }

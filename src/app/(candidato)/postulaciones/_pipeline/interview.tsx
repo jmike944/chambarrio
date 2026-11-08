@@ -240,11 +240,16 @@ export function Checklist({
 
 // ------------------------------------------------------------------ contact
 
-/** "¿No puedes ir? Llama o manda SMS" (or "Confirma tu primer día") with the vacancy's phone. */
+/**
+ * "¿No puedes ir? Llama o manda SMS" (or "Confirma tu primer día") with the vacancy's phone, else
+ * the company's. Without either, a quiet line instead of nothing (the person still knows where
+ * they stand).
+ */
 export function ContactCompany({
   p,
   now,
   job,
+  company,
   title,
   hint,
   smsBody,
@@ -253,14 +258,24 @@ export function ContactCompany({
   p: ApplicationPipeline;
   now: number;
   job?: Job | null;
+  company?: Company | null;
   title: string;
   hint?: string;
   smsBody?: string;
   className?: string;
 }) {
   const name = useApp((s) => s.name.trim());
-  const phone = job?.phone?.replace(/\D/g, "") ?? "";
-  if (!phone) return null;
+  const phone = (job?.phone || company?.phone || "").replace(/\D/g, "");
+  if (!phone) {
+    return (
+      <section className={cn("min-w-0 rounded-tile bg-white/55 p-3.5 sm:p-4", className)}>
+        <h3 className="font-display text-[1.1rem] leading-tight font-extrabold tracking-[-0.02em]">{title}</h3>
+        <p className="mt-0.5 text-[0.9rem] leading-snug text-muted-foreground">
+          {company?.name ?? "La empresa"} no dejó un teléfono en la vacante. Si te llaman o te mandan SMS, guarda ese número.
+        </p>
+      </section>
+    );
+  }
   const at = p.interview?.at;
   const body =
     smsBody ??

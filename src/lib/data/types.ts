@@ -39,6 +39,13 @@ export type Company = {
   locations: Branch[];
   about: string;
   employees: string;
+  /** Digits; the fallback contact when a vacancy has no phone of its own. */
+  phone?: string;
+  /**
+   * Pyme / Industrial see every applicant's name, phone, photo and CV right away; "por-vacante" only
+   * after unlocking the vacancy. Unknown (demo companies) = por-vacante.
+   */
+  plan?: "por-vacante" | "pyme" | "industrial";
 };
 
 export type Job = {
@@ -65,6 +72,11 @@ export type Job = {
   applicants: number;
   urgent?: boolean;
   phone: string;
+  /**
+   * Paused or closed: no longer takes applications. Live, only its applicants (and its company) can
+   * still read it (20261108010000_candidate_reads_after_close.sql).
+   */
+  closed?: boolean;
 };
 
 export type ApplicationStatus = "enviada" | "vista" | "entrevista" | "contratada" | "cerrada";
@@ -93,12 +105,22 @@ export type InterviewDetails = {
 };
 
 /** One entry of an application's timeline (oldest first in `ApplicationPipeline.events`). */
+/**
+ * What an event that isn't a plain step change was: a new interview time, place or instructions, a
+ * message after the hire, or a declined application opened again ("Reabrir"; an immediate "Deshacer"
+ * leaves no trace). Older rows don't say; ./pipeline/steps eventChange() infers it.
+ */
+export type PipelineEventChange = "hora" | "lugar" | "indicaciones" | "mensaje" | "reabierta";
+
 export type PipelineEvent = {
   status: ApplicationStatus;
   actor: PipelineActor;
   at: string;
   /** For "entrevista" events: the interview time set (a reschedule logs a new event). */
   interviewAt?: string | null;
+  change?: PipelineEventChange | null;
+  /** The company's message as it was at this step (hire / decline / interview), when known. */
+  message?: string | null;
 };
 
 /** Everything both sides see about one application. */

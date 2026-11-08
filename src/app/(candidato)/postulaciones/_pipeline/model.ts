@@ -4,7 +4,7 @@
  * /notificaciones. Times always read in Saltillo (helpers from @/lib/pipeline/time).
  */
 import type { ApplicationPipeline } from "@/lib/data/types";
-import { MAIN_STEPS, STEP_META, UNHIRE_COPY, stepOf, trackIndex, wasHiredBeforeClose, type PipelineStep } from "@/lib/pipeline/steps";
+import { MAIN_STEPS, STEP_META, UNHIRE_COPY, eventChange, stepOf, trackIndex, wasHiredBeforeClose, type PipelineStep } from "@/lib/pipeline/steps";
 import { capitalize, fmtDate, fmtDayTime, fmtRelative, fmtTime, isPast, relativeDayWord, toMs } from "@/lib/pipeline/time";
 import type { BlockTone } from "@/components/chamba/primitives";
 
@@ -66,7 +66,10 @@ export function interviewState(p: Pick<ApplicationPipeline, "status" | "intervie
 /** The previous interview time when the company changed it (null if it was never rescheduled). */
 export function rescheduledFrom(p: Pick<ApplicationPipeline, "status" | "interview" | "events">): string | null {
   if (p.status !== "entrevista" || !p.interview) return null;
-  const times = p.events.filter((e) => e.status === "entrevista" && e.interviewAt).map((e) => e.interviewAt as string);
+  // Only the events that set a day/time (not a new place, new instructions or a reopen).
+  const times = p.events
+    .filter((e, i) => e.status === "entrevista" && e.interviewAt && (eventChange(p.events, i) ?? "hora") === "hora")
+    .map((e) => e.interviewAt as string);
   if (times.length < 2) return null;
   // The last event set the current time; the one before is what it replaced.
   const prev = times[times.length - 2];
@@ -100,9 +103,13 @@ const FUTURE_TITLE: Record<(typeof MAIN_STEPS)[number], string> = {
  */
 export function timelineOf(p: ApplicationPipeline, now: number): TimelineRow[] {
   const rows: TimelineRow[] = [];
-  let interviews = 0;
   p.events.forEach((e, i) => {
     const key = `${e.status}-${i}`;
+    const change = eventChange(p.events, i);
+    if (change === "reabierta") {
+      rows.push({ key, title: "Retomaron tu postulación", detail: "Olvida el aviso anterior: sigues en el proceso.", at: e.at, state: "done" });
+      return;
+    }
     switch (e.status) {
       case "enviada":
         rows.push({ key, title: "Enviaste tu postulación", at: e.at, state: "done" });
@@ -113,29 +120,36 @@ export function timelineOf(p: ApplicationPipeline, now: number): TimelineRow[] {
       case "entrevista": {
         const when = e.interviewAt ? fmtDayTime(e.interviewAt, { now }) : null;
         rows.push(
-          interviews === 0
-            ? { key, title: "Te invitaron a entrevista", detail: when ? `Para ${when}` : undefined, at: e.at, state: "done" }
-            : { key, title: "Cambiaron la hora de tu entrevista", detail: when ? `Ahora: ${when}` : undefined, at: e.at, state: "done" },
+          change === "hora"
+            ? { key, title: "Cambiaron la hora de tu entrevista", detail: when ? `Ahora: ${when}` : undefined, at: e.at, state: "done" }
+            : change === "lugar"
+              ? { key, title: "Cambiaron el lugar de tu entrevista", detail: "El día y la hora siguen igual.", at: e.at, state: "done" }
+              : change === "indicaciones"
+                ? { key, title: "Actualizaron las indicaciones", detail: "El día y la hora siguen igual.", at: e.at, state: "done" }
+                : { key, title: "Te invitaron a entrevista", detail: when ? `Para ${when}` : undefined, at: e.at, state: "done" },
         );
-        interviews++;
         break;
       }
       case "contratada":
-        rows.push({ key, title: "¡Te contrataron!", at: e.at, state: "done" });
+        rows.push(change === "mensaje" ? { key, title: "La empresa te dejó un mensaje", at: e.at, state: "done" } : { key, title: "¡Te contrataron!", at: e.at, state: "done" });
         break;
-      case "cerrada":
+      case "cerrada": {
+        const hiredBefore = p.events.slice(0, i).findLast((x) => x.status !== "cerrada")?.status === "contratada";
         rows.push({
           key,
           title:
             e.actor === "candidato"
-              ? "Retiraste tu postulación"
-              : p.events[i - 1]?.status === "contratada"
+              ? hiredBefore
+                ? "Decidiste no tomar el trabajo"
+                : "Retiraste tu postulación"
+              : hiredBefore
                 ? "Cancelaron tu contratación"
                 : "Esta vez no quedaste",
           at: e.at,
           state: "done",
         });
         break;
+      }
     }
   });
   if (rows.length === 0) rows.push({ key: "enviada-0", title: "Enviaste tu postulación", at: p.appliedAt, state: "done" });

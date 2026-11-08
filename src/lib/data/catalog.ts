@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { BRANCH_BY_ID, COMPANIES, COMPANY_BY_ID, DEMO_COMPANY_ID, JOBS, JOB_BY_ID, companyLabelOf } from "@/lib/data/jobs";
+import { applicantsFor } from "@/lib/data/applicants";
 import type { Branch, Company, Job } from "@/lib/data/types";
 import { bearing, distanceKm, type LatLng } from "@/lib/geo";
 import { isLiveAvailable, useApp, useHydrated, type AppMode } from "@/lib/store";
@@ -132,16 +133,41 @@ async function loadLiveCatalog(point: LatLng, force = false): Promise<void> {
 /** Bumped on "reset" (user changed): replies to requests started before it are dropped. */
 let resetSeq = 0;
 const extraFlights = new Set<string>();
-async function loadExtraJob(id: string) {
+/** Ids asked for during the current render commit; fetched together right after it. */
+const extraQueue = new Set<string>();
+let extraFlushScheduled = false;
+
+/**
+ * Fetches a vacancy outside the nearby list. Every list row calls useJob(), so the ids asked for in
+ * one commit are coalesced into ONE request (`in (...)`); a lone id (a vacancy page) uses fetchJob,
+ * which also brings its applicant count.
+ */
+function loadExtraJob(id: string) {
   if (extraFlights.has(id) || id in useLiveCatalog.getState().extra) return;
   extraFlights.add(id);
+  extraQueue.add(id);
+  if (extraFlushScheduled) return;
+  extraFlushScheduled = true;
+  setTimeout(() => void flushExtraJobs(), 0);
+}
+
+async function flushExtraJobs() {
+  extraFlushScheduled = false;
+  const ids = [...extraQueue];
+  extraQueue.clear();
+  if (ids.length === 0) return;
   const seq = resetSeq;
-  const r = await api.fetchJob(id);
-  extraFlights.delete(id);
+  const r: { data: Record<string, Job | null>; error?: undefined } | { error: string; data?: undefined } =
+    ids.length === 1
+      ? await api.fetchJob(ids[0]).then((x) => (x.error !== undefined ? { error: x.error } : { data: { [ids[0]]: x.data } }))
+      : await api.fetchJobsByIds(ids);
+  for (const id of ids) extraFlights.delete(id);
   if (seq !== resetSeq) return;
-  // Leave it unknown (not "not found"); useJob reports the error and reload() retries.
-  if (r.error !== undefined) useLiveCatalog.setState((s) => ({ extraError: { ...s.extraError, [id]: r.error } }));
-  else useLiveCatalog.setState((s) => ({ extra: { ...s.extra, [id]: r.data } }));
+  // Leave them unknown (not "not found"); useJob reports the error and reload() retries.
+  if (r.error !== undefined) {
+    const error = r.error;
+    useLiveCatalog.setState((s) => ({ extraError: { ...s.extraError, ...Object.fromEntries(ids.map((id) => [id, error])) } }));
+  } else useLiveCatalog.setState((s) => ({ extra: { ...s.extra, ...r.data } }));
 }
 
 // ------------------------------------------------------------------ source
@@ -275,6 +301,36 @@ export function useJob(id: string | null | undefined) {
   };
 }
 
+const NO_IDS: string[] = [];
+
+/**
+ * Several vacancies by id (e.g. the ones I applied to, for /notificaciones): the nearby list plus
+ * the ones fetched by id (one request for all the missing ones). Unknown / not visible ids are left out.
+ */
+export function useJobsById(ids: string[] = NO_IDS): Record<string, Job> {
+  const catalog = useCatalog();
+  const extra = useLiveCatalog((s) => s.extra);
+  const key = ids.toSorted().join(",");
+  const live = catalog.source === "live" && catalog.status === "ready";
+
+  useEffect(() => {
+    if (!live || !key) return;
+    const st = useLiveCatalog.getState();
+    for (const id of key.split(",")) {
+      if (!catalog.jobById[id] && !(id in st.extra) && !(id in st.extraError)) loadExtraJob(id);
+    }
+  }, [live, key, catalog.jobById]);
+
+  return useMemo(() => {
+    const out: Record<string, Job> = {};
+    for (const id of key ? key.split(",") : NO_IDS) {
+      const j = catalog.jobById[id] ?? extra[id];
+      if (j) out[id] = j;
+    }
+    return out;
+  }, [key, catalog.jobById, extra]);
+}
+
 export function useCompany(id: string | null | undefined) {
   const catalog = useCatalog();
   return { status: catalog.status, error: catalog.error, company: id ? catalog.companyById[id] : undefined };
@@ -312,7 +368,13 @@ async function loadMyJobs(companyId: string, force = false) {
   else useMyJobs.setState({ status: "ready", companyId, jobs: r.data, error: undefined, refreshing: false });
 }
 
-const DEMO_MY_JOBS: MyJob[] = JOBS.filter((j) => j.companyId === DEMO_COMPANY_ID).map((j) => ({ ...j, status: "abierta" as const }));
+// The demo company's own counts come from its mock applicants (the same rows every list shows), not
+// from the public "N personas se postularon" number of the mock vacancy.
+const DEMO_MY_JOBS: MyJob[] = JOBS.filter((j) => j.companyId === DEMO_COMPANY_ID).map((j) => ({
+  ...j,
+  applicants: applicantsFor(j.id).length,
+  status: "abierta" as const,
+}));
 const NO_MY_JOBS: MyJob[] = [];
 
 export type MyCompany = {

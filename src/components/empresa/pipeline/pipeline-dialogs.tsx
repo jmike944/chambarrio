@@ -223,6 +223,13 @@ export type InterviewDialogProps = {
   interview?: InterviewDetails | null;
   /** Prefill for the place (the vacancy's branch). */
   defaultPlace: string;
+  /**
+   * The current interview already happened: schedule another one (fresh day and time; the place and
+   * instructions stay prefilled).
+   */
+  again?: boolean;
+  /** Neither the vacancy nor the company has a phone: the candidate can't call to say "no puedo ir". */
+  noPhone?: boolean;
   /** Focus goes here on close when the control that opened the dialog is gone. */
   returnFocus?: React.RefObject<HTMLElement | null>;
   /** Called after it saved. */
@@ -241,11 +248,13 @@ export function InterviewDialog(props: InterviewDialogProps) {
       tone="limon"
       icon={Calendar03Icon}
       returnFocus={props.returnFocus}
-      title={reschedule ? "Cambiar la entrevista" : "Agendar entrevista"}
+      title={reschedule ? (props.again ? "Agendar otra entrevista" : "Cambiar la entrevista") : "Agendar entrevista"}
       description={
         reschedule
-          ? `Ahora es ${fmtDayTime(props.interview!.at)}; si cambias el día o la hora, ${props.first} ve el nuevo horario.`
-          : `Elige día, hora y lugar. ${capitalize(props.first)} lo ve en su postulación.`
+          ? props.again
+            ? `La anterior fue ${fmtDayTime(props.interview!.at)}. Elige el nuevo día y hora: ${props.first} recibe un aviso.`
+            : `Ahora es ${fmtDayTime(props.interview!.at)}. Si cambias el día, la hora, el lugar o las indicaciones, ${props.first} recibe un aviso.`
+          : `Elige día, hora y lugar. ${capitalize(props.first)} recibe un aviso y lo ve en su postulación.`
       }
     >
       <InterviewForm {...props} />
@@ -253,11 +262,11 @@ export function InterviewDialog(props: InterviewDialogProps) {
   );
 }
 
-function InterviewForm({ applicationId, first, interview, defaultPlace, onOpenChange, onDone }: InterviewDialogProps) {
+function InterviewForm({ applicationId, first, interview, defaultPlace, again, noPhone, onOpenChange, onDone }: InterviewDialogProps) {
   const reschedule = !!interview;
   // Ticking clock (dialogs open after hydration, so it's never 0 here).
   const now = useNow(15_000);
-  const [initial] = useState(() => (interview ? toZonedInput(interview.at) : defaultInterviewInput()));
+  const [initial] = useState(() => (interview && !again ? toZonedInput(interview.at) : defaultInterviewInput()));
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
   const [place, setPlace] = useState(interview ? (interview.place ?? defaultPlace) : defaultPlace);
@@ -298,7 +307,8 @@ function InterviewForm({ applicationId, first, interview, defaultPlace, onOpenCh
   }
 
   const at = fromZonedInput(date, time);
-  const error = at ? validateInterview({ at, place, note }, now) : PIPELINE_MSG.interviewWhen;
+  // Keeping the current time (fixing only the place or the instructions) is fine even once it passed.
+  const error = at ? validateInterview({ at, place, note }, now, interview?.at) : PIPELINE_MSG.interviewWhen;
   const whenError = error === PIPELINE_MSG.interviewWhen || error === PIPELINE_MSG.interviewPast || error === PIPELINE_MSG.interviewFar;
   const showError = error && (tried || (whenError && !!at));
   const sameTime = interview && at ? Date.parse(interview.at) === Date.parse(at) : false;
@@ -314,7 +324,7 @@ function InterviewForm({ applicationId, first, interview, defaultPlace, onOpenCh
     if (r.error) return;
     // fmtDayTime ends in "a.m." / "p.m.": no extra period.
     toast.success(reschedule ? (sameTime ? "Guardamos los cambios de la entrevista." : `Nueva fecha: ${fmtDayTime(at)}`) : `Entrevista agendada: ${fmtDayTime(at)}`, {
-      description: `${capitalize(first)} lo ve en su postulación.`,
+      description: `${capitalize(first)} recibe un aviso y lo ve en su postulación.`,
     });
     onOpenChange(false);
     onDone?.();
@@ -498,6 +508,13 @@ function InterviewForm({ applicationId, first, interview, defaultPlace, onOpenCh
         </Preview>
       ) : null}
 
+      {noPhone ? (
+        <p className="mt-4 rounded-tile border-2 border-dashed border-ink/40 px-3 py-2.5 text-[0.88rem] leading-snug">
+          <strong className="font-bold">Esta vacante no tiene teléfono.</strong> Si {first === "esta persona" ? "la persona" : first} no
+          puede ir, no tendrá cómo avisarte. Agrega un teléfono a la vacante o a tu empresa.
+        </p>
+      ) : null}
+
       {showError ? <ErrorLine id={errId}>{error}</ErrorLine> : null}
     </Form>
   );
@@ -535,7 +552,7 @@ export function HireDialog(props: OutcomeDialogProps) {
       title={editing ? "Mensaje de bienvenida" : `¿Contratar a ${first}?`}
       description={
         editing
-          ? `${capitalize(first)} lo ve en su postulación, junto con su contratación.`
+          ? `${capitalize(first)} recibe un aviso con tu mensaje y lo ve en su postulación.`
           : `Pasa a «Contratada». Déjale un mensaje con los siguientes pasos (opcional).`
       }
     >
@@ -559,7 +576,7 @@ function HireForm({ applicationId, first, editing, message: current, onOpenChang
     const r = await hire(applicationId, message);
     setBusy(false);
     if (r.error) return;
-    if (editing) toast.success("Guardamos tu mensaje.");
+    if (editing) toast.success("Le mandamos tu mensaje.", { description: `${capitalize(first)} lo ve en su postulación.` });
     else {
       confetti({ origin: btn.current, colors: WORK_CONFETTI, count: 48 });
       toast.success(first === "esta persona" ? "¡Contrataste a esta persona!" : `¡Contrataste a ${first}!`, {
@@ -687,11 +704,13 @@ function DeclineForm({ applicationId, first, editing, message: current, afterInt
           description: "Verá tu mensaje en su postulación.",
           // Long enough to read and react (the default 4 s isn't).
           duration: 10_000,
+          // Deshacer erases the decline for the candidate too: live, its email waits 10 minutes and
+          // the undo cancels it (20261108010100_pipeline_notify_v3.sql).
           action: {
             label: "Deshacer",
             onClick: () =>
               void reopen(applicationId).then((u) => {
-                if (!u.error) toast.success("Listo, la reabriste.");
+                if (!u.error) toast.success("Listo, la reabriste.", { description: "No le llega ningún aviso del descarte." });
               }),
           },
         },

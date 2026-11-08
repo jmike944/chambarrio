@@ -79,7 +79,8 @@ function VacancyListBody() {
   const unlockedCount = jobs.filter((j) => isUnlocked(j.id)).length;
 
   return (
-    <div className="space-y-6">
+    // Desktop: fills the column (the page balances it against the left one); the last box grows.
+    <div className="space-y-6 lg:flex lg:flex-1 lg:flex-col">
       <div className="grid grid-cols-3 gap-3">
         <StatBlock icon={Briefcase01Icon} value={jobs.length} label="Activas" tone="cielo" index={0} />
         <StatBlock icon={UserGroupIcon} value={totalApplicants} label="Postulantes" tone="limon" index={1} />
@@ -105,7 +106,7 @@ function VacancyListBody() {
         </div>
       ) : null}
 
-      <section aria-labelledby="vacantes-activas">
+      <section aria-labelledby="vacantes-activas" className="lg:flex lg:flex-1 lg:flex-col">
         <SectionLabel
           title={<span id="vacantes-activas">{current ? `Activas en ${current.name}` : "Activas"}</span>}
           count={jobs.length}
@@ -122,7 +123,7 @@ function VacancyListBody() {
             primera y le avisamos a quien vive cerca.
           </p>
         ) : null}
-        <ul className="grid">
+        <ul className="grid lg:flex lg:flex-1 lg:flex-col">
           {jobs.map((j, i) => {
             const unlocked = isUnlocked(j.id);
             const count = countFor(j);
@@ -200,13 +201,13 @@ function VacancyListBody() {
             );
           })}
           <li
-            className="animate-rise relative mt-5"
+            className="animate-rise relative mt-5 lg:flex lg:flex-1 lg:flex-col"
             style={{ "--i": Math.min(jobs.length + 2, 8) } as CSSVars}
           >
             <Link
               href="/empresa/vacantes/nueva"
               className={cn(
-                "group flex min-h-20 items-center gap-4 rounded-panel border-2 border-dashed border-ink/60 bg-card px-5 py-4 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 dark:border-white/40",
+                "group flex min-h-20 items-center gap-4 rounded-panel border-2 border-dashed border-ink/60 bg-card px-5 py-4 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 lg:flex-1 dark:border-white/40",
                 "press lift",
               )}
             >

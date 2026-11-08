@@ -456,7 +456,8 @@ function ApplicationCard({
           <span className="block truncate text-[0.93rem] text-muted-foreground">
             {job ? (
               <>
-                <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span> · {label} · {formatKm(distanceKm(home, job.location))}
+                <span className="font-semibold text-foreground tabular-nums">{formatPay(job)}</span> · {label} ·{" "}
+                {job.closed ? "Ya no recibe postulaciones" : formatKm(distanceKm(home, job.location))}
               </>
             ) : loadingJob ? (
               "Cargando la vacante…"

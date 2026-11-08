@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -18,7 +18,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AvatarStack, BLOCK_CLASS, HeroCard, Panel, PanelHeader, SectionLabel, StatTile } from "@/components/chamba/primitives";
+import { AvatarStack, BLOCK_CLASS, HeroCard, Panel, PanelHeader, SectionLabel, StatTile, type BlockTone } from "@/components/chamba/primitives";
 import { CountUp, Sticker } from "@/components/chamba/motion";
 import { CategoryArt, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
 import { Mascot } from "@/components/chamba/art/mascot";
@@ -55,6 +55,9 @@ export function EmployerDashboard() {
   return <EmployerGate shape="dashboard">{() => (live ? <LiveDashboard /> : <DemoDashboard />)}</EmployerGate>;
 }
 
+/** Card pastels for the stacked vacancy cards (no pink). */
+const JOB_TONES: BlockTone[] = ["limon", "cielo", "sol", "menta", "durazno", "lila"];
+
 function DemoDashboard() {
   const [radius, setRadius] = useState<RadiusKm>(5);
   const business = useApp((s) => s.business);
@@ -74,6 +77,17 @@ function DemoDashboard() {
   const activeJobs = jobs.length;
   const unlockedCount = jobs.filter((j) => isUnlocked(j.id)).length;
   const totalApplicants = jobs.reduce((n, j) => n + j.applicants, 0);
+  // Category pastels, nudged so two stacked cards never share one.
+  const jobTones = useMemo(() => {
+    const out: BlockTone[] = [];
+    for (const j of jobs) {
+      let tone: BlockTone = CATEGORY_BLOCK[j.category];
+      let k = JOB_TONES.indexOf(tone);
+      while (out.at(-1) === tone) tone = JOB_TONES[++k % JOB_TONES.length];
+      out.push(tone);
+    }
+    return out;
+  }, [jobs]);
   // Only Pyme caps vacancies with unlocked applicants; Industrial is unlimited.
   const planLimit = planId === "pyme" ? 5 : null;
   const first = locations[0];
@@ -291,6 +305,7 @@ function DemoDashboard() {
         <ul className="flex flex-1 flex-col">
           {jobs.map((j, i) => {
             const open = isUnlocked(j.id);
+            const tone = jobTones[i];
             return (
               <li
                 key={j.id}
@@ -304,13 +319,17 @@ function DemoDashboard() {
                     RUG,
                     i > 0 && "pt-11",
                     i < jobs.length - 1 && "pb-12",
-                    BLOCK_CLASS[CATEGORY_BLOCK[j.category]],
+                    BLOCK_CLASS[tone],
                   )}
                 >
                   <CategoryArt
                     category={j.category}
                     animated
-                    className="pointer-events-none absolute -right-5 -bottom-6 size-36 rotate-[-8deg] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-0"
+                    className={cn(
+                      "pointer-events-none absolute -right-5 size-36 rotate-[-8deg] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-0",
+                      // The next card overlaps this one's bottom edge: keep the art above it.
+                      i < jobs.length - 1 ? "bottom-6" : "-bottom-6",
+                    )}
                   />
                   <span className="relative block max-w-[68%]">
                     <Badge variant={open ? "lime" : "status"} size="md" className={cn("border-2 border-ink", !open && "bg-white text-ink")}>

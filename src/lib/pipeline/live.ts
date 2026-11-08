@@ -26,12 +26,19 @@ type AppRow = Pick<
   | "closed_by"
   | "closed_at"
 >;
-type EventRow = Pick<Tables<"application_events">, "id" | "status" | "actor" | "interview_at" | "created_at">;
+type EventRow = Pick<Tables<"application_events">, "id" | "status" | "actor" | "interview_at" | "created_at"> &
+  Partial<Pick<Tables<"application_events">, "change" | "message">>;
 type DbError = { message?: string; code?: string; details?: string | null; hint?: string | null } | null | undefined;
 
 const APP_COLS =
   "id, job_id, status, created_at, seen_at, interview_at, interview_place, interview_note, company_message, hired_at, closed_by, closed_at";
-const EVENT_COLS = "id, status, actor, interview_at, created_at";
+/** change / message come with 20261108010100_pipeline_notify_v3.sql; until it's applied, the legacy columns. */
+const EVENT_COLS_V3 = "id, status, actor, interview_at, created_at, change, message";
+const EVENT_COLS_V2 = "id, status, actor, interview_at, created_at";
+let eventColsV3 = true;
+const eventCols = () => (eventColsV3 ? EVENT_COLS_V3 : EVENT_COLS_V2);
+/** The v3 event columns aren't there yet: use the legacy ones from now on. */
+const isEventColsMiss = (e: DbError) => eventColsV3 && !!e && (e.code === "42703" || /change|message/i.test(e.message ?? "")) && isSchemaMiss(e);
 const SUMMARY_COLS = "id, job_id, status, created_at, seen_at, interview_at, interview_place, hired_at, closed_by, closed_at";
 
 // ------------------------------------------------------------------ errors
@@ -78,8 +85,11 @@ function toEvents(rows: EventRow[] | null | undefined, r: AppRow): PipelineEvent
   return rows
     .toSorted((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id)
     .map((e): PipelineEvent => {
-      const base = { status: e.status, actor: asActor(e.actor) ?? "empresa", at: e.created_at };
-      return e.status === "entrevista" ? { ...base, interviewAt: e.interview_at } : base;
+      const base: PipelineEvent = { status: e.status, actor: asActor(e.actor) ?? "empresa", at: e.created_at };
+      if (e.status === "entrevista") base.interviewAt = e.interview_at;
+      if (e.change) base.change = e.change;
+      if (e.message) base.message = e.message;
+      return base;
     });
 }
 
@@ -134,11 +144,18 @@ export async function fetchMyPipelines(userId: string): Promise<Result<Applicati
   const sb = getSupabase();
   if (!sb) return { error: MSG.unavailable };
   try {
-    const { data, error } = await sb
-      .from("applications")
-      .select(`${APP_COLS}, application_events(${EVENT_COLS})`)
-      .eq("candidate_id", userId)
-      .order("created_at", { ascending: false });
+    const mine = () =>
+      sb
+        .from("applications")
+        .select(`${APP_COLS}, application_events(${eventCols()})`)
+        .eq("candidate_id", userId)
+        .order("created_at", { ascending: false })
+        .overrideTypes<(AppRow & { application_events: EventRow[] })[], { merge: false }>();
+    let { data, error } = await mine();
+    if (isEventColsMiss(error)) {
+      eventColsV3 = false;
+      ({ data, error } = await mine());
+    }
     if (!error) return { data: (data ?? []).map((r) => rowToPipeline(r, r.application_events)) };
     if (!isSchemaMiss(error)) return { error: pipelineError(error, MSG.load) };
     // Older schema: statuses only, timeline made up from what's there.
@@ -156,11 +173,18 @@ export async function fetchPipeline(applicationId: string): Promise<Result<Appli
   if (!sb) return { error: MSG.unavailable };
   if (!UUID.test(applicationId)) return { data: null };
   try {
-    const { data, error } = await sb
-      .from("applications")
-      .select(`${APP_COLS}, application_events(${EVENT_COLS})`)
-      .eq("id", applicationId)
-      .maybeSingle();
+    const one = () =>
+      sb
+        .from("applications")
+        .select(`${APP_COLS}, application_events(${eventCols()})`)
+        .eq("id", applicationId)
+        .maybeSingle()
+        .overrideTypes<AppRow & { application_events: EventRow[] }, { merge: false }>();
+    let { data, error } = await one();
+    if (isEventColsMiss(error)) {
+      eventColsV3 = false;
+      ({ data, error } = await one());
+    }
     if (error) return { error: pipelineError(error, MSG.load) };
     return { data: data ? rowToPipeline(data, data.application_events) : null };
   } catch (e) {
@@ -204,14 +228,25 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ------------------------------------------------------------------ writes
 
-/** Company update of an application. The guard trigger stamps the times and checks who may do what. */
-export async function updateApplication(applicationId: string, patch: ApplicationPatch): Promise<WriteResult> {
+/**
+ * Company update of an application. The guard trigger stamps the times and checks who may do what.
+ * `expected`: the status the change was computed from; when the row has another one by now (the
+ * candidate withdrew, another tab moved it) nothing is written and `stale` comes back.
+ */
+export async function updateApplication(
+  applicationId: string,
+  patch: ApplicationPatch,
+  expected?: ApplicationPipeline["status"],
+): Promise<WriteResult & { stale?: boolean }> {
   const sb = getSupabase();
   if (!sb) return { error: MSG.unavailable };
   try {
-    const { data, error } = await sb.from("applications").update(patch).eq("id", applicationId).select("id");
+    let q = sb.from("applications").update(patch).eq("id", applicationId);
+    if (expected) q = q.eq("status", expected);
+    const { data, error } = await q.select("id");
     if (error) return { error: pipelineError(error) };
-    return data?.length ? {} : { error: PIPELINE_MSG.notFound };
+    if (data?.length) return {};
+    return expected ? { error: PIPELINE_MSG.stale, stale: true } : { error: PIPELINE_MSG.notFound };
   } catch (e) {
     return { error: pipelineError(e as DbError) };
   }

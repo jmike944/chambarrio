@@ -19,8 +19,10 @@ export default function EmpresaVacantesPage() {
   return (
     <>
       <PageHeader title="Vacantes" />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start lg:gap-7">
-        <div className="min-w-0 space-y-5 lg:sticky lg:top-8 lg:col-span-5">
+      {/* Desktop: both columns end on the same line. "Así de fácil" grows when the list is longer,
+          the "Publicar otra vacante" box when it's shorter. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-7">
+        <div className="min-w-0 space-y-5 lg:col-span-5 lg:flex lg:flex-col lg:gap-5 lg:space-y-0">
           {/* The ONE saturated block: publish CTA with the crew scene bleeding off the bottom */}
           <HeroCard
             tone="uva"
@@ -66,13 +68,50 @@ export default function EmpresaVacantesPage() {
               separator={<Doodle name="estrella" color="#ff6b2c" animated={false} className="size-5" />}
             />
           </div>
+
+          <HowItWorks className="hidden lg:flex lg:flex-1" />
         </div>
 
-        <div className="min-w-0 lg:col-span-7">
+        <div className="min-w-0 lg:col-span-7 lg:flex lg:flex-col">
           <VacancyList />
         </div>
       </div>
     </>
+  );
+}
+
+const STEPS = [
+  { title: "Publica gratis", body: "Puesto, sueldo y turno. Queda lista en un par de minutos." },
+  { title: "Te llega gente de tu zona", body: "Ves su experiencia, sus turnos y a cuántos kilómetros vive." },
+  { title: "Desbloquea y llama", body: "$500 al mes por vacante: nombre, teléfono, foto y CV de cada persona." },
+];
+
+/** Desktop filler with a job: how the vacancy goes from published to hired (stretches to the list). */
+function HowItWorks({ className }: { className?: string }) {
+  return (
+    <section
+      aria-labelledby="asi-de-facil"
+      className={cn("block-menta relative isolate min-w-0 flex-col overflow-hidden rounded-panel p-6", OUTLINE, HARD, className)}
+    >
+      <h2 id="asi-de-facil" className="font-display text-[1.35rem] leading-tight font-extrabold tracking-[-0.025em]">
+        Así de fácil
+      </h2>
+      <ol className="mt-4 space-y-3">
+        {STEPS.map((s, i) => (
+          <li key={s.title} className="flex items-start gap-3 rounded-tile border-2 border-ink bg-white/70 p-3.5 text-ink">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full border-2 border-ink bg-limon font-display text-[1.05rem] font-extrabold">
+              {i + 1}
+            </span>
+            <span className="min-w-0">
+              <span className="block font-display text-[1.08rem] leading-tight font-extrabold">{s.title}</span>
+              <span className="mt-0.5 block text-[0.92rem] leading-snug text-ink/75">{s.body}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {/* Pinned to the bottom, so a taller column only adds room above the art. */}
+      <Scene name="radar" className="mx-auto mt-auto w-full max-w-[9.5rem] pt-4" />
+    </section>
   );
 }
 

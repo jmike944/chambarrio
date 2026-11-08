@@ -252,7 +252,11 @@ const SIGNED_FRESH_MS = 50 * 60 * 1000;
 
 type DetailResult = { data: DetailRow[]; signedAt: number; error?: undefined } | { data?: undefined; signedAt?: undefined; error: string };
 
-async function fetchDetails(jobId: string): Promise<DetailResult> {
+/**
+ * `prev`: the rows on screen. Their photo / CV links are reused while still fresh (same path), so a
+ * refetch doesn't re-sign every link and make every photo download again.
+ */
+async function fetchDetails(jobId: string, prev?: { byId: Record<string, DetailRow>; signedAt: number }): Promise<DetailResult> {
   const sb = getSupabase();
   if (!sb) return { error: MSG.unavailable };
   try {
@@ -280,16 +284,28 @@ async function fetchDetails(jobId: string): Promise<DetailResult> {
         cvUrl: null,
       };
     });
-    const signedAt = Date.now();
+    const fresh = !!prev && prev.signedAt > 0 && Date.now() - prev.signedAt < SIGNED_FRESH_MS;
+    const kept = (r: DetailRow, kind: "photo" | "cv") => {
+      const old = fresh ? prev!.byId[r.id] : undefined;
+      if (!old) return null;
+      return kind === "photo" ? (old.avatarPath === r.avatarPath ? old.photoUrl : null) : old.cvPath === r.cvPath ? old.cvUrl : null;
+    };
+    let reused = false;
+    for (const r of rows) {
+      r.photoUrl = r.avatarPath ? kept(r, "photo") : null;
+      r.cvUrl = r.cvPath ? kept(r, "cv") : null;
+      if (r.photoUrl || r.cvUrl) reused = true;
+    }
     const [avatars, cvs] = await Promise.all([
-      signAll("avatars", rows.flatMap((r) => (r.avatarPath ? [r.avatarPath] : []))),
-      signAll("cvs", rows.flatMap((r) => (r.cvPath ? [r.cvPath] : []))),
+      signAll("avatars", rows.flatMap((r) => (r.avatarPath && !r.photoUrl ? [r.avatarPath] : []))),
+      signAll("cvs", rows.flatMap((r) => (r.cvPath && !r.cvUrl ? [r.cvPath] : []))),
     ]);
     for (const r of rows) {
-      r.photoUrl = r.avatarPath ? (avatars[r.avatarPath] ?? null) : null;
-      r.cvUrl = r.cvPath ? (cvs[r.cvPath] ?? null) : null;
+      if (r.avatarPath && !r.photoUrl) r.photoUrl = avatars[r.avatarPath] ?? null;
+      if (r.cvPath && !r.cvUrl) r.cvUrl = cvs[r.cvPath] ?? null;
     }
-    return { data: rows, signedAt };
+    // The oldest link in the set decides when it needs re-signing.
+    return { data: rows, signedAt: reused ? prev!.signedAt : Date.now() };
   } catch (e) {
     return { error: friendlyError(e as { message?: string }, MSG.load) };
   }
@@ -313,7 +329,7 @@ async function loadDetail(jobId: string, force = false): Promise<void> {
   };
   if (!existing || existing.status === "error") put({ status: "loading", byId: {}, signedAt: 0 });
   const p = (async () => {
-    const r = await fetchDetails(jobId);
+    const r = await fetchDetails(jobId, existing?.status === "ready" ? existing : undefined);
     if (r.error !== undefined) {
       put(existing?.status === "ready" ? { ...existing, error: r.error } : { status: "error", byId: {}, signedAt: 0, error: r.error });
       return;
@@ -404,12 +420,22 @@ function fallbackProfile(a: ApplicantView): ApplicantProfile {
 /**
  * Applicants of one of my vacancies (or all of them, no jobId) with their richer profile.
  * Status changes go through `setStatus` (optimistic, toasts on error), exactly like useApplicants.
+ * `detailsFor`: load the rich profiles (one RPC + signed photo / CV links per vacancy) only for these
+ * vacancies; the others keep the basic rows. The dashboards pass the vacancies with someone on
+ * "Para hoy" instead of fanning out over every vacancy on each load.
  */
-export function useApplicantProfiles(jobId?: string): ApplicantProfilesResult {
+export function useApplicantProfiles(jobId?: string, opts?: { detailsFor?: readonly string[] }): ApplicantProfilesResult {
   const live = useApp((s) => s.mode === "live");
   const base = useApplicants(jobId);
   const my = useMyCompany();
-  const jobIds = useMemo(() => (jobId ? [jobId] : my.jobs.map((j) => j.id)), [jobId, my.jobs]);
+  const scope = opts?.detailsFor;
+  const scopeKey = scope ? scope.toSorted().join(",") : null;
+  const jobIds = useMemo(() => {
+    const all = jobId ? [jobId] : my.jobs.map((j) => j.id);
+    if (scopeKey === null) return all;
+    const wanted = new Set(scopeKey ? scopeKey.split(",") : []);
+    return all.filter((id) => wanted.has(id));
+  }, [jobId, my.jobs, scopeKey]);
   const key = jobIds.join(",");
   const entries = useDetailCache((s) => s.entries);
   const ready = live && (jobId ? true : my.status === "ready");
