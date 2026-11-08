@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { ArrowLeft01Icon, ArrowRight02Icon, Cancel01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
@@ -299,6 +300,8 @@ export function FlowShell({
   children: React.ReactNode;
 }) {
   const key = stepKey ?? title;
+  // "Salir" goes back to the page this visitor came from: companies to /empresas, everyone else to the landing.
+  const exitHref = usePathname().startsWith("/bienvenida/empresa") ? "/empresas" : "/";
   const order = step ?? total ?? 99;
   // Slide direction follows the step number ("derive state from props" pattern, no effects).
   const [seen, setSeen] = useState({ key, order, dir: 0 });
@@ -366,7 +369,7 @@ export function FlowShell({
             </Link>
           )}
           <Link
-            href="/"
+            href={exitHref}
             aria-label="Salir"
             className={cn(
               "press flex h-12 items-center gap-1.5 rounded-full px-4 text-[0.95rem] font-bold opacity-90 transition-[opacity,scale] hover:opacity-100",

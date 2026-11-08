@@ -113,7 +113,7 @@ export function AccountMenu() {
     // Flushes pending edits, wipes the store and signs out of Supabase on this device.
     await signOutEverywhere();
     // Full reload (per Next's "Preserving UI state" guide for logout).
-    reloadTo("/");
+    reloadTo(role === "empresa" || isEmpresa ? "/empresas" : "/");
   }
 
   function leaveDemo(href: string) {
@@ -190,7 +190,7 @@ export function AccountMenu() {
                   Crear mi cuenta real
                 </DropdownMenuItem>
               ) : null}
-              <DropdownMenuItem variant="destructive" className="h-12 text-[0.95rem]" onSelect={() => leaveDemo("/")}>
+              <DropdownMenuItem variant="destructive" className="h-12 text-[0.95rem]" onSelect={() => leaveDemo(role === "empresa" || isEmpresa ? "/empresas" : "/")}>
                 <HugeiconsIcon icon={Logout01Icon} className="size-5" strokeWidth={1.6} />
                 Salir de la demo
               </DropdownMenuItem>

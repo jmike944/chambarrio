@@ -1,19 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Agreement01Icon,
-  ArrowRight02Icon,
-  Building06Icon,
-  CheckmarkCircle02Icon,
-  Clock01Icon,
-  LockIcon,
-  UserCheck01Icon,
-} from "@hugeicons/core-free-icons";
+import { ArrowRight02Icon, Building06Icon, CheckmarkCircle02Icon, LockIcon } from "@hugeicons/core-free-icons";
 import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { Reveal, Sticker, Stagger, StaggerItem, CountUp } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
 import { Scene, type SceneName } from "@/components/chamba/art/scenes";
+import { Mascot } from "@/components/chamba/art/mascot";
 import { Doodle, Marquee } from "@/components/chamba/art/doodles";
 import { BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
 import { ThemeToggle } from "@/components/theme";
@@ -22,24 +15,31 @@ import { InstallButton } from "@/components/landing/install-button";
 import { DemoShowcase } from "@/components/landing/demo-entry";
 import { CategoryCount } from "@/components/landing/category-count";
 import { ChambitaHello, Squiggle } from "@/components/landing/fx";
-import { HARD, HARD_SM, HazardStripe, PRESSABLE, Rivets, Scatter, StencilNumber, Tape, chunky } from "@/components/landing/decor";
+import { HARD, HARD_SM, HazardStripe, PRESSABLE, Scatter, StencilNumber, Tape, chunky } from "@/components/landing/decor";
+import { SectionHead, focusLink } from "@/components/landing/section-head";
+import { LandingFooter } from "@/components/landing/landing-footer";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
 import type { CategoryId } from "@/lib/data/types";
 import { CITY_AVG_KM, monthlySavings } from "@/lib/geo";
-import { formatMXN } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+/*
+ * The landing is for people looking for work. Everything for companies (pitch, plans, FAQ) lives on
+ * /empresas; here they only get a quiet link. No plans or company pricing on this page.
+ */
 
 export const metadata: Metadata = {
   title: { absolute: "Chambarrio · El trabajo que buscas, cerca de ti" },
   description:
-    "Vacantes a 2, 5, 10 o 15 km de tu casa en Saltillo. Gratis para quien busca trabajo. Para empresas: personal que vive cerca, llega a tiempo y se queda.",
+    "Vacantes a 2, 5, 10 o 15 km de tu casa en Saltillo y Ramos Arizpe. Gratis para quien busca trabajo, sin currículum y desde tu celular.",
 };
 
 const savings = monthlySavings(5);
 
 const PHILOSOPHY: { line: string; fact: string; tone: BlockTone }[] = [
   { line: "Menos distancia.", fact: `El traslado promedio en Saltillo y Ramos Arizpe ronda los ${CITY_AVG_KM} km. Aquí puedes empezar a buscar a 2.`, tone: "limon" },
-  { line: "Menos gastos.", fact: `Hasta ${formatMXN(savings.pesos)} al mes menos en gasolina si trabajas a 5 km o menos de tu casa.`, tone: "sol" },
+  { line: "Menos gastos.", fact: `Hasta ${formatNumber(savings.pesos)} pesos al mes menos en gasolina si trabajas a 5 km o menos de tu casa.`, tone: "sol" },
   { line: "Más tiempo.", fact: `Hasta ${savings.hours} horas al mes que no pasas en el camión ni en el tráfico.`, tone: "cielo" },
   { line: "Mejor calidad de vida.", fact: "Menos estrés, más tiempo con tu familia y llegas descansado a trabajar.", tone: "menta" },
 ];
@@ -53,18 +53,6 @@ const STEPS: { title: string; body: string; tone: BlockTone; scene: SceneName; t
   { title: "Habla directo con la empresa", body: "Postúlate con un toque o llámales directo. Sin intermediarios.", tone: "limon", scene: "contratado", tilt: "-rotate-[0.8deg]" },
 ];
 
-const BENEFITS: { icon: typeof Clock01Icon; title: string; body: string; tone: BlockTone }[] = [
-  { icon: Clock01Icon, title: "Más puntualidad", body: "Un traslado corto deja menos espacio para el tráfico y el camión que no pasó.", tone: "sol" },
-  { icon: UserCheck01Icon, title: "Menos ausentismo", body: "Cuando llegar cuesta poco, faltar por el transporte deja de ser excusa.", tone: "cielo" },
-  { icon: Building06Icon, title: "Más permanencia", body: "La gente cambia menos de trabajo cuando el suyo le queda cerca de casa.", tone: "limon" },
-];
-
-const PLANS: { name: string; price: string; unit: string; body: string; featured: boolean; tone: BlockTone }[] = [
-  { name: "Por vacante", price: "Gratis", unit: "para publicar", body: "Publica las vacantes que quieras. Para ver y contactar a quienes se postulan, desbloquea cada vacante por $500 MXN al mes.", featured: false, tone: "menta" },
-  { name: "Pyme", price: "$1,500", unit: "MXN al mes", body: "Hasta 5 vacantes con postulaciones desbloqueadas. Para quien contrata seguido.", featured: true, tone: "uva" },
-  { name: "Industrial", price: "Desde $6,500", unit: "MXN al mes", body: "Vacantes ilimitadas, varias plantas y reportes de rotación.", featured: false, tone: "durazno" },
-];
-
 /** "¿Qué chamba buscas?" stack — order chosen so neighbours never share a tone. */
 const PICKS: { id: CategoryId; tone: BlockTone }[] = [
   { id: "construccion", tone: "cielo" },
@@ -74,6 +62,8 @@ const PICKS: { id: CategoryId; tone: BlockTone }[] = [
   { id: "almacen", tone: "lila" },
   { id: "mantenimiento", tone: "limon" },
 ];
+/** The kinds of work that don't get a big card: listed in the "y también" card next to the stack. */
+const MORE = CATEGORIES.filter((c) => !PICKS.some((p) => p.id === c.id));
 
 const HERO_STATS: { value: number; suffix: string; label: string; tone: BlockTone }[] = [
   { value: 0, suffix: "", label: "pesos te cuesta buscar", tone: "sol" },
@@ -88,59 +78,21 @@ const CLOSING = [
   "Avisos de vacantes nuevas cerca de ti",
 ];
 
-const focusLink = "rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/60";
-
-function SectionHead({
-  id,
-  eyebrow,
-  title,
-  children,
-  className,
-  invert,
-}: {
-  id: string;
-  eyebrow: string;
-  title: React.ReactNode;
-  children?: React.ReactNode;
-  className?: string;
-  invert?: boolean;
-}) {
-  return (
-    <Reveal inView className={cn("max-w-3xl", className)}>
-      <p
-        className={cn(
-          "inline-flex items-center gap-2 font-display text-[0.8rem] font-extrabold tracking-[0.16em] uppercase",
-          invert ? "text-limon" : "text-uva-ink",
-        )}
-      >
-        <HazardStripe className="h-3 w-8 rounded-sm" size={5} />
-        {eyebrow}
-      </p>
-      <h2
-        id={id}
-        className="mt-3 font-display text-[2.3rem] leading-[1] font-extrabold tracking-[-0.045em] sm:text-[3.2rem] lg:text-[3.6rem]"
-      >
-        {title}
-      </h2>
-      {children}
-    </Reveal>
-  );
-}
+const NAV: [href: string, label: string][] = [
+  ["#como-funciona", "Cómo funciona"],
+  ["#por-que-cerca", "Por qué cerca"],
+];
 
 export default function LandingPage() {
   return (
     <div className="min-h-dvh overflow-x-clip [--hard:var(--ink)] dark:[--hard:#2c2464]">
       {/* Nav */}
       <header className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 sm:px-6 lg:px-10">
-        <Link href="/" aria-label="Chambarrio, inicio" className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        <Link href="/" aria-label="Chambarrio, inicio" className="group inline-flex min-h-11 items-center rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
           <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
         </Link>
-        <nav aria-label="Secciones" className="ml-8 hidden items-center gap-1 md:flex">
-          {[
-            ["#como-funciona", "Cómo funciona"],
-            ["#empresas", "Empresas"],
-            ["#precios", "Precios"],
-          ].map(([href, label]) => (
+        <nav aria-label="Secciones" className="ml-8 hidden items-center gap-1 lg:flex">
+          {NAV.map(([href, label]) => (
             <a
               key={href}
               href={href}
@@ -150,15 +102,22 @@ export default function LandingPage() {
             </a>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/empresas"
+            className="hidden h-11 items-center gap-1.5 rounded-full px-3 text-[0.9rem] font-semibold text-muted-foreground outline-none transition-colors hover:bg-card hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 sm:inline-flex"
+          >
+            <HugeiconsIcon icon={Building06Icon} className="size-4.5" strokeWidth={2} />
+            Para empresas
+          </Link>
           <a
             href="#demo"
             className="hidden h-11 items-center rounded-full px-4 text-[0.95rem] font-bold outline-none transition-colors hover:bg-card focus-visible:ring-3 focus-visible:ring-ring/50 sm:inline-flex"
           >
-            Probar la demo
+            Pruébalo
           </a>
           <ThemeToggle className="size-11" />
-          <Link href="/entrar" className={chunky("lime", "md")}>
+          <Link href="/entrar" className={cn(chunky("lime", "md"), "ml-0.5")}>
             Entrar
           </Link>
         </div>
@@ -167,7 +126,7 @@ export default function LandingPage() {
       <main>
         {/* Hero */}
         <section className="mx-auto grid max-w-6xl items-start gap-7 px-4 pt-5 pb-10 sm:px-6 lg:grid-cols-[1.12fr_1fr] lg:items-stretch lg:gap-10 lg:px-10 lg:pt-10 lg:pb-16">
-          <Reveal y={22} className={cn("relative isolate min-w-0 overflow-hidden rounded-panel block-mandarina", HARD)}>
+          <Reveal y={22} className={cn("relative isolate flex min-w-0 flex-col overflow-hidden rounded-panel block-mandarina", HARD)}>
             <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-60" />
             <Scatter count={4} seed={2} palette={["var(--block-sol)", "var(--limon)"]} className="-z-10" />
             <div className="relative px-5 pt-6 sm:px-8 sm:pt-8">
@@ -189,35 +148,40 @@ export default function LandingPage() {
                 Vacantes a 2, 5, 10 o 15 km de tu casa en Saltillo. Gratis para quien busca trabajo, sin currículum y
                 desde tu celular.
               </p>
-              <div className="mt-7 flex flex-col gap-3.5 sm:flex-row sm:flex-wrap [&>a]:whitespace-nowrap">
+              <div className="mt-7 flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:items-center [&>a]:whitespace-nowrap">
                 <Link href="/bienvenida" className={cn(chunky("ink"), "group")}>
-                  Buscar trabajo cerca
+                  Busco chamba
                   <HugeiconsIcon icon={ArrowRight02Icon} className="size-5 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
                 </Link>
-                <Link href="/bienvenida/empresa" className={chunky("white")}>
-                  Publicar una vacante
-                </Link>
-              </div>
-              <p className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.98rem] font-medium">
                 <a
                   href="#demo"
                   className={cn(
                     focusLink,
-                    "inline-flex h-11 items-center gap-2 rounded-full border-[2.5px] border-ink bg-block-sol px-4 font-display font-extrabold text-ink",
+                    "inline-flex h-12 w-fit items-center gap-2 rounded-full border-[2.5px] border-ink bg-block-sol px-4 font-display text-[0.98rem] font-extrabold text-ink",
                   )}
                 >
                   <span className="rounded bg-ink px-1.5 py-0.5 text-[0.7rem] tracking-[0.1em] text-limon uppercase">Demo</span>
                   Pruébala sin registrarte
                 </a>
-                <span>
-                  ¿Ya tienes cuenta?{" "}
-                  <Link href="/entrar" className={cn(focusLink, "font-bold underline decoration-2 underline-offset-4")}>
-                    Entra aquí
-                  </Link>
-                </span>
+              </div>
+              <p className="mt-4 text-[0.98rem] font-medium">
+                ¿Ya tienes cuenta?{" "}
+                <Link href="/entrar" className={cn(focusLink, "inline-flex min-h-11 items-center font-bold underline decoration-2 underline-offset-4")}>
+                  Entra aquí
+                </Link>
+              </p>
+              <p className="text-[0.92rem] font-medium text-muted-foreground">
+                ¿Tienes un negocio?{" "}
+                <Link
+                  href="/empresas"
+                  className={cn(focusLink, "inline-flex min-h-11 items-center font-semibold text-foreground underline decoration-current/40 decoration-2 underline-offset-4 hover:decoration-current")}
+                >
+                  Conoce Chambarrio para empresas
+                </Link>
               </p>
             </div>
-            <div className="relative -mt-6 sm:mt-0">
+            {/* mt-auto: the street sits on the card's bottom edge however tall the right column makes the row. */}
+            <div className="relative lg:mt-auto">
               <div className="relative z-10 ml-auto -mb-8 w-fit pr-3 sm:pr-6">
                 <ChambitaHello size={104} />
               </div>
@@ -289,16 +253,41 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Demo entry */}
+        {/* Demo entry (job seeker) */}
         <DemoShowcase />
 
         {/* ¿Qué chamba buscas? */}
-        <section aria-labelledby="chambas-t" className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[0.8fr_1.6fr] lg:gap-12 lg:px-10 lg:py-20">
-          <SectionHead id="chambas-t" eyebrow="Escoge tu rama" title="¿Qué chamba buscas?">
-            <p className="mt-4 max-w-[28rem] text-[1.05rem] leading-relaxed text-muted-foreground">
-              Obra, cocina, reparto, almacén, tienda, mantenimiento… Hay vacantes de todo, y muchas te quedan a unas cuadras.
-            </p>
-          </SectionHead>
+        <section aria-labelledby="chambas-t" className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[0.8fr_1.6fr] lg:items-stretch lg:gap-12 lg:px-10 lg:py-20">
+          {/* Desktop: the "y también" card grows so this column ends on the stack's bottom line. */}
+          <div className="min-w-0 lg:flex lg:flex-col">
+            <SectionHead id="chambas-t" eyebrow="Escoge tu rama" title="¿Qué chamba buscas?">
+              <p className="mt-4 max-w-[28rem] text-[1.05rem] leading-relaxed text-muted-foreground">
+                Obra, cocina, reparto, almacén, tienda, mantenimiento… Hay vacantes de todo, y muchas te quedan a unas cuadras.
+              </p>
+            </SectionHead>
+            <Reveal inView index={1} className="mt-8 hidden lg:flex lg:flex-1 lg:flex-col">
+              <Link
+                href="/bienvenida"
+                className={cn(
+                  "group relative isolate flex flex-1 flex-col overflow-hidden rounded-panel p-5 outline-none block-chicle focus-visible:ring-4 focus-visible:ring-ring/60",
+                  HARD,
+                  PRESSABLE,
+                  "-rotate-[0.6deg]",
+                )}
+              >
+                <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-50" />
+                <span className="font-display text-[0.78rem] font-extrabold tracking-[0.14em] text-muted-foreground uppercase">Y también</span>
+                <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  {MORE.map((c) => (
+                    <li key={c.id} className="flex min-w-0 items-center gap-2">
+                      <CategoryIcon category={c.id} size="xs" />
+                      <span className="truncate font-display text-[0.98rem] leading-tight font-extrabold tracking-[-0.01em]">{c.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Link>
+            </Reveal>
+          </div>
           <Stagger as="ul" inView gap={0.07} className="grid min-w-0 lg:grid-cols-3 lg:gap-5">
             {PICKS.map((p, i) => {
               const last = i === PICKS.length - 1;
@@ -307,7 +296,7 @@ export default function LandingPage() {
                   <Link
                     href="/bienvenida"
                     className={cn(
-                      "group relative isolate flex min-h-[8.5rem] flex-col overflow-hidden rounded-panel px-5 pt-5 pb-10 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 lg:min-h-[12rem] lg:pb-5",
+                      "group relative isolate flex min-h-[8.5rem] flex-col overflow-hidden rounded-panel px-5 pt-5 pb-10 outline-none focus-visible:ring-4 focus-visible:ring-ring/60 lg:h-full lg:min-h-[12rem] lg:pb-5",
                       BLOCK_CLASS[p.tone],
                       HARD,
                       PRESSABLE,
@@ -341,7 +330,7 @@ export default function LandingPage() {
         </section>
 
         {/* Philosophy */}
-        <section aria-labelledby="filosofia" className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-10 lg:py-20">
+        <section id="por-que-cerca" aria-labelledby="filosofia" className="mx-auto max-w-6xl scroll-mt-6 px-4 py-12 sm:px-6 lg:px-10 lg:py-20">
           <SectionHead id="filosofia" eyebrow="Por qué trabajar cerca" title="Cerca de casa, la vida rinde más." />
           <dl className="mt-9 grid gap-5 md:grid-cols-6">
             {PHILOSOPHY.map((p, i) => (
@@ -365,14 +354,17 @@ export default function LandingPage() {
                 {i === 1 ? (
                   <>
                     <dd className="mt-5 md:col-start-1">
-                      <p className="flex items-baseline gap-2">
+                      <p className="flex items-end gap-2.5">
                         <CountUp
                           from={0}
                           value={savings.pesos}
-                          prefix="$"
                           className="font-display text-[3.8rem] leading-none font-extrabold tracking-[-0.05em] tabular-nums sm:text-[4.6rem]"
                         />
-                        <span className="font-display text-lg font-extrabold uppercase">al mes</span>
+                        <span className="pb-1.5 font-display text-lg leading-[1.05] font-extrabold uppercase">
+                          pesos
+                          <br />
+                          al mes
+                        </span>
                       </p>
                     </dd>
                     <dd className={cn("mt-5 overflow-hidden rounded-tile bg-white/55 md:col-start-2 md:row-span-4 md:row-start-1 md:mt-0 md:self-center", HARD_SM)}>
@@ -384,7 +376,7 @@ export default function LandingPage() {
             ))}
           </dl>
           <p className="mt-6 text-sm text-muted-foreground">
-            Estimaciones con gasolina a ~$25 por litro, un auto de 12 km por litro y 22 días de trabajo al mes.
+            Estimaciones con gasolina a unos 25 pesos por litro, un auto de 12 km por litro y 22 días de trabajo al mes.
           </p>
         </section>
 
@@ -425,134 +417,13 @@ export default function LandingPage() {
           </Reveal>
         </section>
 
-        {/* Employers */}
-        <section id="empresas" aria-labelledby="empresas-t" className="relative scroll-mt-6 block-tinta [--hard:rgb(255_255_255/0.22)]">
-          <HazardStripe className="h-4" />
-          <div className="relative isolate overflow-hidden">
-            <Scatter count={6} seed={5} palette={["var(--block-sol)", "var(--limon)", "var(--block-cielo)"]} className="-z-10 opacity-60" />
-            {/* Row 1: pitch + crew art at equal height. Row 2: the three benefits as equal cards — no column ends early. */}
-            <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-10 lg:py-24">
-              <div className="grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:items-stretch lg:gap-14">
-                <div className="min-w-0 lg:flex lg:flex-col lg:justify-center">
-                  <SectionHead
-                    invert
-                    id="empresas-t"
-                    eyebrow="Para negocios y plantas"
-                    title={
-                      <>
-                        Personal que vive cerca llega a tiempo y <span className="text-limon">se queda.</span>
-                      </>
-                    }
-                  >
-                    <p className="mt-5 max-w-[34rem] text-lg leading-relaxed text-muted-foreground">
-                      Desde una cafetería hasta una planta industrial: publica tu vacante y ve quién vive a pocos minutos de
-                      tu negocio.
-                    </p>
-                    <Link href="/bienvenida/empresa" className={cn(chunky("lime"), "group mt-7 border-limon")}>
-                      Publicar una vacante gratis
-                      <HugeiconsIcon icon={ArrowRight02Icon} className="size-5 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
-                    </Link>
-                  </SectionHead>
-                </div>
-                <Reveal
-                  inView
-                  index={1}
-                  className="relative flex min-w-0 items-end overflow-hidden rounded-panel border-[3px] border-white/80 bg-block-sol p-3 pb-0 text-ink lg:p-5 lg:pb-0"
-                >
-                  {/* items-end + no bottom padding: the crew is cut at the hips by the card's edge, not mid-card;
-                      bleed: the sunburst fills the card above the scene instead of leaving a plain band */}
-                  <Scene name="equipo" bleed className="w-full" title="Un equipo de trabajadores listos para empezar" />
-                  <Rivets inset="0.6rem" />
-                </Reveal>
-              </div>
-              <Stagger as="ul" inView gap={0.09} className="mt-10 grid min-w-0 gap-4 md:grid-cols-3 lg:mt-14 lg:gap-5">
-                {BENEFITS.map((b, i) => (
-                  <StaggerItem
-                    as="li"
-                    key={b.title}
-                    className={cn(
-                      "relative flex h-full gap-4 rounded-panel p-5 sm:p-6 md:flex-col",
-                      BLOCK_CLASS[b.tone],
-                      HARD,
-                      i === 1 ? "md:rotate-[0.6deg]" : "md:-rotate-[0.4deg]",
-                    )}
-                  >
-                    <span className="grid size-14 shrink-0 place-items-center rounded-tile bg-ink text-white">
-                      <HugeiconsIcon icon={b.icon} className="size-7" strokeWidth={2} />
-                    </span>
-                    <span>
-                      <span className="block font-display text-[1.35rem] leading-tight font-extrabold tracking-[-0.02em]">{b.title}</span>
-                      <span className="mt-1 block text-[1rem] leading-relaxed text-muted-foreground">{b.body}</span>
-                    </span>
-                  </StaggerItem>
-                ))}
-              </Stagger>
-            </div>
-          </div>
-          <HazardStripe className="h-4" />
-        </section>
-
-        {/* Pricing */}
-        <section id="precios" aria-labelledby="precios-t" className="mx-auto max-w-6xl scroll-mt-6 px-4 py-14 sm:px-6 lg:px-10 lg:py-24">
-          <SectionHead id="precios-t" eyebrow="Precios de lanzamiento" title="Quien busca trabajo nunca paga.">
-            <p className="mt-4 max-w-[36rem] text-lg leading-relaxed text-muted-foreground">
-              Las empresas publican gratis y pagan solo por ver a quienes se postulan. Precios de lanzamiento en Saltillo.
-            </p>
-          </SectionHead>
-          <Stagger as="div" inView gap={0.09} className="mt-12 grid items-stretch gap-7 md:grid-cols-3 md:gap-5">
-            {PLANS.map((p) => (
-              <StaggerItem
-                key={p.name}
-                className={cn(
-                  "relative flex min-w-0 flex-col rounded-panel p-6 sm:p-7",
-                  BLOCK_CLASS[p.tone],
-                  HARD,
-                  p.featured && "md:-translate-y-4",
-                )}
-              >
-                {p.featured ? (
-                  <div className="absolute -top-7 -right-2 z-10">
-                    <Sticker variant="lime" size="md" rotate={10} className="border-[3px] border-ink">
-                      <strong>N.º 1</strong>más pedido
-                    </Sticker>
-                  </div>
-                ) : null}
-                <h3 className="font-display text-[0.85rem] font-extrabold tracking-[0.16em] uppercase opacity-80">{p.name}</h3>
-                <p className="mt-5 font-display text-[2.9rem] leading-none font-extrabold tracking-[-0.05em] tabular-nums">{p.price}</p>
-                <p className="mt-2 text-[0.95rem] font-semibold text-muted-foreground">{p.unit}</p>
-                <p className="mt-5 flex-1 border-t-2 border-dashed border-current/25 pt-5 text-[1rem] leading-relaxed text-muted-foreground">
-                  {p.body}
-                </p>
-                <Link
-                  href="/bienvenida/empresa"
-                  className={cn(chunky(p.featured ? "lime" : "ink", "md"), "mt-6 h-12 w-full")}
-                >
-                  Empezar con {p.name}
-                </Link>
-              </StaggerItem>
-            ))}
-          </Stagger>
-          <Reveal inView className={cn("mt-9 flex items-start gap-3.5 rounded-panel bg-card p-5 text-[1rem] leading-relaxed text-card-foreground sm:p-6", HARD_SM)}>
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink text-white">
-              <HugeiconsIcon icon={Agreement01Icon} className="size-5" strokeWidth={2} />
-            </span>
-            <p className="text-muted-foreground">
-              Chambarrio no es agencia de reclutamiento: conectamos personas y empresas. Cada empresa entrevista,
-              contrata y cumple sus obligaciones laborales.{" "}
-              <Link href="/terminos" className={cn(focusLink, "font-semibold text-foreground underline decoration-2 underline-offset-4")}>
-                Lee los términos
-              </Link>
-              .
-            </p>
-          </Reveal>
-        </section>
-
         {/* Closing CTA */}
         <section aria-labelledby="cta-t" className="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:px-10 lg:pb-24">
           <Reveal inView y={24} className={cn("relative isolate overflow-hidden rounded-panel block-sol", HARD)}>
             <HazardStripe className="h-5" colors={["var(--ink)", "var(--block-sol)"]} />
             <Scatter count={6} seed={7} palette={["var(--ink)", "var(--block-mandarina)", "var(--block-uva)"]} className="-z-10" />
-            <div className="grid gap-6 p-7 sm:p-10 lg:grid-cols-[1.3fr_1fr] lg:items-center lg:p-14">
+            {/* items-stretch: the van card runs the full height of the copy, so both columns end together. */}
+            <div className="grid gap-6 p-7 sm:p-10 lg:grid-cols-[1.3fr_1fr] lg:items-stretch lg:p-14">
               <div className="min-w-0">
                 <h2 id="cta-t" className="font-display text-[2.5rem] leading-[0.98] font-extrabold tracking-[-0.05em] text-balance sm:text-[3.4rem]">
                   Tu próxima chamba puede estar a la vuelta de la esquina.
@@ -575,28 +446,28 @@ export default function LandingPage() {
                   <InstallButton />
                 </div>
               </div>
-              <div className={cn("min-w-0 overflow-hidden rounded-tile bg-white/60 p-2", HARD_SM)}>
-                <Scene name="reparto" className="w-full" title="Una camioneta de reparto en camino" />
+              <div className={cn("relative isolate flex min-w-0 flex-col overflow-hidden rounded-tile bg-block-cielo text-ink", HARD_SM)}>
+                <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-50" />
+                <div className="hidden flex-1 items-center justify-center p-4 lg:flex">
+                  <Mascot mood="festeja" prop="paquete" size={150} />
+                </div>
+                <div className="mt-auto bg-white/60 p-2 lg:border-t-[2.5px] lg:border-ink">
+                  <Scene name="reparto" className="w-full" title="Una camioneta de reparto en camino" />
+                </div>
               </div>
             </div>
           </Reveal>
         </section>
       </main>
 
-      <footer>
-        <HazardStripe className="h-2.5 opacity-90" />
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:px-6 lg:px-10">
-          <div>
-            <ChambarrioLogo iconClassName="size-9 shrink-0 group-hover:animate-wiggle" />
-            <p className="mt-3 text-sm text-muted-foreground">Hecho en Saltillo, Coahuila.</p>
-          </div>
-          <nav aria-label="Legal" className="flex flex-wrap gap-x-6 gap-y-2 text-[0.95rem] font-medium text-muted-foreground sm:ml-auto">
-            <Link href="/terminos" className={cn(focusLink, "py-2 hover:text-foreground")}>Términos y condiciones</Link>
-            <Link href="/privacidad" className={cn(focusLink, "py-2 hover:text-foreground")}>Aviso de privacidad</Link>
-            <Link href="/empresa" className={cn(focusLink, "py-2 hover:text-foreground")}>Panel de empresa</Link>
-          </nav>
-        </div>
-      </footer>
+      <LandingFooter
+        links={[
+          { href: "/terminos", label: "Términos y condiciones" },
+          { href: "/privacidad", label: "Aviso de privacidad" },
+          { href: "/empresas", label: "Para empresas" },
+          { href: "/empresa", label: "Panel de empresa" },
+        ]}
+      />
     </div>
   );
 }

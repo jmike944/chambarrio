@@ -35,8 +35,8 @@ export function HeroDemo({ className }: { className?: string }) {
             Pruébalo aquí
           </h2>
           <span className="ml-auto inline-flex h-8 items-center gap-2 rounded-full border-2 border-ink bg-white px-3 text-sm font-bold text-ink">
-            <StatusDot color="var(--nopal)" pulse />
-            En vivo
+            <StatusDot color="var(--chile)" pulse />
+            Demo
           </span>
         </header>
         <div className="mt-3 grid flex-1 items-center gap-4 sm:grid-cols-[1fr_minmax(0,13rem)] lg:grid-cols-1 lg:content-center lg:gap-5">

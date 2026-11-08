@@ -250,7 +250,7 @@ function DemoRibbon() {
               Crear mi cuenta
             </button>
           ) : null}
-          <button type="button" onClick={() => leaveDemoTo("/")} className={cn(btn, "hover:bg-ink/10")}>
+          <button type="button" onClick={() => leaveDemoTo(role === "empresa" ? "/empresas" : "/")} className={cn(btn, "hover:bg-ink/10")}>
             Salir
           </button>
         </span>
