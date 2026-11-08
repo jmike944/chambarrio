@@ -486,8 +486,9 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
     >
       {title ? <title>{title}</title> : null}
       <ellipse className="mscGround" cx={0} cy={426} rx={98} ry={8} fill={INK} opacity={0.16} />
-      <g className={cn("avA", mood === "festeja" ? "avHop" : "avBob")}>
-        <ShadowOf ctx={ctx} draws={layers.map((l) => l.draw)} offset={sw} />
+      {/* keyed by mood + prop: a change remounts the figure so every copy of an animated arm restarts in step */}
+      <g key={`${mood}|${prop}|${size}`} className={cn("avA", mood === "festeja" ? "avHop" : "avBob")}>
+        <ShadowOf ctx={ctx} layers={layers} offset={sw} />
         {layers.map((l) => (
           <Layer key={l.key} ctx={ctx} draw={l.draw} shadow={l.shadow} />
         ))}

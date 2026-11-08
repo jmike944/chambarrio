@@ -205,13 +205,26 @@ export function Layer({ ctx, draw, shadow = 0 }: { ctx: PaintCtx; draw: Draw; sh
   );
 }
 
-/** The ink pass of several layers at once, offset: the figure's single hard sticker shadow. */
-export function ShadowOf({ ctx, draws, offset }: { ctx: PaintCtx; draws: readonly Draw[]; offset: number }) {
+/**
+ * The ink pass of several layers at once, offset: the figure's single hard sticker shadow.
+ * Each copy is keyed by its layer's name, like the colour passes: keyed by position, adding or
+ * removing a layer (a hat, a badge) would remount the arm's shadow, restart its CSS wave and leave
+ * it out of step with the visible arm.
+ */
+export function ShadowOf({
+  ctx,
+  layers,
+  offset,
+}: {
+  ctx: PaintCtx;
+  layers: readonly { key: string; draw: Draw }[];
+  offset: number;
+}) {
   const k = makeKit("ink", ctx.sw, ctx.sep, ctx.lo);
   return (
     <g transform={`translate(${offset} ${offset})`}>
-      {draws.map((d, i) => (
-        <g key={i}>{d(k)}</g>
+      {layers.map((l) => (
+        <g key={l.key}>{l.draw(k)}</g>
       ))}
     </g>
   );

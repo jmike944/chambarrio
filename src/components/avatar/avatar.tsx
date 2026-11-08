@@ -115,6 +115,7 @@ export function Avatar({
     placeArm(-1, paintArm(k, left, L, armPart, realPose === "festeja" ? -0.45 : undefined));
   const armR: Draw = (k) => placeArm(1, paintArm(k, right, L, armPart));
 
+  const figureKey = `${JSON.stringify(cfg)}|${realPose}|${framing}|${flip ? 1 : 0}|${expression ?? ""}|${px}`;
   const layers: { key: string; draw: Draw; shadow?: number }[] = [
     { key: "hairBack", draw: (k) => headWrap(paintHairBack(k, L)) },
     ...(framing === "completo" ? [{ key: "legs", draw: ((k) => paintLegs(k, L)) as Draw }] : []),
@@ -144,8 +145,10 @@ export function Avatar({
     >
       {title ? <title>{title}</title> : null}
       {framing === "completo" ? <ellipse cx={0} cy={425} rx={92} ry={7} fill={INK} opacity={0.16} /> : null}
-      <g className={cn("avA", realPose === "festeja" ? "avHop" : "avBob")}>
-        <ShadowOf ctx={ctx} draws={layers.map((l) => l.draw)} offset={SH} />
+      {/* Keyed by the look: a change remounts the whole figure, so the shadow, outline and colour
+          copies of an animated arm restart their CSS motion together and stay in step. */}
+      <g key={figureKey} className={cn("avA", realPose === "festeja" ? "avHop" : "avBob")}>
+        <ShadowOf ctx={ctx} layers={layers} offset={SH} />
         {layers.map((l) => (
           <Layer key={l.key} ctx={ctx} draw={l.draw} shadow={l.shadow} />
         ))}
