@@ -396,6 +396,11 @@ export function CandidateFlow() {
                 </span>
               </span>
             </p>
+            {inRadius === 0 ? (
+              <p className="mt-3 text-[0.98rem] font-medium">
+                Todavía no hay vacantes tan cerca. Te avisamos en cuanto una empresa publique en tu zona.
+              </p>
+            ) : null}
             <RadiusBar value={radiusKm} onChange={setRadius} label="Distancia máxima al trabajo" className="mt-6" />
           </Slab>
           <Slab tone="menta" index={2} className="mt-5 pr-32">
@@ -488,11 +493,18 @@ export function CandidateFlow() {
           band
           title={name.trim() ? `¡Ya quedó, ${name.trim()}!` : "¡Ya quedó!"}
           hint={
-            <>
-              Hay <span className="font-bold text-foreground tabular-nums">{inRadius}</span>{" "}
-              {inRadius === 1 ? "vacante" : "vacantes"} a menos de {radiusKm} km de{" "}
-              {place?.source === "gps" ? "donde estás" : (place?.colonia ?? "tu casa")}.
-            </>
+            inRadius === 0 ? (
+              <>
+                Llegaste antes que las vacantes: todavía no hay ninguna a menos de {radiusKm} km de{" "}
+                {place?.source === "gps" ? "donde estás" : (place?.colonia ?? "tu casa")}. Te avisamos en cuanto publiquen una.
+              </>
+            ) : (
+              <>
+                Hay <span className="font-bold text-foreground tabular-nums">{inRadius}</span>{" "}
+                {inRadius === 1 ? "vacante" : "vacantes"} a menos de {radiusKm} km de{" "}
+                {place?.source === "gps" ? "donde estás" : (place?.colonia ?? "tu casa")}.
+              </>
+            )
           }
           aside="Mejor calidad de vida empieza más cerca de casa."
           onBack={back}
@@ -512,7 +524,7 @@ export function CandidateFlow() {
           }
         >
           <Slab tone="limon" index={1} className="pt-4">
-            <p className="text-[0.78rem] font-bold tracking-[0.14em] uppercase">¡Chamba a la vista!</p>
+            <p className="text-[0.78rem] font-bold tracking-[0.14em] uppercase">{inRadius === 0 ? "¡Llegaste primero!" : "¡Chamba a la vista!"}</p>
             <p className="mt-1 flex flex-wrap items-end gap-x-3">
               <CountUp
                 value={inRadius}

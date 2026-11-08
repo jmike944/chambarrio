@@ -6,7 +6,8 @@ import { StatusDot } from "@/components/chamba/primitives";
 import { CountUp } from "@/components/chamba/motion";
 import { RadiusBar } from "@/components/chamba/radius-bar";
 import { Radar } from "@/components/chamba/radar";
-import { useApp, useJobsByDistance } from "@/lib/store";
+import { useApp } from "@/lib/store";
+import { useDemoJobsByDistance } from "@/lib/data/catalog";
 import { bandColor, bandFor } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import { HARD, HazardStripe, Rivets } from "./decor";
@@ -16,7 +17,8 @@ export function HeroDemo({ className }: { className?: string }) {
   const radiusKm = useApp((s) => s.radiusKm);
   const setRadius = useApp((s) => s.setRadius);
   const colonia = useApp((s) => s.colonia);
-  const jobs = useJobsByDistance();
+  // Labeled "Vacantes de demostración": always the bundled demo data, never the live database.
+  const jobs = useDemoJobsByDistance();
   const inRadius = jobs.filter((j) => j.km <= radiusKm);
 
   return (

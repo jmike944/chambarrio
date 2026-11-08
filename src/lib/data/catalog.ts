@@ -273,6 +273,18 @@ export function useJobsByDistance(): JobWithDistance[] {
 }
 
 /**
+ * The bundled demo vacancies around the user's home, whatever the mode. Only for showcases that are
+ * labeled as demo (the landing's "Pruébalo aquí" radar): real screens use useJobsByDistance().
+ */
+export function useDemoJobsByDistance(): JobWithDistance[] {
+  const home = useApp((s) => s.home);
+  return useMemo(
+    () => DEMO_CATALOG.jobs.map((j) => ({ ...j, km: distanceKm(home, j.location), bearing: bearing(home, j.location) })).toSorted((a, b) => a.km - b.km),
+    [home],
+  );
+}
+
+/**
  * One vacancy, with its company and branch. Live: if it isn't in the 50 km list (an old link, a
  * saved vacancy far away) it's fetched by id. status "ready" + job undefined = not found / closed.
  */
