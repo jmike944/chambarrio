@@ -39,7 +39,7 @@ const STAGE_LABEL: Record<UploadStage, string> = {
   guardando: "Guardando…",
 };
 
-/** "Foto y CV": upload with progress, preview, replace, remove. Private until a company unlocks you. */
+/** "Foto y CV": upload with progress, preview, replace, remove. Private until a company moves forward with the application. */
 export function FilesBlock({ tone, index }: { tone: BlockTone; index: number }) {
   const avatarPath = useApp((s) => s.avatarPath);
   const cvPath = useApp((s) => s.cvPath);
@@ -60,7 +60,7 @@ export function FilesBlock({ tone, index }: { tone: BlockTone; index: number }) 
       <p className="mt-4 flex items-start gap-2.5 rounded-tile border-2 border-dashed border-ink/35 bg-white/45 p-3 text-[0.9rem] leading-snug font-semibold">
         <HugeiconsIcon icon={LockIcon} className="mt-0.5 size-5 shrink-0" strokeWidth={2.2} />
         <span>
-          Solo la ven las empresas cuando desbloquean tu postulación.
+          Solo la ven las empresas cuando avanzan con tu postulación.
           <span className="block text-[0.85rem] font-normal text-muted-foreground">Antes de eso ven tu perfil sin nombre, teléfono, foto ni CV.</span>
         </span>
       </p>

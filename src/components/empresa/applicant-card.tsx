@@ -20,6 +20,7 @@ import {
   LanguageSkillIcon,
   Location01Icon,
   LockIcon,
+  ShieldUserIcon,
   Message01Icon,
   Money01Icon,
   Mortarboard01Icon,
@@ -112,6 +113,11 @@ export type ApplicantCardProps = {
   action?: React.ReactNode;
   /** Extra action after the contact buttons (e.g. "Ver en la vacante"). */
   extraAction?: React.ReactNode;
+  /**
+   * The candidate's own preview ("Así te ven las empresas"): no padlock and no "Al desbloquear
+   * verás". Candidates never learn that contact details depend on the company paying.
+   */
+  candidateView?: boolean;
   className?: string;
 };
 
@@ -128,6 +134,7 @@ export function ApplicantCard({
   onOpenProfile,
   action,
   extraAction,
+  candidateView = false,
   className,
 }: ApplicantCardProps) {
   const now = useNow();
@@ -160,7 +167,7 @@ export function ApplicantCard({
 
       {/* ------------------------------------------------ header */}
       <div className="flex items-start gap-3">
-        <ApplicantAvatar name={name} locked={!open} photoUrl={a.photoUrl} art={a.photoArt} />
+        <ApplicantAvatar name={name} locked={!open && !candidateView} photoUrl={a.photoUrl} art={a.photoArt} />
         <div className="min-w-0 flex-1 pt-0.5">
           <h3 id={titleId} className="font-display text-[1.22rem] leading-[1.1] font-extrabold tracking-[-0.02em] break-words">
             {profileHref ? (
@@ -230,6 +237,8 @@ export function ApplicantCard({
       <div className="mt-auto pt-4">
         {open ? (
           <ContactActions applicant={a} first={first} />
+        ) : candidateView ? (
+          <PrivateContact applicant={a} />
         ) : (
           <LockedReveal applicant={a} />
         )}
@@ -262,6 +271,25 @@ export function ApplicantCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+/** Candidate preview only: their contact details are private, shared as the company moves forward. */
+function PrivateContact({ applicant: a }: { applicant: ApplicantProfile }) {
+  return (
+    <div className="rounded-tile border-2 border-dashed border-ink/40 bg-white/45 p-3">
+      <p className="flex items-center gap-1.5 text-[0.72rem] font-extrabold tracking-[0.12em] uppercase">
+        <HugeiconsIcon icon={ShieldUserIcon} className="size-3.5" strokeWidth={2.4} />
+        Tus datos de contacto
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-1.5 text-[0.85rem] font-semibold">
+        <Reveal icon={UserIcon}>Nombre</Reveal>
+        <Reveal icon={SmartPhone01Icon}>Teléfono</Reveal>
+        {a.hasPhoto ? <Reveal icon={Camera01Icon}>Foto</Reveal> : null}
+        {a.hasCv ? <Reveal icon={DocumentAttachmentIcon}>CV</Reveal> : null}
+      </ul>
+      <p className="mt-2 text-[0.82rem] leading-snug">Se comparten cuando la empresa avanza con tu postulación.</p>
+    </div>
   );
 }
 

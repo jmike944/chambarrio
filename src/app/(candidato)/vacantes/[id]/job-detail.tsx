@@ -24,8 +24,7 @@ import {
   Tick02Icon,
   WalkingIcon,
   Message01Icon,
-  LockIcon,
-  SquareUnlock02Icon,
+  ShieldUserIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -521,14 +520,14 @@ function ApplyConfirmation({ company, km, tone }: { company: Company; km: number
           <p className="text-[0.72rem] font-extrabold tracking-[0.14em] uppercase">Esto ve {company.name} ahora</p>
           <div className="mt-3 flex items-center gap-3">
             {/* Their own look: the avatar is what every company sees, before anything is unlocked. */}
-            <ApplicantAvatar name={null} locked={!seesContact} art={look} />
+            <ApplicantAvatar name={null} locked={false} art={look} />
             <div className="min-w-0">
               <p className="font-display text-[1.15rem] leading-tight font-extrabold">Tu ficha</p>
               <p className="flex items-start gap-1.5 text-[0.88rem] leading-snug text-ink/70">
-                <HugeiconsIcon icon={seesContact ? SquareUnlock02Icon : LockIcon} className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.4} />
+                <HugeiconsIcon icon={ShieldUserIcon} className="mt-0.5 size-3.5 shrink-0" strokeWidth={2.4} />
                 {seesContact
-                  ? "También ve tu nombre, teléfono, foto y CV, para llamarte."
-                  : "Tu nombre, teléfono, foto y CV los ve cuando la empresa abra tus datos."}
+                  ? "También ve tu nombre, teléfono, foto y CV, para contactarte."
+                  : "Para cuidar tu privacidad, tu nombre, teléfono, foto y CV se comparten cuando la empresa avanza con tu postulación."}
               </p>
             </div>
           </div>

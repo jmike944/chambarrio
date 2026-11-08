@@ -258,7 +258,7 @@ export function AvatarBuilder({ tone = "durazno", index }: { tone?: BlockTone; i
           <p className="mt-4 flex items-start gap-2.5 @lg/avb:mt-0 rounded-tile border-2 border-dashed border-ink/35 bg-white/45 p-3 text-[0.9rem] leading-snug font-semibold">
             <HugeiconsIcon icon={EyeIcon} className="mt-0.5 size-5 shrink-0" strokeWidth={2.2} />
             <span>
-              Las empresas ven tu avatar desde el principio; tu foto solo cuando desbloquean tu postulación.
+              Las empresas ven tu avatar desde que te postulas; tu foto, cuando avanzan con tu postulación.
               {localOnly ? (
                 <span className="mt-1 flex items-start gap-1.5 text-[0.82rem] font-normal text-muted-foreground">
                   <HugeiconsIcon icon={InformationCircleIcon} className="mt-px size-4 shrink-0" strokeWidth={2} />

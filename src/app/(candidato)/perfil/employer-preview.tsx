@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Building06Icon, LockIcon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import { Building06Icon, Call02Icon, UserIcon } from "@hugeicons/core-free-icons";
 import { ApplicantCard } from "@/components/empresa/applicant-card";
 import type { ApplicantProfile } from "@/lib/live/applicant-profiles";
 import { useOwnFileUrl } from "@/lib/live/profile-files";
@@ -15,8 +15,9 @@ import { HARD } from "../postulaciones/rugged";
 import { useStrengthInput, type CSSVars } from "./ui";
 
 /**
- * "Así te ven las empresas": the real employer card (ApplicantCard) fed with the candidate's own
- * draft, before and after the company unlocks the vacancy. Read-only: contact buttons only explain.
+ * "Así te ven las empresas": the real employer card (ApplicantCard, candidate view: no padlocks) fed
+ * with the candidate's own draft, when they apply and once the company contacts them. Read-only:
+ * contact buttons only explain. Candidates never learn that contact depends on the company paying.
  */
 export function EmployerPreview({ index }: { index: number }) {
   const [unlocked, setUnlocked] = useState(false);
@@ -130,15 +131,15 @@ export function EmployerPreview({ index }: { index: number }) {
             Así te ven las empresas
           </h2>
           <p className="mt-1 text-[0.92rem] leading-snug text-muted-foreground">
-            Cuando te postulas, la empresa ve tu avatar y tu perfil sin tus datos de contacto. Tu nombre, teléfono, foto y CV aparecen solo si desbloquea la vacante.
+            Cuando te postulas, la empresa ve tu avatar y tu perfil. Para cuidar tu privacidad, tu nombre, teléfono, foto y CV se comparten cuando la empresa avanza con tu postulación.
           </p>
         </div>
       </header>
 
       <div role="radiogroup" aria-label="Estado de la postulación en la vista previa" className="mb-5 grid grid-cols-2 gap-1.5 rounded-full bg-tile p-1.5">
         {[
-          { on: false, label: "Antes", icon: LockIcon },
-          { on: true, label: "Desbloqueada", icon: SquareUnlock02Icon },
+          { on: false, label: "Al postularte", icon: UserIcon },
+          { on: true, label: "Cuando te contactan", icon: Call02Icon },
         ].map((o) => {
           const active = unlocked === o.on;
           return (
@@ -163,7 +164,7 @@ export function EmployerPreview({ index }: { index: number }) {
       {/* The real employer card, framed as "their screen". */}
       <div onClickCapture={intercept} className="relative -mx-1.5 rounded-[1.6rem] border-2 border-dashed border-border p-1 pt-6 sm:mx-0 sm:p-2.5 sm:pt-6">
         <span className="absolute -top-3 left-4 rounded-full bg-ink px-2.5 py-0.5 text-[0.68rem] font-bold tracking-[0.12em] text-white uppercase">
-          Pantalla de la empresa
+          Tu ficha para la empresa
         </span>
         <ApplicantCard
           key={unlocked ? "abierta" : "cerrada"}
@@ -172,6 +173,7 @@ export function EmployerPreview({ index }: { index: number }) {
           index={0}
           context={nearest ? `Ej. ${nearest.title}` : undefined}
           category={nearest?.category}
+          candidateView
           className="animate-pop-in"
         />
       </div>

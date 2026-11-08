@@ -196,7 +196,7 @@ function DatosBlock({ index }: { index: number }) {
             className={FIELD}
           />
           <p id="phone-hint" className="text-sm text-muted-foreground">
-            Solo lo ve la empresa cuando desbloquea tu postulación. Te contacta por SMS o llamada.
+            Solo lo ve la empresa cuando avanza con tu postulación, para contactarte por SMS o llamada.
           </p>
         </div>
       </div>
