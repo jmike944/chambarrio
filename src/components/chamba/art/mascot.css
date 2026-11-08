@@ -76,6 +76,16 @@
     .mscRoot[data-animated] .mscLens {
       animation: msc-lens 0.7s steps(2, jump-none) infinite;
     }
+    /* a figure whose look arrived after the page (my-mascot.tsx): fades into its held spot */
+    .mscRoot.mscArrive {
+      animation: msc-arrive 0.35s ease-out both;
+    }
+  }
+
+  @keyframes msc-arrive {
+    from {
+      opacity: 0;
+    }
   }
 
   @keyframes msc-dust {

@@ -21,8 +21,9 @@ import { Button } from "@/components/ui/button";
 import { AvatarStack, BLOCK_CLASS, HeroCard, Panel, PanelHeader, SectionLabel, StatTile, type BlockTone } from "@/components/chamba/primitives";
 import { CountUp, Sticker } from "@/components/chamba/motion";
 import { CategoryArt, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
+import { Mascot } from "@/components/chamba/art/mascot";
+import { MyMascot } from "@/components/chamba/art/my-mascot";
 import { Burst, Doodle, HazardTape } from "@/components/chamba/art/doodles";
 import { formatMXN, formatPay } from "@/lib/format";
 import type { RadiusKm } from "@/lib/geo";
@@ -184,7 +185,7 @@ function DemoDashboard() {
         <RadiusChips value={radius} onChange={setRadius} label="Radio de búsqueda de candidatos" className="mt-5" />
         <Scene name="radar" className="mx-auto my-3 hidden w-36 lg:block" />
         <div className="mt-5 flex items-center gap-3 rounded-tile border-2 border-dashed border-ink/35 bg-white/45 p-3.5 lg:mt-auto dark:bg-white/30">
-          <Mascot mood="piensa" prop="casco" size={52} className="-my-2 shrink-0" />
+          <MyMascot mood="piensa" prop="casco" size={52} className="-my-2 shrink-0" />
           <p className="text-[0.95rem] leading-snug">
             Quien vive a menos de 5 km llega a tiempo más seguido y dura más en el puesto.
           </p>
@@ -424,6 +425,7 @@ function DemoDashboard() {
               </Button>
             </div>
           </div>
+          {/* Chambarrio's own support / plans: the brand mascot, not the user. */}
           <Mascot mood="saluda" prop="telefono" size={78} className="-mr-2 -mb-6 shrink-0" />
         </div>
       </Panel>

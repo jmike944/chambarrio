@@ -108,7 +108,7 @@ export function paintHairBack(k: Kit, L: Look): ReactNode {
 }
 
 /** Hair over the head (part of the head layer, ringed with an inner contour). */
-function paintHairFront(k: Kit, L: Look): ReactNode {
+export function paintHairFront(k: Kit, L: Look): ReactNode {
   if (L.hatMode === "net") return null;
   const hat = L.hatMode === "hat";
   const h = L.hair;
@@ -200,33 +200,55 @@ const BEARD =
 const LIPS = "M-14 18Q0 14 14 18Q16 30 0 35Q-16 30-14 18Z";
 const GOATEE = "M-10 35Q0 32 10 35L9 45Q0 51-9 45Z";
 
+/**
+ * Facial hair under the mouth: the full beard, with the lips cut out of it in skin (the mouth goes on
+ * top). Exported, with the two below, for figures that redraw the mouth / brows over the engine face
+ * (the mascot's moods): they repaint these over their own features.
+ */
+export function paintBeard(k: Kit, L: Look): ReactNode {
+  if (L.facial !== "barba") return null;
+  return (
+    <>
+      {k.part({ d: BEARD }, L.hair, true)}
+      {k.part({ d: LIPS }, L.skin, true)}
+    </>
+  );
+}
+
+/** Facial hair over the mouth: goatee (candado) and moustache (bigote / barba / candado). */
+export function paintFacialHairOver(k: Kit, L: Look): ReactNode {
+  return (
+    <>
+      {L.facial === "candado" ? k.part([{ d: GOATEE }, { p: [-14, 22], q: [-11, 36], w: 4.5 }, { p: [14, 22], q: [11, 36], w: 4.5 }], L.hair, true) : null}
+      {L.facial === "bigote" || L.facial === "barba" || L.facial === "candado" ? k.part({ d: MOUSTACHE }, L.hair, true) : null}
+    </>
+  );
+}
+
+/** Glasses (fill pass only: thin frames over the eyes and brows' lower edge). */
+export function paintGlasses(k: Kit, L: Look): ReactNode {
+  if (!L.glasses || k.m !== "fill") return null;
+  return (
+    <g>
+      <rect x={-25} y={-11} width={21} height={17} rx={6} fill={WHITE} fillOpacity={0.22} stroke={INK} strokeWidth={k.lo ? 4.5 : 3.8} />
+      <rect x={4} y={-11} width={21} height={17} rx={6} fill={WHITE} fillOpacity={0.22} stroke={INK} strokeWidth={k.lo ? 4.5 : 3.8} />
+      {k.line("M-4-4Q0-7.5 4-4M-25-5L-36.5-6M25-5L36.5-6", k.lo ? 4.5 : 3.6)}
+      {k.lo ? null : k.line("M-11-7.5L-8.5-5M18-7.5L20.5-5", 2.4, WHITE)}
+    </g>
+  );
+}
+
 function paintFace(k: Kit, L: Look): ReactNode {
   const e = L.expression;
-  const hairInk = L.hair;
   return (
     <>
       <Eyes k={k} e={e} />
       {k.line(BROWS[e], k.lo ? 6.5 : 5.4)}
-      {L.facial === "barba" ? (
-        <>
-          {k.part({ d: BEARD }, hairInk, true)}
-          {k.part({ d: LIPS }, L.skin, true)}
-        </>
-      ) : null}
+      {paintBeard(k, L)}
       <Mouth k={k} e={e} />
-      {L.facial === "candado" ? k.part([{ d: GOATEE }, { p: [-14, 22], q: [-11, 36], w: 4.5 }, { p: [14, 22], q: [11, 36], w: 4.5 }], hairInk, true) : null}
-      {L.facial === "bigote" || L.facial === "barba" || L.facial === "candado" ? k.part({ d: MOUSTACHE }, hairInk, true) : null}
+      {paintFacialHairOver(k, L)}
       {k.lo ? null : k.line("M-1 3Q5 9 0 12.5", 3.6, detailOn(L.skin))}
-      {L.glasses ? (
-        k.m === "fill" ? (
-          <g>
-            <rect x={-25} y={-11} width={21} height={17} rx={6} fill={WHITE} fillOpacity={0.22} stroke={INK} strokeWidth={k.lo ? 4.5 : 3.8} />
-            <rect x={4} y={-11} width={21} height={17} rx={6} fill={WHITE} fillOpacity={0.22} stroke={INK} strokeWidth={k.lo ? 4.5 : 3.8} />
-            {k.line("M-4-4Q0-7.5 4-4M-25-5L-36.5-6M25-5L36.5-6", k.lo ? 4.5 : 3.6)}
-            {k.lo ? null : k.line("M-11-7.5L-8.5-5M18-7.5L20.5-5", 2.4, WHITE)}
-          </g>
-        ) : null
-      ) : null}
+      {paintGlasses(k, L)}
     </>
   );
 }

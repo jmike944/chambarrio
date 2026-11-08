@@ -15,13 +15,13 @@ import {
   SortByDown02Icon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
-import { Scene } from "@/components/chamba/art/scenes";
 import { HARD_SM, INK_BUTTON, OUTLINE } from "@/components/empresa/workwear";
 import { STEP_COLOR, STEP_FILTER_LABEL } from "@/components/empresa/pipeline/pipeline-kit";
 import type { ApplicantProfile } from "@/lib/live/applicant-profiles";
 import { onLive } from "@/lib/live/events";
 import { PIPELINE_STEPS, type PipelineStep } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
+import { MyScene } from "@/components/chamba/art/my-mascot";
 
 /*
  * Ordering + quick filters + pipeline step filter above an applicant list.
@@ -350,7 +350,7 @@ export function ApplicantFilterEmpty({
   const label = step === "todos" ? null : STEP_FILTER_LABEL[step];
   return (
     <div className={cn("block-lila flex flex-col items-center rounded-panel p-6 text-center", OUTLINE, HARD_SM, className)}>
-      <Scene name="vacio" className="w-44" />
+      <MyScene name="vacio" className="w-44" />
       <p className="mt-2 font-display text-[1.3rem] font-extrabold">
         {label ? (quick ? `Nadie en «${label}» con esos filtros` : `Nadie en «${label}» por ahora`) : "Nadie cumple esos filtros"}
       </p>

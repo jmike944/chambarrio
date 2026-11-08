@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Delete02Icon, LockIcon, RefreshIcon, Route01Icon, StickyNote01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { FIELD, HARD, OUTLINE } from "@/components/empresa/workwear";
 import { STEP_COLOR, ago } from "@/components/empresa/pipeline/pipeline-kit";
 import type { ApplicationPipeline, PipelineEvent, RecruiterNote } from "@/lib/data/types";
 import { PIPELINE_LIMITS, capitalize, eventChange, fmtDayTime, stepOf, validateNote, type PipelineActions } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
+import { MyMascot } from "@/components/chamba/art/my-mascot";
 
 /*
  * The applicant page's private notes (tinta, "Solo tu equipo las ve") and the event timeline.
@@ -183,7 +183,7 @@ export function NotesPanel({
       ) : error ? null : (
         // Empty: centered in whatever room the column leaves (the panel stretches on desktop).
         <div className="mt-4 flex min-h-40 flex-1 flex-col items-center justify-center rounded-tile border-2 border-dashed border-white/25 px-4 py-5 text-center">
-          <Mascot mood="piensa" prop="lupa" size={84} />
+          <MyMascot mood="piensa" prop="lupa" size={84} />
           <p className="mt-2 font-display text-[1.05rem] font-extrabold">Aún no hay notas</p>
           <p className="mt-1 max-w-[17rem] text-[0.9rem] leading-snug text-white/70">
             Apunta lo que te llamó la atención, sus papeles o cuándo llamarle, para decidir con tu equipo.

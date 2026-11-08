@@ -15,13 +15,29 @@
  * viewBox: -198 -105.5 396 475.2 (engine figure units: face centre at 0,0, soles at y SOLE = 364).
  * The viewer-RIGHT arm does the mood gesture; the viewer-LEFT arm holds the hand prop
  * (lupa, trofeo, paquete, telefono) or falls back to the mood's own pose.
+ *
+ * `config`: someone else's look plays the part (inside the app: the signed-in user's own avatar, see
+ * my-mascot.tsx). Their face, hair, skin, build, outfit, accessories and colours stay theirs; the moods
+ * and the held props work the same, in their hands; the hat props (casco, gorra, chef) are the
+ * mascot's own outfits, so they are ignored (the person keeps their own headwear, or none).
  */
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { type ArmPose, L1, L2, POSE_SPECS, paintArm, placeArm, shoulderCaps } from "@/components/avatar/arms";
-import { SOLE, paintLegs, paintTorso } from "@/components/avatar/body";
-import { AVATAR_PRESETS, type AvatarConfig, type Expression } from "@/components/avatar/config";
-import { paintHairBack, paintHead, paintHeadwear, paintNeck } from "@/components/avatar/head";
+import { SOLE, chestAccessoryShown, paintChestAccessory, paintLegs, paintTorso } from "@/components/avatar/body";
+import { AVATAR_PRESETS, type AvatarConfig, type Expression, type HairStyle, sanitizeAvatar } from "@/components/avatar/config";
+import {
+  paintBeard,
+  paintFacialHairOver,
+  paintGlasses,
+  paintHairBack,
+  paintHairFront,
+  paintHead,
+  paintHeadsetBand,
+  paintHeadsetCups,
+  paintHeadwear,
+  paintNeck,
+} from "@/components/avatar/head";
 import { type Look, resolveLook } from "@/components/avatar/look";
 import { type Draw, INK, type Kit, Layer, type PaintCtx, ShadowOf, WHITE, mirrorD, polar, pt, r1 } from "@/components/avatar/paint";
 import "@/components/avatar/avatar.css";
@@ -32,8 +48,13 @@ export type MascotProp = "ninguno" | "casco" | "gorra" | "chef" | "lupa" | "trof
 
 export type MascotProps = {
   mood?: MascotMood;
-  /** Accessory/prop it holds or wears. */
+  /** Accessory/prop it holds or wears. With a `config`, the hat props (casco, gorra, chef) are ignored. */
   prop?: MascotProp;
+  /**
+   * Whose look plays the part (sanitized on render). Omitted: el Chambas, the brand mascot. Given: that
+   * person in the mascot's poses, with their own headwear and outfit (see the header).
+   */
+  config?: AvatarConfig;
   /** Rendered width in px (height = width × 1.2). Default 120. */
   size?: number;
   /** Idle animation (blink + bob + mood-specific gesture). Default true. */
@@ -63,6 +84,12 @@ const VB = [-198, -105.5, 396, 475.2] as const;
 /* ── looks ───────────────────────────────────────────────────────────── */
 
 const CHAMBAS = AVATAR_PRESETS.chambas.config;
+
+/** The mascot's own outfits: worn by el Chambas only, never put on someone else's look. */
+const isHatProp = (p: MascotProp) => p === "casco" || p === "gorra" || p === "chef";
+
+/** Hair painted all over the head under a hat, so lifting the hat (wow) shows hair, not a bald crown. */
+const FULL_UNDER_HAT: ReadonlySet<HairStyle> = new Set(["corto", "rapado", "chongo", "coleta", "calvo"]);
 
 function configFor(prop: MascotProp): AvatarConfig {
   if (prop === "gorra") return { ...CHAMBAS, headwear: "gorra", headwearColor: "violeta" };
@@ -157,7 +184,21 @@ function inHand(side: 1 | -1, A: ArmPose, L: Look, node: ReactNode) {
 function paintFaceFx(k: Kit, L: Look, face: Face): ReactNode {
   if (k.m === "ink") return null;
   const cover = (d: string) => k.flat({ d }, L.skin);
-  const mouth = cover(ell(0, 26, 18.5, 10.8));
+  // a beard comes back round the covered mouth (its lips cut out again), the moustache / goatee and the
+  // glasses over the new features: the covers below would otherwise cut into them
+  const mouth = (
+    <>
+      {/* square-ish, so the engine smile's corners (±15, 19) don't peek out beside the new mouth */}
+      {cover(rrect(-19, 15, 38, 21, 4))}
+      {paintBeard(k, L)}
+    </>
+  );
+  const over = (
+    <>
+      {paintFacialHairOver(k, L)}
+      {paintGlasses(k, L)}
+    </>
+  );
   if (face === "duerme") {
     return (
       <>
@@ -166,16 +207,21 @@ function paintFaceFx(k: Kit, L: Look, face: Face): ReactNode {
         {mouth}
         {k.line("M-21-1Q-14 5.5-7-1M7-1Q14 5.5 21-1", k.lo ? 5 : 4.2)}
         <g className="mscSnore">{k.flat({ c: [2, 27], r: 4.8 }, INK)}</g>
+        {over}
       </>
     );
   }
+  // the brow covers reach the fringe's inner contour: the front hair goes back over them (the raised
+  // brows then sit on top, as the engine's own brows do)
   if (face === "piensa") {
     return (
       <>
         {cover(ell(15, -16.5, 11.5, 6.4))}
+        {paintHairFront(k, L)}
         {mouth}
         {k.line("M7-23Q15-29.5 23-23", k.lo ? 6.5 : 5.4)}
         {k.line("M-10 27.5Q0 27 7 24.5Q11.5 23 13.5 19.5", k.lo ? 5 : 4.2)}
+        {over}
       </>
     );
   }
@@ -183,12 +229,14 @@ function paintFaceFx(k: Kit, L: Look, face: Face): ReactNode {
     <>
       {cover(ell(-15, -16.5, 11.5, 6.4))}
       {cover(ell(15, -16.5, 11.5, 6.4))}
+      {paintHairFront(k, L)}
       {mouth}
       {k.line("M-23-23Q-15-30.5-7-24M7-24Q15-30.5 23-23", k.lo ? 6.5 : 5.4)}
       <g className="mscJaw">
         <path d={ell(0, 27, 8.6, 10.8)} fill={INK} />
         <path d="M-5.6 32.5Q0 27.5 5.6 32.5Q3.2 37.6 0 37.6Q-3.2 37.6-5.6 32.5Z" fill={CHILE} />
       </g>
+      {over}
     </>
   );
 }
@@ -266,7 +314,7 @@ function paintPhone(k: Kit): ReactNode {
 }
 
 /**
- * Gloved fingertips curled up over the parcel's bottom edge (parcel frame): the hand carrying it from
+ * Fingertips (gloved, or bare) curled up over the parcel's bottom edge (parcel frame): the hand carrying it from
  * below (HOLD.paquete, wrist at ≈ (−105, 62) here) is hidden behind it. Index → pinky, middle longest.
  */
 const PARCEL_GRIP: ReadonlyArray<readonly [number, number]> = [
@@ -290,7 +338,7 @@ function paintParcel(k: Kit, L: Look): ReactNode {
         </>
       )}
       {PARCEL_GRIP.map(([x, h]) => (
-        <g key={x}>{k.part({ p: [x, 55], q: [x, 55 - h], w: 9.6 }, L.gloveFill, true)}</g>
+        <g key={x}>{k.part({ p: [x, 55], q: [x, 55 - h], w: 9.6 }, L.glove ? L.gloveFill : L.skin, true)}</g>
       ))}
     </g>
   );
@@ -417,11 +465,18 @@ function Extras({ mood, prop }: { mood: MascotMood; prop: MascotProp }) {
 
 /* ── the character ───────────────────────────────────────────────────── */
 
-export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated = true, className, title }: MascotProps) {
+export function Mascot({ mood = "feliz", prop: asked = "ninguno", config, size = 120, animated = true, className, title }: MascotProps) {
   const spec = MOODS[mood];
-  const cfg = configFor(prop);
+  // someone's own look: the mascot's outfits (hat props) don't go on it
+  const prop: MascotProp = config !== undefined && isHatProp(asked) ? "ninguno" : asked;
+  const cfg = config !== undefined ? sanitizeAvatar(config) : configFor(prop);
   const L = resolveLook(cfg, spec.expression);
   const held = isHandProp(prop) ? prop : null;
+  // The mood's hat moves (pushed back while scratching, slid down while dozing, popping up in surprise)
+  // suit a hat with a brim; a bandana or a hairnet stays put. It only pops when there's hair under it.
+  const brimmed = prop === "chef" || L.headwear === "casco" || L.headwear === "gorra";
+  const hatShift = brimmed ? spec.hat : undefined;
+  const hatPop = mood === "wow" && brimmed && (prop === "chef" || FULL_UNDER_HAT.has(L.hairStyle));
   const armL = held ? HOLD[held] : spec.L;
   // crossed arms need both arms: holding something, the dozing mascot rests the other hand on its hip
   const crossed = mood === "duerme" && !held;
@@ -444,8 +499,8 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
 
   const hat: Draw = (k) =>
     headWrap(
-      <g transform={spec.hat}>
-        <g className={mood === "wow" ? "mscPart mscHatPop" : undefined} style={mood === "wow" ? { transformOrigin: "0px -30px" } : undefined}>
+      <g transform={hatShift}>
+        <g className={hatPop ? "mscPart mscHatPop" : undefined} style={hatPop ? { transformOrigin: "0px -30px" } : undefined}>
           {prop === "chef" ? paintToque(k) : paintHeadwear(k, L)}
           {prop === "casco" ? paintLamp(k) : null}
         </g>
@@ -477,6 +532,8 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
         </>
       ),
     },
+    // the person's badge / radio (a look's own accessory; hidden behind crossed arms, as on the avatar)
+    ...(chestAccessoryShown(L, crossed) ? [{ key: "acc", draw: ((k) => paintChestAccessory(k, L)) as Draw }] : []),
     // the carrying arm goes behind the parcel (its hand is under it), the parcel behind the head
     ...(held === "paquete"
       ? [
@@ -494,7 +551,10 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
           </>,
         ),
     },
-    { key: "hat", draw: hat, shadow: 3 },
+    // a headset's band goes over the hair but under any headwear, its ear cups over both
+    ...(L.accessory === "audifonos" ? [{ key: "band", draw: ((k) => headWrap(paintHeadsetBand(k, L))) as Draw }] : []),
+    ...(L.headwear !== "ninguno" || prop === "chef" ? [{ key: "hat", draw: hat, shadow: 3 }] : []),
+    ...(L.accessory === "audifonos" ? [{ key: "cups", draw: ((k) => headWrap(paintHeadsetCups(k))) as Draw }] : []),
     ...(held === "lupa" || held === "trofeo" || held === "telefono"
       ? [
           {
@@ -524,8 +584,8 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
     >
       {title ? <title>{title}</title> : null}
       <ellipse className="mscGround" cx={0} cy={SOLE + 1} rx={94} ry={7.5} fill={INK} opacity={0.16} />
-      {/* keyed by mood + prop: a change remounts the figure so every copy of an animated arm restarts in step */}
-      <g key={`${mood}|${prop}|${size}`} className={cn("avA", mood === "festeja" ? "avHop" : "avBob")}>
+      {/* keyed by the look + mood + prop: a change remounts the figure so every copy of an animated arm restarts in step */}
+      <g key={`${JSON.stringify(cfg)}|${mood}|${prop}|${size}`} className={cn("avA", mood === "festeja" ? "avHop" : "avBob")}>
         <ShadowOf ctx={ctx} layers={layers} offset={sw} />
         {layers.map((l) => (
           <Layer key={l.key} ctx={ctx} draw={l.draw} shadow={l.shadow} />
@@ -533,5 +593,22 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       </g>
       <Extras mood={mood} prop={prop} />
     </svg>
+  );
+}
+
+/**
+ * The same box as `<Mascot size className />`, empty: holds the figure's spot (and its responsive
+ * classes) while the look that goes in it is still loading, so the layout never jumps.
+ */
+export function MascotPlaceholder({ size = 120, className }: Pick<MascotProps, "size" | "className">) {
+  return (
+    <svg
+      viewBox={VB.join(" ")}
+      width={size}
+      height={size * 1.2}
+      className={cn("mscRoot avRoot shrink-0 overflow-visible", className)}
+      aria-hidden
+      data-placeholder
+    />
   );
 }

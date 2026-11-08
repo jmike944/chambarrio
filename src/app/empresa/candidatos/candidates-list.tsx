@@ -9,6 +9,7 @@ import { Eyebrow, HeroCard, Panel } from "@/components/chamba/primitives";
 import { CountUp } from "@/components/chamba/motion";
 import { CategoryIcon } from "@/components/chamba/job-icons";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyScene } from "@/components/chamba/art/my-mascot";
 import { Burst, Doodle } from "@/components/chamba/art/doodles";
 import { EmployerError, EmployerGate } from "@/components/empresa/employer-gate";
 import { AccessTag, HARD_SM, INK_BUTTON, WHITE_BUTTON } from "@/components/empresa/workwear";
@@ -144,7 +145,7 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
           aria-hidden
           className="relative -mx-6 mt-5 -mb-6 flex items-end justify-between sm:absolute sm:right-0 sm:bottom-0 sm:m-0 sm:w-[40%] sm:flex-col-reverse sm:items-end sm:justify-start xl:relative xl:right-auto xl:bottom-auto xl:-mx-7 xl:mt-5 xl:-mb-7 xl:w-auto xl:flex-row xl:items-end xl:justify-between"
         >
-          <Scene name="busqueda" className="w-48 translate-x-3 translate-y-3 sm:w-56" />
+          <MyScene name="busqueda" className="w-48 translate-x-3 translate-y-3 sm:w-56" />
           <Burst
             size={92}
             color="var(--limon)"
@@ -182,7 +183,7 @@ function AllApplicants({ jobs }: { jobs: MyJob[] }) {
           </Panel>
         ) : applicants.length === 0 || inRadius.length === 0 ? (
           <Panel tone="lila" className={cn("flex flex-col items-center text-center", RUG)}>
-            <Scene name="vacio" className="w-52" />
+            <MyScene name="vacio" className="w-52" />
             <h2 className="mt-2 font-display text-[1.4rem] font-extrabold">
               {applicants.length === 0 ? "Aún nadie se postula" : "Nadie en este radio"}
             </h2>

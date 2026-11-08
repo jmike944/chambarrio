@@ -20,8 +20,8 @@ import { Switch } from "@/components/ui/switch";
 import { BLOCK_CLASS, HeroCard, Panel, PanelHeader, SectionLabel, StatTile } from "@/components/chamba/primitives";
 import { CountUp, Sticker } from "@/components/chamba/motion";
 import { CategoryArt, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
+import { Mascot } from "@/components/chamba/art/mascot";
 import { Doodle, HazardTape } from "@/components/chamba/art/doodles";
 import { useMyCompany } from "@/lib/data/catalog";
 import { useLiveUser } from "@/lib/live/session";
@@ -286,6 +286,7 @@ export function LiveDashboard() {
               </Button>
             </div>
           </div>
+          {/* Chambarrio's own support / plans: the brand mascot, not the user. */}
           <Mascot mood="saluda" prop="telefono" size={78} className="-mr-2 -mb-6 shrink-0" />
         </div>
       </Panel>

@@ -17,8 +17,8 @@ import {
 import { BLOCK_CLASS, Chip, HeroCard, Panel, PanelHeader, type BlockTone } from "@/components/chamba/primitives";
 import { CountUp, Sticker } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { JobRow } from "@/components/chamba/job-row";
 import { Button } from "@/components/ui/button";
@@ -162,7 +162,7 @@ export function ApplicationsList() {
           <PanelHeader icon={Bookmark01Icon} title="Guardadas" count={saved.length} />
           {saved.length === 0 ? (
             <div className="flex items-center gap-4 py-2">
-              <Mascot mood="duerme" size={72} />
+              <MyMascot mood="duerme" size={72} />
               <p className="text-[0.98rem] leading-snug text-muted-foreground">
                 Guarda vacantes con el <HugeiconsIcon icon={Bookmark01Icon} className="inline size-4 align-[-2px]" /> para verlas después.
               </p>
@@ -308,7 +308,7 @@ function AttentionHero({ p, now, onDetails }: { p: ApplicationPipeline; now: num
           </p>
           <MiniTrack p={p} inverse />
         </div>
-        <Mascot mood={STEP_MOOD[step]} prop={step === "contratada" ? "trofeo" : "casco"} size={88} className="-mr-2 -mb-1 shrink-0 sm:-mr-3" />
+        <MyMascot mood={STEP_MOOD[step]} prop={step === "contratada" ? "trofeo" : "casco"} size={88} className="-mr-2 -mb-1 shrink-0 sm:-mr-3" />
       </div>
 
       <div className="mt-auto grid gap-2.5 pt-5 sm:grid-cols-2">
@@ -345,7 +345,7 @@ function EmptyHero() {
         <p className="min-w-0 flex-1 text-[1rem] leading-snug text-primary-foreground/85">
           Un toque y listo, sin currículum. Aquí vas a ver cuándo la empresa vea tu postulación, tu entrevista y su respuesta.
         </p>
-        <Scene name="busqueda" className="w-32 shrink-0 sm:w-40" />
+        <MyScene name="busqueda" className="w-32 shrink-0 sm:w-40" />
       </div>
       <Button variant="lime" size="xl" className="mt-auto w-full" asChild>
         <Link href="/vacantes">Ve las que están cerca de ti</Link>

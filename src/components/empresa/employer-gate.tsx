@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Eyebrow } from "@/components/chamba/primitives";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyScene } from "@/components/chamba/art/my-mascot";
 import { HARD, HARD_SM, INK_BUTTON, OUTLINE } from "@/components/empresa/workwear";
 import { useMyCompany, type MyCompany } from "@/lib/data/catalog";
 import { cn } from "@/lib/utils";
@@ -93,7 +94,7 @@ export function EmployerError({ message, onRetry, className }: { message?: strin
     >
       <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-dots opacity-50" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Scene name="vacio" className="mx-auto w-40 shrink-0 sm:mx-0" />
+        <MyScene name="vacio" className="mx-auto w-40 shrink-0 sm:mx-0" />
         <div className="min-w-0">
           <Eyebrow>Algo falló</Eyebrow>
           <h2 className="mt-1.5 font-display text-[1.5rem] leading-tight font-extrabold tracking-[-0.03em]">

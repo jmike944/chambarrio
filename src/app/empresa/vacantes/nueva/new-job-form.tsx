@@ -16,6 +16,7 @@ import { BLOCK_CLASS, DistanceRing, Eyebrow, type BlockTone } from "@/components
 import { confetti, springs } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyScene } from "@/components/chamba/art/my-mascot";
 import {
   FIELD,
   HARD,
@@ -797,7 +798,7 @@ function NewJobFormBody({ companyName }: { companyName: string }) {
               transition={springs.bouncy}
               className={cn("block-limon w-full max-w-sm rounded-panel p-6 text-center", OUTLINE, HARD)}
             >
-              <Scene name="exito" className="mx-auto w-52" />
+              <MyScene name="exito" className="mx-auto w-52" />
               <p className="mt-3 font-display text-[2rem] leading-none font-extrabold tracking-[-0.04em]">¡Ya quedó!</p>
               <p className="mt-2 text-[1.02rem] text-muted-foreground">
                 Tu vacante ya está publicada. ¡Chamba a la vista para tu colonia!

@@ -27,8 +27,6 @@ import {
 import { Panel, rotateTone, surface, type BlockTone } from "@/components/chamba/primitives";
 import { CountUp, springs } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
-import { Mascot } from "@/components/chamba/art/mascot";
-import { Scene } from "@/components/chamba/art/scenes";
 import { Doodle, Marquee } from "@/components/chamba/art/doodles";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/data/categories";
 import { useCatalog } from "@/lib/data/catalog";
@@ -40,6 +38,7 @@ import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
 import { useApp, useJobsByDistance } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { CatalogErrorPanel, InkSkeleton, JobCardSkeletons, LiveEmptyNearby, LoadingNote, PickHomeBanner, StaleNote } from "./_seeker/states";
+import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 
 const SHIFTS: Shift[] = ["Matutino", "Vespertino", "Nocturno", "Mixto", "Rotativo"];
 const TYPES: EmploymentType[] = ["Tiempo completo", "Medio tiempo", "Temporal", "Fines de semana"];
@@ -391,11 +390,11 @@ export function JobSearch() {
           aria-hidden
           className="pointer-events-none absolute right-2 bottom-10 -z-10 hidden animate-float sm:block lg:right-10 lg:bottom-8"
         >
-          <Mascot mood="piensa" prop="lupa" size={150} className="lg:hidden" />
-          <Mascot mood="piensa" prop="lupa" size={190} className="hidden lg:block" />
+          <MyMascot mood="piensa" prop="lupa" size={150} className="lg:hidden" />
+          <MyMascot mood="piensa" prop="lupa" size={190} className="hidden lg:block" />
         </div>
         <div aria-hidden className="pointer-events-none absolute top-3 right-3 animate-float sm:hidden">
-          <Mascot mood="piensa" prop="lupa" size={92} />
+          <MyMascot mood="piensa" prop="lupa" size={92} />
         </div>
 
         <div className="max-w-2xl">
@@ -597,7 +596,7 @@ export function JobSearch() {
           <LiveEmptyNearby radiusKm={radiusKm} onWiden={(r) => void setRadius(r)} />
         ) : results.length === 0 ? (
           <Panel tone="cielo" className="animate-pop-in overflow-hidden text-center">
-            <Scene name="vacio" className="mx-auto w-full max-w-[18rem]" />
+            <MyScene name="vacio" className="mx-auto w-full max-w-[18rem]" />
             <h3 className="mt-3 font-display text-[1.6rem] leading-tight font-extrabold tracking-[-0.03em]">
               ¡Uy! Aquí no hay chamba… todavía
             </h3>

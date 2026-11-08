@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight01Icon, Clock01Icon, QuoteDownIcon, UserIcon } from "@hugeicons/core-free-icons";
-import { Mascot, type MascotMood } from "@/components/chamba/art/mascot";
+import type { MascotMood } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyMascot } from "@/components/chamba/art/my-mascot";
 import type { ApplicationPipeline } from "@/lib/data/types";
 import {
   DEFAULT_DECLINE_MESSAGE,
@@ -378,7 +379,7 @@ export function StatusHeader({
         </H>
         <MiniTrack p={p} className="mt-3 max-w-xs" />
       </div>
-      <Mascot
+      <MyMascot
         mood={STEP_MOOD[step]}
         prop={step === "contratada" ? "trofeo" : "casco"}
         size={84}

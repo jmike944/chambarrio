@@ -9,8 +9,8 @@ import { ArrowLeft01Icon, ArrowRight01Icon, ArrowRight02Icon, Gps01Icon, Store01
 import { JobRow, companyLabel } from "@/components/chamba/job-row";
 import { CATEGORY_BLOCK, CategoryIcon } from "@/components/chamba/job-icons";
 import { CountUp, useConfetti } from "@/components/chamba/motion";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyMascot } from "@/components/chamba/art/my-mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import { useCatalog } from "@/lib/data/catalog";
@@ -48,7 +48,7 @@ const JobMap = dynamic(() => import("./job-map").then((m) => m.JobMap), {
   loading: () => (
     <div className="grid size-full place-items-center bg-[#f2ead8] text-[#160f33] dark:bg-[#14121c] dark:text-[#f2efff]">
       <div className="flex flex-col items-center gap-2">
-        <Mascot mood="piensa" prop="casco" size={84} />
+        <MyMascot mood="piensa" prop="casco" size={84} />
         <p className="font-display text-lg font-bold">Cargando mapa…</p>
       </div>
     </div>
@@ -206,7 +206,7 @@ function SelectedJobCard({
     <div className={cn("relative pt-14", className)}>
       {/* the crew boss peeking over the card */}
       <div aria-hidden className="pointer-events-none absolute top-0 left-5 z-0 translate-y-2">
-        <Mascot mood={inside ? "saluda" : "piensa"} prop={inside ? "casco" : "lupa"} size={70} />
+        <MyMascot mood={inside ? "saluda" : "piensa"} prop={inside ? "casco" : "lupa"} size={70} />
       </div>
       <Doodle name="rayo" color="#ffd84a" className="pointer-events-none absolute top-6 left-[6.5rem] z-0 size-6 rotate-12" />
 
@@ -540,7 +540,7 @@ export function MapScreen() {
             ))}
             {inRadius.length === 0 && !loading && !failed && live ? (
               <li className="flex flex-col items-center gap-2 py-6 text-center">
-                <Mascot mood="piensa" prop="casco" size={90} />
+                <MyMascot mood="piensa" prop="casco" size={90} />
                 <p className="font-display text-lg font-bold">Todavía no hay vacantes a {radiusKm} km.</p>
                 <p className="opacity-75">Amplía tu radio o vuelve pronto.</p>
                 {nextStop ? (
@@ -551,7 +551,7 @@ export function MapScreen() {
               </li>
             ) : inRadius.length === 0 && !loading && !failed ? (
               <li className="flex flex-col items-center gap-2 py-6 text-center">
-                <Mascot mood="piensa" prop="lupa" size={90} />
+                <MyMascot mood="piensa" prop="lupa" size={90} />
                 <p className="font-display text-lg font-bold">No hay vacantes en este radio.</p>
                 <p className="opacity-75">Prueba con uno más grande.</p>
               </li>

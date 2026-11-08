@@ -17,9 +17,9 @@ export type SceneName =
   | "barrio" // Saltillo street strip: houses, a plant, cathedral towers, Sierra de Zapalinamé, bus + cars driving, sun — wide hero/banner
   | "radar" // a house with pulsing rings and job pins popping up around it
   | "reparto" // delivery van zooming with parcels, speed lines
-  | "exito" // Chambita celebrating with a trophy + confetti (application sent / hired)
-  | "busqueda" // Chambita with a magnifying glass over a mini map
-  | "vacio" // empty state: Chambita napping on a bench / tumbleweed, zZz
+  | "exito" // Chambita (or the user, see `mascot`) celebrating with a trophy + confetti (application sent / hired)
+  | "busqueda" // Chambita (or the user) with a magnifying glass over a mini map
+  | "vacio" // empty state: Chambita (or the user) napping on a bench / tumbleweed, zZz
   | "contratado" // high-five (a worker's glove meets the boss's bare hand): you got the job
   | "negocio" // storefront with striped awning + "open" sign, a regular giving a thumbs up — employer side
   | "codigo" // phone with chat bubbles + a code bubble, Chambita waving — sign-in / OTP
@@ -54,7 +54,21 @@ export type SceneProps = {
    * scene. The parent must clip (overflow-hidden) — figures cut at the bottom edge rely on it.
    */
   bleed?: boolean;
+  /**
+   * exito / busqueda / vacio: whose look plays the mascot's part (ignored by the other scenes). Omitted:
+   * el Chambas, the brand mascot. A config: that person (in the app, the user: my-mascot.tsx · MyScene).
+   * null: the spot stays empty, holding it while that look loads so a different face never flashes.
+   */
+  mascot?: AvatarConfig | null;
+  /** Extra classes on that figure (e.g. a fade-in when it arrives after the rest of the scene). */
+  mascotClassName?: string;
 };
+
+/** The scenes the mascot plays in (the ones `mascot` recasts). */
+export type MascotSceneName = "exito" | "busqueda" | "vacio";
+
+/** Who plays the mascot in a scene: el Chambas (undefined), someone's look, or nobody yet (null). */
+type Cast = { mascot?: AvatarConfig | null; mascotClassName?: string };
 
 /* ------------------------------------------------------------------ */
 /* Palette + drawing kit                                               */
@@ -647,7 +661,7 @@ function Reparto() {
   );
 }
 
-function Exito({ animated }: { animated: boolean }) {
+function Exito({ animated, mascot, mascotClassName }: { animated: boolean } & Cast) {
   return (
     <>
       <Rays cx={150} cy={130} r={170} />
@@ -675,7 +689,9 @@ function Exito({ animated }: { animated: boolean }) {
       {/* champion */}
       <G x={80} y={27}>
         <g {...a("hop", 1.1, { v: { "--a": "-8px" } })}>
-          <Mascot mood="festeja" prop="trofeo" size={140} animated={animated} />
+          {mascot === null ? null : (
+            <Mascot mood="festeja" prop="trofeo" size={140} animated={animated} config={mascot} className={mascotClassName} />
+          )}
         </g>
       </G>
       <Confetti
@@ -715,7 +731,7 @@ function MiniMap() {
   );
 }
 
-function Busqueda({ animated }: { animated: boolean }) {
+function Busqueda({ animated, mascot, mascotClassName }: { animated: boolean } & Cast) {
   return (
     <>
       <Halftone x={180} y={20} cols={8} rows={6} gap={15} r={4} />
@@ -729,7 +745,9 @@ function Busqueda({ animated }: { animated: boolean }) {
       <SlamPin x={232} y={268} fill={VIO} dl={-2} s={0.8} />
       <G x={-8} y={10}>
         <g {...a("bob", 2.4, { v: { "--a": "-7px" } })}>
-          <Mascot mood="piensa" prop="lupa" size={152} animated={animated} />
+          {mascot === null ? null : (
+            <Mascot mood="piensa" prop="lupa" size={152} animated={animated} config={mascot} className={mascotClassName} />
+          )}
         </g>
       </G>
     </>
@@ -745,7 +763,7 @@ function Tumbleweed() {
   );
 }
 
-function Vacio({ animated }: { animated: boolean }) {
+function Vacio({ animated, mascot, mascotClassName }: { animated: boolean } & Cast) {
   return (
     <>
       <Cloud x={40} y={30} s={0.8} t={12} dx="40px" />
@@ -773,7 +791,9 @@ function Vacio({ animated }: { animated: boolean }) {
       {/* napping worker */}
       <G x={140} y={72} r={-4}>
         <g {...a("bob", 3.2, { v: { "--a": "-3px" } })}>
-          <Mascot mood="duerme" prop="casco" size={150} animated={animated} />
+          {mascot === null ? null : (
+            <Mascot mood="duerme" prop="casco" size={150} animated={animated} config={mascot} className={mascotClassName} />
+          )}
         </g>
       </G>
       {/* tumbleweed */}
@@ -1083,7 +1103,8 @@ function Equipo({ animated }: { animated: boolean }) {
   );
 }
 
-export function Scene({ name, className, animated = true, title, bleed = false }: SceneProps) {
+export function Scene({ name, className, animated = true, title, bleed = false, mascot, mascotClassName }: SceneProps) {
+  const cast: Cast = { mascot, mascotClassName };
   const r = SCENE_RATIO[name];
   const w = 300 * r;
   let art: ReactNode;
@@ -1098,13 +1119,13 @@ export function Scene({ name, className, animated = true, title, bleed = false }
       art = <Reparto />;
       break;
     case "exito":
-      art = <Exito animated={animated} />;
+      art = <Exito animated={animated} {...cast} />;
       break;
     case "busqueda":
-      art = <Busqueda animated={animated} />;
+      art = <Busqueda animated={animated} {...cast} />;
       break;
     case "vacio":
-      art = <Vacio animated={animated} />;
+      art = <Vacio animated={animated} {...cast} />;
       break;
     case "contratado":
       art = <Contratado animated={animated} />;

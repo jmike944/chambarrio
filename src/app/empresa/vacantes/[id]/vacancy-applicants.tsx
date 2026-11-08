@@ -31,9 +31,7 @@ import {
 import { BLOCK_CLASS, Eyebrow, SectionLabel } from "@/components/chamba/primitives";
 import { CountUp } from "@/components/chamba/motion";
 import { CategoryArt, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { HazardTape } from "@/components/chamba/art/doodles";
-import { Scene } from "@/components/chamba/art/scenes";
 import { EmployerError, EmployerGate } from "@/components/empresa/employer-gate";
 import { UnlockDialog } from "@/components/empresa/unlock-dialog";
 import { Padlock } from "@/components/empresa/padlock";
@@ -57,6 +55,7 @@ import { formatKm } from "@/lib/geo";
 import { UNLOCK_PRICE, useEmployerLocations, useIsLive, useIsUnlocked, usePaymentsEnabled } from "@/lib/store";
 import { branchIdOf, coloniaText } from "@/app/empresa/sucursales/branch-kit";
 import { cn } from "@/lib/utils";
+import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 
 type CSSVars = React.CSSProperties & Record<`--${string}`, string | number>;
 
@@ -101,7 +100,7 @@ function VacancyNotFound() {
           "dark:border-white/25",
         )}
       >
-        <Scene name="vacio" className="w-52" />
+        <MyScene name="vacio" className="w-52" />
         <h1 className="mt-3 font-display text-[1.6rem] leading-tight font-extrabold tracking-[-0.03em]">
           No encontramos esta vacante
         </h1>
@@ -340,7 +339,7 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
               </h2>
             </div>
             <div className="relative -mt-2 -mr-2 shrink-0">
-              <Mascot mood={unlocked ? "saluda" : "piensa"} prop={unlocked ? "telefono" : "lupa"} size={78} />
+              <MyMascot mood={unlocked ? "saluda" : "piensa"} prop={unlocked ? "telefono" : "lupa"} size={78} />
               <Padlock open={unlocked} className="absolute -bottom-3 -left-5 size-14" />
             </div>
           </div>
@@ -435,7 +434,7 @@ function VacancyApplicantsBody({ job }: { job: MyJob }) {
             <EmployerError message={listError} onRetry={reload} />
           ) : applicants.length === 0 ? (
             <div className={cn("block-cielo flex flex-col items-center rounded-panel p-6 text-center", OUTLINE, HARD_SM)}>
-              <Scene name="busqueda" className="w-44" />
+              <MyScene name="busqueda" className="w-44" />
               <p className="mt-2 font-display text-[1.3rem] font-extrabold">Aún no hay postulantes</p>
               <p className="mt-1 max-w-sm text-[0.95rem] text-muted-foreground">
                 Tu vacante ya le aparece a la gente que vive cerca. Te avisamos en cuanto alguien se postule.

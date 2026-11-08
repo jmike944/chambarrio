@@ -21,8 +21,8 @@ import { BLOCK_CLASS, HeroCard, type BlockTone } from "@/components/chamba/primi
 import { Sticker } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyMascot } from "@/components/chamba/art/my-mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { Button } from "@/components/ui/button";
 import { useCatalog, useCatalogSource, useJobsById, useJobsByDistance } from "@/lib/data/catalog";
 import { useApp } from "@/lib/store";
@@ -215,7 +215,7 @@ function Feed({ items, loading, live, now }: { items: Notice[]; loading: boolean
           </section>
         ) : items.length === 0 ? (
           <div className={cn("animate-pop-in rounded-panel p-6 text-center", BLOCK_CLASS.menta, HARD)}>
-            <Mascot mood="duerme" prop="casco" size={120} className="mx-auto w-28" />
+            <MyMascot mood="duerme" prop="casco" size={120} className="mx-auto w-28" />
             <p className="mt-2 font-display text-[1.45rem] leading-tight font-extrabold tracking-[-0.03em]">Pronto verás tus avisos aquí</p>
             <p className="mx-auto mt-1.5 max-w-sm text-muted-foreground">
               Cuando una empresa vea tu postulación o salga una vacante cerca de tu casa, te avisamos aquí

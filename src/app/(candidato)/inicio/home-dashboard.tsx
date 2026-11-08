@@ -23,8 +23,8 @@ import {
 } from "@/components/chamba/primitives";
 import { CountUp, Sticker, confetti } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
-import { Mascot } from "@/components/chamba/art/mascot";
 import { Scene } from "@/components/chamba/art/scenes";
+import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 import { Doodle, Marquee } from "@/components/chamba/art/doodles";
 import { RadiusBar } from "@/components/chamba/radius-bar";
 import { Radar } from "@/components/chamba/radar";
@@ -161,7 +161,7 @@ export function HomeDashboard() {
               )}
             </p>
           </div>
-          <Mascot
+          <MyMascot
             mood="saluda"
             prop="casco"
             size={132}
@@ -253,7 +253,7 @@ export function HomeDashboard() {
             <LiveEmptyNearby radiusKm={radiusKm} onWiden={changeRadius} className="mt-3" />
           ) : nearest.length === 0 ? (
             <Panel tone="menta" className={cn("mt-3 flex items-center gap-4", PLATE)}>
-              <Scene name="vacio" className="w-28 shrink-0" />
+              <MyScene name="vacio" className="w-28 shrink-0" />
               <p className="font-semibold">
                 No hay vacantes a {radiusKm} km todavía. Amplía tu radio para ver más.
               </p>

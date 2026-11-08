@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DistanceRing, Eyebrow } from "@/components/chamba/primitives";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
-import { Scene } from "@/components/chamba/art/scenes";
 import { EmployerError, EmployerGate } from "@/components/empresa/employer-gate";
 import { ApplicantAvatar } from "@/components/empresa/applicant-avatar";
 import { StrengthMeter, StrengthStamp } from "@/components/empresa/applicant-strength";
@@ -38,6 +37,7 @@ import { useApp, useIsUnlocked, usePaymentsEnabled } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { PipelineCard } from "./pipeline-card";
 import { NotesPanel, TimelinePanel } from "./notes-timeline";
+import { MyScene } from "@/components/chamba/art/my-mascot";
 
 /*
  * /empresa/vacantes/[id]/postulantes/[appId] — one applicant, end to end (demo + live):
@@ -535,7 +535,7 @@ function ApplicantNotFound({ jobId }: { jobId: string | null }) {
     <>
       <BackLink href={jobId ? `/empresa/vacantes/${jobId}#postulantes` : "/empresa/candidatos"} label={jobId ? "Postulantes" : "Candidatos"} />
       <section className={cn("mt-4 flex flex-col items-center rounded-panel bg-card p-8 text-center", OUTLINE, HARD, "dark:border-white/25")}>
-        <Scene name="vacio" className="w-52" />
+        <MyScene name="vacio" className="w-52" />
         <h1 className="mt-3 font-display text-[1.6rem] leading-tight font-extrabold tracking-[-0.03em]">No encontramos esta postulación</h1>
         <p className="mt-1.5 max-w-sm text-muted-foreground">
           Puede que el enlace esté mal o que no sea de una de tus vacantes. Revisa tu lista de candidatos.

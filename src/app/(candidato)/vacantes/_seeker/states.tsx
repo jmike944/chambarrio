@@ -6,12 +6,11 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Location06Icon, RefreshIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/chamba/primitives";
-import { Mascot } from "@/components/chamba/art/mascot";
-import { Scene } from "@/components/chamba/art/scenes";
 import { useCatalog } from "@/lib/data/catalog";
 import { RADIUS_STOPS, type RadiusKm } from "@/lib/geo";
 import { useApp, useIsLive } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 
 /*
  * Shared loading / error / empty states for the job-seeker screens (inicio, vacantes, mapa,
@@ -113,7 +112,7 @@ export function CatalogErrorPanel({
   }
   return (
     <Panel tone="durazno" role="alert" className={cn("animate-pop-in overflow-hidden text-center", EDGE, className)}>
-      <Mascot mood="piensa" prop="casco" size={120} className="mx-auto w-28" />
+      <MyMascot mood="piensa" prop="casco" size={120} className="mx-auto w-28" />
       <h3 className="mt-2 font-display text-[1.5rem] leading-tight font-extrabold tracking-[-0.03em]">{title}</h3>
       <p className="mx-auto mt-1.5 max-w-sm text-muted-foreground">
         {error ?? catalog.error ?? "Revisa tu conexión a internet e inténtalo otra vez en un momento."}
@@ -160,7 +159,7 @@ export function LiveEmptyNearby({
   const widen = onWiden ?? ((r: RadiusKm) => void setRadius(r));
   return (
     <Panel tone="menta" className={cn("animate-pop-in overflow-hidden text-center", EDGE, className)}>
-      <Mascot mood="piensa" prop="casco" size={compact ? 96 : 132} className={cn("mx-auto", compact ? "w-24" : "w-32")} />
+      <MyMascot mood="piensa" prop="casco" size={compact ? 96 : 132} className={cn("mx-auto", compact ? "w-24" : "w-32")} />
       <h3 className="mt-2 font-display text-[1.45rem] leading-tight font-extrabold tracking-[-0.03em]">
         Todavía no hay vacantes a {radiusKm} km
       </h3>
@@ -198,5 +197,5 @@ export function PickHomeBanner({ className }: { className?: string }) {
 
 /** Generic "this vacancy is gone" block used by the detail page. */
 export function GoneScene({ className }: { className?: string }) {
-  return <Scene name="vacio" className={cn("mx-auto w-full max-w-[16rem]", className)} />;
+  return <MyScene name="vacio" className={cn("mx-auto w-full max-w-[16rem]", className)} />;
 }

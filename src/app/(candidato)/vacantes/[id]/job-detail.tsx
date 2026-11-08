@@ -32,7 +32,7 @@ import { Panel, StatTile, surface, type BlockTone } from "@/components/chamba/pr
 import { CountUp, Reveal, Sticker, useConfetti } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon, CATEGORY_BLOCK } from "@/components/chamba/job-icons";
 import { Scene } from "@/components/chamba/art/scenes";
-import { Mascot } from "@/components/chamba/art/mascot";
+import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 import { Doodle } from "@/components/chamba/art/doodles";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import { useCatalog, useJob } from "@/lib/data/catalog";
@@ -503,7 +503,7 @@ function ApplyConfirmation({ company, km, tone }: { company: Company; km: number
       <div className="grid gap-4 @2xl:grid-cols-[0.9fr_1.1fr] @2xl:grid-rows-[auto_1fr] @2xl:gap-x-6">
         <div className="min-w-0 @2xl:col-start-1 @2xl:row-start-1">
           <div className="flex items-start gap-3">
-            <Scene name="exito" className="-mt-1 -ml-1 w-24 shrink-0 sm:w-28" />
+            <MyScene name="exito" className="-mt-1 -ml-1 w-24 shrink-0 sm:w-28" />
             <div className="min-w-0">
               <p className="text-[0.75rem] font-extrabold tracking-[0.14em] uppercase">¡Ya quedó!</p>
               <h2 id="ya-quedo-titulo" className="mt-1 font-display text-[1.45rem] leading-[1.05] font-extrabold tracking-[-0.03em] sm:text-[1.8rem]">
@@ -834,7 +834,7 @@ function JobDetailView({
     <Panel tone="cielo" className={cn("relative flex h-full flex-col overflow-hidden border-2 border-ink", HARD)}>
       <div className="flex items-start justify-between gap-3">
         <BlockHeader icon={Clock01Icon} title="¿Qué sigue?" />
-        <Mascot mood="saluda" prop="casco" size={72} className="-mt-2 -mr-1 shrink-0" />
+        <MyMascot mood="saluda" prop="casco" size={72} className="-mt-2 -mr-1 shrink-0" />
       </div>
       <NotAppliedSteps className="-mt-1" />
     </Panel>
