@@ -368,6 +368,12 @@
   html.dark {
     color-scheme: dark;
   }
+  /* Browsers give <fieldset> min-inline-size: min-content, so a horizontally scrolling chip row inside
+     one blows the whole form out to the row's full width (the "Agregar experiencia" sheet on iPhone). */
+  fieldset {
+    min-inline-size: 0;
+    min-width: 0;
+  }
   body {
     @apply bg-background text-foreground;
   }
