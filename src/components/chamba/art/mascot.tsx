@@ -12,14 +12,14 @@
  * avatar.css (pivots at shoulder / elbow) + mascot.css, only with `data-animated` and never
  * under prefers-reduced-motion.
  *
- * viewBox: -213 -105.5 426 511.2 (engine figure units: face centre at 0,0, soles at y 400).
+ * viewBox: -198 -105.5 396 475.2 (engine figure units: face centre at 0,0, soles at y SOLE = 364).
  * The viewer-RIGHT arm does the mood gesture; the viewer-LEFT arm holds the hand prop
  * (lupa, trofeo, paquete, telefono) or falls back to the mood's own pose.
  */
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { type ArmPose, L1, L2, POSE_SPECS, paintArm, placeArm } from "@/components/avatar/arms";
-import { paintLegs, paintTorso } from "@/components/avatar/body";
+import { type ArmPose, L1, L2, POSE_SPECS, paintArm, placeArm, shoulderCaps } from "@/components/avatar/arms";
+import { SOLE, paintLegs, paintTorso } from "@/components/avatar/body";
 import { AVATAR_PRESETS, type AvatarConfig, type Expression } from "@/components/avatar/config";
 import { paintHairBack, paintHead, paintHeadwear, paintNeck } from "@/components/avatar/head";
 import { type Look, resolveLook } from "@/components/avatar/look";
@@ -57,7 +57,8 @@ const CREMA = "#FFF6E0";
 const CARTON = "#F2B36B";
 const TINTA = "#2B2452";
 
-const VB = [-213, -105.5, 426, 511.2] as const;
+/** Width : height = 1 : 1.2, from the hard-hat beacons down to just under the soles (SOLE + 5.7). */
+const VB = [-198, -105.5, 396, 475.2] as const;
 
 /* ── looks ───────────────────────────────────────────────────────────── */
 
@@ -109,12 +110,17 @@ const MOODS: Record<MascotMood, MoodSpec> = {
 };
 
 type HandProp = "lupa" | "trofeo" | "paquete" | "telefono";
-/** Viewer-left arm when it carries something. "thumb" = side-on fist, thumb up along the handle. */
+/**
+ * Viewer-left arm when it carries something. "grip" = side-on fist closed round the handle (the handle
+ * leaves its top); "thumb" = side-on fist, thumb up along the phone.
+ */
 const HOLD: Record<HandProp, ArmPose> = {
-  lupa: { a1: 86, a2: -56, hand: "thumb", screen: 2, fore: "mscScan" },
+  lupa: { a1: 86, a2: -56, hand: "grip", screen: 2, fore: "mscScan" },
   telefono: { a1: 88, a2: -64, hand: "thumb", screen: 4, fore: "mscBuzz" },
   trofeo: { a1: -40, a2: -98, hand: "fist", hb: 6, arm: "avPump" },
-  paquete: { a1: -24, a2: -102, hand: "relax", hb: 2 },
+  // carried at the shoulder on the upturned hand: the wrist just under the parcel's bottom edge, the hand
+  // behind it, the fingertips curled over the edge onto its face (paintParcel)
+  paquete: { a1: 37, a2: -80, hand: "relax", hb: -4 },
 };
 const isHandProp = (p: MascotProp): p is HandProp => p === "lupa" || p === "trofeo" || p === "paquete" || p === "telefono";
 
@@ -259,8 +265,19 @@ function paintPhone(k: Kit): ReactNode {
   );
 }
 
-/** Parcel resting on the viewer-left shoulder, behind the head (figure units). */
-function paintParcel(k: Kit): ReactNode {
+/**
+ * Gloved fingertips curled up over the parcel's bottom edge (parcel frame): the hand carrying it from
+ * below (HOLD.paquete, wrist at ≈ (−105, 62) here) is hidden behind it. Index → pinky, middle longest.
+ */
+const PARCEL_GRIP: ReadonlyArray<readonly [number, number]> = [
+  [-116.5, 7.5],
+  [-108.8, 10],
+  [-101.1, 9],
+  [-93.6, 6.5],
+];
+
+/** Parcel carried at the viewer-left shoulder, behind the head (figure units), with the carrying fingers. */
+function paintParcel(k: Kit, L: Look): ReactNode {
   return (
     <g transform="rotate(-6 -112 14)">
       {k.part({ d: rrect(-170, -36, 116, 88, 6) }, CARTON)}
@@ -272,6 +289,9 @@ function paintParcel(k: Kit): ReactNode {
           {k.line("M-85 34L-78 14M-74 34L-67 14", 3.4)}
         </>
       )}
+      {PARCEL_GRIP.map(([x, h]) => (
+        <g key={x}>{k.part({ p: [x, 55], q: [x, 55 - h], w: 9.6 }, L.gloveFill, true)}</g>
+      ))}
     </g>
   );
 }
@@ -279,15 +299,18 @@ function paintParcel(k: Kit): ReactNode {
 /* ── extras around the figure (plain strokes, no kit) ─────────────────── */
 /* Loose motion marks use currentColor, so they stay visible on dark surfaces (the text colour). */
 
-const CONFETTI: ReadonlyArray<readonly [number, number, string, number]> = [
-  [-182, -70, SOL, 20],
-  [176, -86, CIELO, -25],
-  [-204, 70, MENTA, 40],
-  [198, 40, NARANJA, -15],
-  [-112, -104, LIMON, 60],
-  [104, -106, CHILE, -50],
-  [-196, 214, CIELO, 15],
-  [196, 196, SOL, 70],
+type Bit = readonly [number, number, string, number];
+/** Where a raised trophy's cup is (HOLD.trofeo): no confetti there. */
+const OVER_TROPHY: Bit = [-112, -98, LIMON, 60];
+const CONFETTI: ReadonlyArray<Bit> = [
+  [-172, -70, SOL, 20],
+  [166, -86, CIELO, -25],
+  [-178, 88, MENTA, 40], // under a shouldered parcel's corner (HOLD.paquete), not on it
+  [178, 36, NARANJA, -15],
+  OVER_TROPHY,
+  [104, -100, CHILE, -50],
+  [-176, 196, CIELO, 15],
+  [176, 180, SOL, 70],
 ];
 
 function Ink({ d, w = 9, c = INK }: { d: string; w?: number; c?: string }) {
@@ -299,7 +322,7 @@ function Extras({ mood, prop }: { mood: MascotMood; prop: MascotProp }) {
   if (mood === "festeja") {
     out.push(
       <g key="c">
-        {CONFETTI.map(([x, y, c, r], i) => (
+        {CONFETTI.filter((b) => prop !== "trofeo" || b !== OVER_TROPHY).map(([x, y, c, r], i) => (
           <g key={i} transform={`translate(${x} ${y}) rotate(${r})`}>
             <rect
               className="mscConfetti"
@@ -317,10 +340,10 @@ function Extras({ mood, prop }: { mood: MascotMood; prop: MascotProp }) {
         ))}
         {(
           [
-            [-84, 395, 17],
-            [84, 395, 17],
-            [-118, 388, 11.5],
-            [118, 388, 11.5],
+            [-84, SOLE - 5, 17],
+            [84, SOLE - 5, 17],
+            [-118, SOLE - 12, 11.5],
+            [118, SOLE - 12, 11.5],
           ] as const
         ).map(([x, y, r], i) => (
           <circle key={i} className="mscDust" style={{ animationDelay: `${(i % 2) * 0.05}s` }} cx={x} cy={y} r={r} fill={CREMA} stroke={INK} strokeWidth={7} />
@@ -330,10 +353,10 @@ function Extras({ mood, prop }: { mood: MascotMood; prop: MascotProp }) {
   }
   if (mood === "piensa") {
     out.push(
-      <g key="q" className="mscPart mscQuestion" style={{ transformOrigin: "176px -54px" }}>
-        <Ink d="M152-74Q152-100 176-100Q200-100 200-78Q200-62 182-54Q176-51 176-40" w={25} />
-        <Ink d="M152-74Q152-100 176-100Q200-100 200-78Q200-62 182-54Q176-51 176-40" w={12} c={VIOLETA} />
-        <circle cx={176} cy={-14} r={10} fill={VIOLETA} stroke={INK} strokeWidth={6.5} />
+      <g key="q" className="mscPart mscQuestion" style={{ transformOrigin: "160px -54px" }}>
+        <Ink d="M136-74Q136-100 160-100Q184-100 184-78Q184-62 166-54Q160-51 160-40" w={25} />
+        <Ink d="M136-74Q136-100 160-100Q184-100 184-78Q184-62 166-54Q160-51 160-40" w={12} c={VIOLETA} />
+        <circle cx={160} cy={-14} r={10} fill={VIOLETA} stroke={INK} strokeWidth={6.5} />
       </g>,
     );
   }
@@ -359,23 +382,26 @@ function Extras({ mood, prop }: { mood: MascotMood; prop: MascotProp }) {
     );
   }
   if (mood === "wow") {
+    // a raised trophy fills the left side (it has its own shine marks): surprise marks on the right only
+    const left = prop === "trofeo" ? "" : "M-74-96L-60-80M-100-66L-80-58";
     out.push(
       <g key="w" className="mscFlash">
-        <Ink d="M-74-96L-60-80M-100-66L-80-58M74-96L60-80M100-66L80-58" c="currentColor" />
+        <Ink d={`${left}M74-96L60-80M100-66L80-58`} c="currentColor" />
       </g>,
     );
   }
   if (mood === "saluda") {
     out.push(
       <g key="s" className="mscFlash">
-        <Ink d="M176-28Q190-4 176 20M196-46Q216-4 196 38" c="currentColor" />
+        <Ink d="M160-28Q174-4 160 20M180-46Q200-4 180 38" c="currentColor" />
       </g>,
     );
   }
-  if (prop === "trofeo") {
+  // shine marks out to the left of the raised trophy (festeja has its confetti there instead)
+  if (prop === "trofeo" && mood !== "festeja") {
     out.push(
       <g key="t" className="mscFlash">
-        <Ink d="M-170-46L-186-58M-116-62L-108-80M-176 0L-196-2" c="currentColor" />
+        <Ink d="M-140-92L-156-101M-158-52L-174-64M-164-6L-184-8" c="currentColor" />
       </g>,
     );
   }
@@ -397,7 +423,9 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
   const L = resolveLook(cfg, spec.expression);
   const held = isHandProp(prop) ? prop : null;
   const armL = held ? HOLD[held] : spec.L;
-  const armR = spec.R;
+  // crossed arms need both arms: holding something, the dozing mascot rests the other hand on its hip
+  const crossed = mood === "duerme" && !held;
+  const armR = mood === "duerme" && held ? HIP : spec.R;
 
   // Outline weight: the engine's 5 units, a bit heavier when small so the sticker edge survives.
   const sw = Math.min(9, Math.max(5, (1.8 * VB[2]) / size));
@@ -424,6 +452,8 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       </g>,
     );
 
+  // the shoulders belong to the shirt: the torso paints each arm's cap, fused with the cloth
+  const caps = shoulderCaps(L, armL, armR);
   const festejaDelay = mood === "festeja" && !held ? -0.45 : undefined;
   const drawL: Draw = (k) => placeArm(-1, L.B, paintArm(k, armL, L, "full", festejaDelay));
   const drawR: Draw = (k) => placeArm(1, L.B, paintArm(k, armR, L, "full"));
@@ -436,8 +466,9 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       key: "torso",
       draw: (k) => (
         <>
-          {paintTorso(k, L, "completo")}
-          {prop === "chef" ? (
+          {paintTorso(k, L, "completo", caps, crossed)}
+          {/* the chef's chest pin hides behind crossed arms, like the avatar's chest accessories */}
+          {prop === "chef" && !crossed ? (
             <g transform="translate(-27 88) scale(1.1)">
               {k.part({ d: "M0 18C-4.2 13-7 10-7 6.5A7 7 0 0 1 7 6.5C7 10 4.2 13 0 18Z" }, VIOLETA, k.sep / 1.1)}
               {k.flat({ c: [0, 6.5], r: 2.6 }, WHITE)}
@@ -446,7 +477,13 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
         </>
       ),
     },
-    ...(held === "paquete" ? [{ key: "parcel", draw: paintParcel, shadow: 3 }] : []),
+    // the carrying arm goes behind the parcel (its hand is under it), the parcel behind the head
+    ...(held === "paquete"
+      ? [
+          { key: "armL", draw: drawL, shadow: 3 },
+          { key: "parcel", draw: ((k) => paintParcel(k, L)) as Draw, shadow: 3 },
+        ]
+      : []),
     {
       key: "head",
       draw: (k) =>
@@ -467,8 +504,10 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
           },
         ]
       : []),
-    { key: "armL", draw: drawL, shadow: 3 },
+    ...(held === "paquete" ? [] : [{ key: "armL", draw: drawL, shadow: 3 }]),
     { key: "armR", draw: drawR, shadow: 3 },
+    // crossed arms: the left upper arm again, over the right hand tucked under it
+    ...(crossed ? [{ key: "armCover", draw: ((k) => placeArm(-1, L.B, paintArm(k, armL, L, "upper"))) as Draw, shadow: 3 }] : []),
   ];
 
   return (
@@ -484,7 +523,7 @@ export function Mascot({ mood = "feliz", prop = "ninguno", size = 120, animated 
       data-animated={animated || undefined}
     >
       {title ? <title>{title}</title> : null}
-      <ellipse className="mscGround" cx={0} cy={401} rx={94} ry={7.5} fill={INK} opacity={0.16} />
+      <ellipse className="mscGround" cx={0} cy={SOLE + 1} rx={94} ry={7.5} fill={INK} opacity={0.16} />
       {/* keyed by mood + prop: a change remounts the figure so every copy of an animated arm restarts in step */}
       <g key={`${mood}|${prop}|${size}`} className={cn("avA", mood === "festeja" ? "avHop" : "avBob")}>
         <ShadowOf ctx={ctx} layers={layers} offset={sw} />

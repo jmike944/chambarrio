@@ -1,14 +1,15 @@
 /*
- * Avatar engine · torso, outfits, hips, legs, feet and chest accessories — a MASS-BASED build.
+ * Avatar engine · torso, outfits, hips, legs, feet and chest accessories — "Trabajador fuerte" build.
  *
- * The body is a few rounded masses fused by the union painting: a ribcage / chest mass (the shirt),
- * a pelvis mass (the top of the pants, with the belt across it) and, in the arm layers, a round
- * deltoid ball per shoulder that the arm hangs from. Where the ribcage narrows into the wider pelvis
- * the silhouette pinches: that is the waist. Widths come from the build (look.ts · BUILDS); heights
- * are shared landmarks (Y), so every build fits every pose and framing.
+ * The torso is a trapezoid: a broad, square shoulder line (the trapezius runs from the collar to the
+ * build's shoulder top, where each arm's sleeve cap takes over — arms.tsx · capRegion, painted here,
+ * fused with the shirt, so the shoulders are part of the garment), tapering straight down to the belt
+ * (tucked) or to a straight hem at the hip (untucked). Below it a pelvis mass (the top of the pants,
+ * with the belt across it). Widths come from the build (look.ts · BUILDS); heights are shared
+ * landmarks (Y, LEG), so every build fits every pose and framing.
  *
- * Figure space: face centre (0,0), chin y 44, collar y≈54–64, shoulder joints (±sx, sy≈88),
- * waist y≈180, belt y 191–205, hips y≈230, crotch y≈262, soles y 392.
+ * Figure space: face centre (0,0), chin y 44, collar y≈54–64, shoulder tops (±shX, shY≈67), shoulder
+ * joints (±sx, sy≈76), armpits y≈102, belt y 172–186, hips y≈206, knees y 276, soles y 364 (SOLE).
  */
 import type { ReactNode } from "react";
 import { taper } from "./arms";
@@ -16,7 +17,16 @@ import type { Build, Look } from "./look";
 import { INK, type Kit, type Pt, type Shape, WHITE, detailOn, luma, mirrorD, pt, r1 } from "./paint";
 
 /** Shared vertical landmarks. */
-export const Y = { beltTop: 191, beltH: 14, hem: 226, hip: 232, frame: 276 } as const;
+export const Y = { beltTop: 172, beltH: 14, hem: 202, hip: 206, frame: 262 } as const;
+
+/**
+ * Leg landmarks (y): thigh-top centre, knee, ankle, sole. Sized to the short "trabajador fuerte"
+ * torso: legs (belt → sole ≈ 178) ≈ 1.37 × the torso (collar → belt ≈ 130), so the figure stands
+ * sturdy, neither stubby nor stretched.
+ */
+const LEG = { top: 220, knee: 276, ankle: 320 } as const;
+/** Where the soles rest (completo ground line). */
+export const SOLE = 364;
 
 /* ── symmetric paths ─────────────────────────────────────────────────── */
 
@@ -63,29 +73,42 @@ function xAt(p0: Pt, s: Seg, y: number) {
 
 const NECK_DIP: Pt = [0, 64];
 
+/** Armpit level (where the torso side leaves the sleeve cap). */
+const AY = 102;
+
 /**
- * Right half of the ribcage / shirt mass, from the neckline down: neckline → trapezius → shoulder
- * (tucked inside the deltoid ball) → armpit → chest → waist → belt (tucked) or hip hem (untucked).
+ * Right half of the shirt, from the neckline down: neckline → trapezius (a gentle slope to the shoulder
+ * top, where the sleeve cap takes over) → shoulder corner (under the cap) → armpit → a straight taper to
+ * the waist (the trapezoid) → belt (tucked) or a straight hem at the hip (untucked, no flare).
  */
 function shirtSide(B: Build, end: "belt" | "hem"): Seg[] {
-  const { nk, sx, sy, dr, chest, waist, beltW, hip } = B;
+  const { nk, shX, shY, chest, waist, beltW, hip } = B;
   const belly = waist > chest - 2;
   const segs: Seg[] = [
     [[9, 64], [nk - 1, 59], [nk + 1, 54]],
-    [[nk + 11, 57], [sx - 17, 62], [sx - 5, sy - dr + 4]],
-    [[sx + 8, sy - dr + 6], [sx + dr - 3, sy - 3], [sx + 9, sy + 14]],
-    [[sx + 5, sy + 22], [chest, 110], [chest, 124]],
-    belly ? [[chest + 1, 142], [waist, 150], [waist, 170]] : [[chest, 146], [waist, 160], [waist, 180]],
+    [[nk + 12, 57.5], [shX - 15, shY - 2.5], [shX, shY]],
+    [[shX + 9, shY + 1.5], [chest + 3, shY + 12], [chest, AY]],
+    belly ? [[chest + 1, 116], [waist, 126], [waist, 146]] : [[chest, 116], [waist + 1.5, 134], [waist, 150]],
   ];
   if (end === "belt") {
-    segs.push(belly ? [[waist, 186], [beltW + 2, 195], [beltW, Y.beltTop + 8]] : [[waist, 188], [beltW, 193], [beltW, Y.beltTop + 8]]);
+    segs.push(belly ? [[waist, 158], [beltW + 2, 168], [beltW, Y.beltTop + 8]] : [[waist, 160], [beltW, 166], [beltW, Y.beltTop + 8]]);
   } else {
-    segs.push(belly ? [[waist, 190], [hip + 3, 206], [hip + 3, Y.hem]] : [[waist, 196], [hip + 2, 210], [hip + 3, Y.hem]]);
+    segs.push(belly ? [[waist, 166], [hip + 1, 182], [hip + 1, Y.hem]] : [[waist + 0.5, 168], [hip - 0.5, 182], [hip - 0.5, Y.hem]]);
   }
   return segs;
 }
 
 const ends = (segs: readonly Seg[]) => [NECK_DIP, ...segs.map((s) => s[2])];
+
+/** The first part (0 → t) of the cubic from p0 along `s` (de Casteljau). */
+function splitCubic(p0: Pt, s: Seg, t: number): Seg {
+  const lerp = (a: Pt, b: Pt): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const p01 = lerp(p0, s[0]);
+  const p12 = lerp(s[0], s[1]);
+  const p23 = lerp(s[1], s[2]);
+  const p012 = lerp(p01, p12);
+  return [p01, p012, lerp(p012, lerp(p12, p23))];
+}
 
 /** Side x of the shirt mass at height y (for stripes and pockets that must stay inside it). */
 function sideX(B: Build, y: number) {
@@ -104,7 +127,7 @@ function pelvisD(B: Build, bottom: number) {
     [0, Y.beltTop - 4],
     [
       [[beltW * 0.6, Y.beltTop - 4], [beltW - 2, Y.beltTop - 4], [beltW, Y.beltTop]],
-      [[beltW + 2, Y.beltTop + 14], [hip, 214], [hip, Y.hip]],
+      [[beltW + 2, Y.beltTop + 14], [hip, Y.hip - 16], [hip, Y.hip]],
       [[hip, Y.hip + 16], [hip - 0.5, bottom - 10], [hip - 1, bottom]],
     ],
   );
@@ -167,11 +190,30 @@ function Buttons({ k, x, ys, color }: { k: Kit; x: number; ys: number[]; color: 
 const pocketL = (x: number, y: number, w = 22, h = 22) => `M${x} ${y}H${x + w}V${y + h}Q${x + w / 2} ${y + h + 4} ${x} ${y + h}Z`;
 
 /**
+ * Overall-bib pin top y: high on the bib (as on the approved sheet), or low — under the forearm band
+ * when the arms are crossed over it, and under a badge clipped to the bib's top hem — so it never shows
+ * as a half-covered shard.
+ */
+const BIB_PIN_Y = 120;
+const BIB_PIN_LOW = 141;
+
+/** Chest accessories hide behind crossed arms (they would only peek out between the hands). */
+export const chestAccessoryShown = (L: Look, crossed: boolean) => !crossed && (L.accessory === "gafete" || L.accessory === "radio");
+
+/**
  * The torso layer: hips (medio), shirt, belt, collar, garment details, over-garments.
  * `framing`: medio paints the pelvis down past the frame edge; completo leaves the pelvis to the legs
- * layer (so pants and legs fuse); busto stops at the chest.
+ * layer (so pants and legs fuse); busto stops at the chest. `caps`: the two shoulder caps for the pose
+ * (arms.tsx · shoulderCaps), fused into the shirt — pass them, or the figure has no shoulders.
+ * `crossed`: the forearms cross over the chest (brazos-cruzados): chest details move clear of them.
  */
-export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "completo"): ReactNode {
+export function paintTorso(
+  k: Kit,
+  L: Look,
+  framing: "busto" | "medio" | "completo",
+  caps: readonly Shape[] = [],
+  crossed = false,
+): ReactNode {
   const B = L.B;
   const o = L.outfit;
   const shirtInk = detailOn(L.shirt);
@@ -182,7 +224,7 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
   // Overalls hold the belly in: the bib sits straight on the waistband, so the shirt under it doesn't
   // sag (a sagging hem would show between the bib and the overall's waist).
   const sag = o === "overol" ? 0 : B.sag;
-  const shirtD = symPath(NECK_DIP, segs, tucked ? sag : 2 + sag * 0.5);
+  const shirtD = symPath(NECK_DIP, segs, tucked ? sag : 1 + sag * 0.5);
   const shirtBottom = tucked ? Y.beltTop + 8 : Y.hem;
   const parts: ReactNode[] = [];
 
@@ -198,6 +240,8 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
 
   // the shirt mass (ringed where it overlaps the pants)
   parts.push(<g key="t">{k.part({ d: shirtD }, L.shirt, framing === "medio" ? true : 0)}</g>);
+  // the shoulders: the arms' caps, fused into the shirt (same layer, same cloth → one silhouette)
+  if (caps.length) parts.push(<g key="sh">{k.part(caps, L.shirt)}</g>);
   if (sag && !k.lo) {
     // the belly's overhang: a soft shade crescent above the belt / hem
     const y0 = tucked ? Y.beltTop + 1 : Y.hem - 2;
@@ -231,8 +275,8 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
     parts.push(
       <g key="d">
         {k.line(`M0 74V${shirtBottom + B.sag}`, k.sep * 0.8, shirtInk)}
-        <Buttons k={k} x={4} ys={[96, 122, 148, 174]} color={L.shirt} />
-        {k.lo ? null : k.line(pocketL(-42, 100), k.sep * 0.7, shirtInk)}
+        <Buttons k={k} x={4} ys={[92, 114, 136, 158]} color={L.shirt} />
+        {k.lo ? null : k.line(pocketL(-33, 97, 20, 20), k.sep * 0.7, shirtInk)}
       </g>,
     );
   }
@@ -240,12 +284,12 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
     parts.push(
       <g key="d">
         {k.line(`M0 74V${shirtBottom + B.sag}`, k.sep * 0.8, shirtInk)}
-        <Buttons k={k} x={4} ys={[98, 126, 154, 180]} color={L.shirt} />
-        {k.lo ? null : k.line(`${pocketL(-42, 100)}M-42 108H-20${mirrorD(pocketL(-42, 100))}M42 108H20`, k.sep * 0.7, shirtInk)}
+        <Buttons k={k} x={4} ys={[92, 114, 136, 158]} color={L.shirt} />
+        {k.lo ? null : k.line(`${pocketL(-37, 96, 21, 21)}M-37 104H-16${mirrorD(pocketL(-37, 96, 21, 21))}M37 104H16`, k.sep * 0.7, shirtInk)}
         {k.lo ? null : (
           <g>
-            {k.part({ d: "M22 86H40V94Q40 102 31 106Q22 102 22 94Z" }, "#FFC93C", k.sep * 0.7)}
-            {k.line("M27 92L31 97L36 90", k.sep * 0.55)}
+            {k.part({ d: "M18 80H34V87Q34 94 26 98Q18 94 18 87Z" }, "#FFC93C", k.sep * 0.7)}
+            {k.line("M22.5 86L26 90.5L30.5 84.5", k.sep * 0.55)}
           </g>
         )}
       </g>,
@@ -255,8 +299,8 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
     parts.push(
       <g key="d">
         {k.line(`M${nk - 1} 61C${nk + 2} 70 24 76 26 84V${shirtBottom + B.sag}`, k.sep * 0.8, shirtInk)}
-        <Buttons k={k} x={-13} ys={[94, 122, 150, 178]} color={L.shirt} />
-        <Buttons k={k} x={13} ys={[94, 122, 150, 178]} color={L.shirt} />
+        <Buttons k={k} x={-13} ys={[90, 114, 138, 162]} color={L.shirt} />
+        <Buttons k={k} x={13} ys={[90, 114, 138, 162]} color={L.shirt} />
       </g>,
     );
   }
@@ -268,42 +312,47 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
     const hemY = Y.beltTop + Y.beltH + 12;
     const hs = shirtSide(B, "hem");
     const e = ends(hs);
-    let vr = `M${pt(e[1])}`;
-    for (const [a, b, c] of hs.slice(1, 5)) vr += `C${pt(a)} ${pt(b)} ${pt(c)}`;
+    // Shoulder strap: the inner ~70 % of the trapezius line; then the armhole curves in and down to the
+    // armpit, so the shirt's square shoulder (and its sleeve cap) stays visible outside the vest.
+    const strap = splitCubic(e[1], hs[1], 0.7);
+    const so = strap[2];
+    let vr = `M${pt(e[1])}C${pt(strap[0])} ${pt(strap[1])} ${pt(so)}`;
+    vr += `C${pt([so[0] + 1.5, so[1] + 14])} ${pt([B.chest - 5, AY - 12])} ${pt(e[3])}`;
+    for (const [a, b, c] of hs.slice(3, 4)) vr += `C${pt(a)} ${pt(b)} ${pt(c)}`;
     const sx = r1(sideX(B, hemY));
-    const last = hs[5];
+    const last = hs[4];
     vr += `C${pt(last[0])} ${pt([last[1][0] - 1, hemY - 12])} ${sx} ${hemY}L15 ${hemY}L15 116C15 92 ${nk + 5} 72 ${pt(e[1])}Z`;
     const stripe = (y: number) => {
       const x1 = r1(sideX(B, y) + 1);
       const x2 = r1(sideX(B, y + 11) + 1);
       return `M15 ${y}L${x1} ${y}L${x2} ${y + 11}L15 ${y + 11}Z`;
     };
-    const s1 = stripe(146);
-    const s2 = stripe(174);
+    const s1 = stripe(128);
+    const s2 = stripe(154);
     parts.push(
       <g key="o">
         {k.part([{ d: vr }, { d: mirrorD(vr) }], L.over, true)}
         {k.part([{ d: s1 }, { d: s2 }, { d: mirrorD(s1) }, { d: mirrorD(s2) }], "#C9C6D6", k.sep * 0.7)}
-        {k.lo ? null : k.line(`M17 151.5H${r1(sideX(B, 151) - 2)}M17 179.5H${r1(sideX(B, 179) - 2)}M-17 151.5H${-r1(sideX(B, 151) - 2)}M-17 179.5H${-r1(sideX(B, 179) - 2)}`, 2.4, WHITE)}
+        {k.lo ? null : k.line(`M17 133.5H${r1(sideX(B, 133) - 2)}M17 159.5H${r1(sideX(B, 159) - 2)}M-17 133.5H${-r1(sideX(B, 133) - 2)}M-17 159.5H${-r1(sideX(B, 159) - 2)}`, 2.4, WHITE)}
       </g>,
     );
   }
   if (o === "mandil" && L.over) {
-    const ab = framing === "completo" ? 318 : Y.frame;
-    const tieY = 178;
+    const ab = framing === "completo" ? LEG.knee + 10 : Y.frame;
+    const tieY = Y.beltTop - 13;
     const tw = r1(sideX(B, tieY) - 1);
     const ww = Math.min(B.beltW - 6, 40);
     parts.push(
       <g key="o">
         {k.part(
           [
-            { p: [-nk + 3, 56], q: [-25, 100], w: 5 },
-            { p: [nk - 3, 56], q: [25, 100], w: 5 },
+            { p: [-nk + 3, 56], q: [-25, 96], w: 5 },
+            { p: [nk - 3, 56], q: [25, 96], w: 5 },
           ],
           L.over,
           true,
         )}
-        {k.part({ d: `M-27 98L27 98C29 130 ${ww} 160 ${ww} ${tieY}L${ww + 4} ${ab}L${-ww - 4} ${ab}L${-ww} ${tieY}C${-ww} 160-29 130-27 98Z` }, L.over, true)}
+        {k.part({ d: `M-27 94L27 94C29 120 ${ww} 142 ${ww} ${tieY}L${ww + 4} ${ab}L${-ww - 4} ${ab}L${-ww} ${tieY}C${-ww} 142-29 120-27 94Z` }, L.over, true)}
         {k.part(
           [
             { p: [-ww, tieY], q: [-tw, tieY - 1], w: 6 },
@@ -323,25 +372,25 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
       <g key="o">
         {k.part(
           [
-            { p: [-27, 112], q: [-nk - 12, 60], w: 10 },
-            { p: [27, 112], q: [nk + 12, 60], w: 10 },
+            { p: [-27, 106], q: [-nk - 11, 59], w: 10 },
+            { p: [27, 106], q: [nk + 11, 59], w: 10 },
           ],
           ov,
           true,
         )}
-        {k.part({ d: `M-31 106L31 106L33 ${wb}L-33 ${wb}Z` }, ov, true)}
-        {k.lo ? null : k.line(`M-25 114V${wb - 6}M25 114V${wb - 6}`, 1.8, "#9DC0FF", { opacity: ov === "#2F6FD6" ? 1 : 0.45 })}
+        {k.part({ d: `M-31 100L31 100L33 ${wb}L-33 ${wb}Z` }, ov, true)}
+        {k.lo ? null : k.line(`M-25 108V${wb - 6}M25 108V${wb - 6}`, 1.8, "#9DC0FF", { opacity: ov === "#2F6FD6" ? 1 : 0.45 })}
         {framing === "medio" ? k.line(`M${-B.beltW - 1} ${wb}H${B.beltW + 1}`, k.sep * 0.8, detailOn(ov)) : null}
         {k.part(
           [
-            { c: [-27, 113], r: 4.4 },
-            { c: [27, 113], r: 4.4 },
+            { c: [-27, 107], r: 4.4 },
+            { c: [27, 107], r: 4.4 },
           ],
           "#FFC93C",
           k.sep * 0.7,
         )}
         {k.lo || framing !== "medio" ? null : k.part([{ c: [-B.beltW + 4, wb + 9], r: 3.4 }, { c: [B.beltW - 4, wb + 9], r: 3.4 }], "#FFC93C", k.sep * 0.6)}
-        <Pin k={k} x={0} y={128} s={1.25} />
+        <Pin k={k} x={0} y={crossed || L.accessory === "gafete" ? BIB_PIN_LOW : BIB_PIN_Y} s={1.25} />
       </g>,
     );
   }
@@ -350,6 +399,7 @@ export function paintTorso(k: Kit, L: Look, framing: "busto" | "medio" | "comple
 
 /* ── legs + feet (completo) ──────────────────────────────────────────── */
 
+/* Feet are drawn for soles at y 400 and moved up to SOLE. */
 const BOOT = "M13 356L57 356L59 374Q75 377 77 390L77 400L13 400Z";
 const SNEAKER = "M14 370L55 370Q75 374 77 389L77 400L14 400Z";
 const SHOE = "M16 371L53 371Q72 375 74 389L74 400L16 400Z";
@@ -364,26 +414,29 @@ export function paintLegs(k: Kit, L: Look): ReactNode {
   const foot = L.feet === "boots" ? BOOT : L.feet === "sneakers" ? SNEAKER : SHOE;
   const footFill = L.feet === "boots" ? "#6E4127" : L.feet === "sneakers" ? WHITE : "#2B2452";
   const lx = B.hip / 2 + 0.5;
-  const knee: Pt = [lx + 4, 306];
-  const ankle: Pt = [lx + 7, 356];
-  const legs: Shape[] = [{ d: pelvisD(B, 262) }];
+  const knee: Pt = [lx + 4, LEG.knee];
+  const ankle: Pt = [lx + 6.5, LEG.ankle];
+  const legs: Shape[] = [{ d: pelvisD(B, LEG.top + 22) }];
   for (const sg of [-1, 1]) {
     const m = (p: Pt): Pt => [sg * p[0], p[1]];
-    legs.push({ c: m([lx, 240]), r: lx }, taper(m([lx, 240]), m(knee), lx - 0.5, lx - 5.5), taper(m(knee), m(ankle), lx - 5.5, lx - 9));
+    legs.push({ c: m([lx, LEG.top]), r: lx }, taper(m([lx, LEG.top]), m(knee), lx, lx - 4.5), taper(m(knee), m(ankle), lx - 4.5, lx - 7.5));
   }
   const ink = detailOn(L.pants);
-  const hem = 350;
+  const hem = LEG.ankle - 6;
+  const overol = L.outfit === "overol";
   return (
     <>
-      {k.part([{ d: foot }, { d: mirrorD(foot) }], footFill)}
-      {k.line("M13 392H77M-13 392H-77", k.sep * 0.8, L.feet === "sneakers" ? INK : "#160F33")}
-      {L.feet === "sneakers" && !k.lo ? k.line("M34 382Q49 376 62 382M-34 382Q-49 376-62 382", 3.4, "#FF5A36") : null}
-      {L.feet !== "sneakers" ? k.line("M62 382Q68 381 70 384M-62 382Q-68 381-70 384", 3.4, WHITE) : null}
+      <g transform={`translate(0 ${SOLE - 400})`}>
+        {k.part([{ d: foot }, { d: mirrorD(foot) }], footFill)}
+        {k.line("M13 392H77M-13 392H-77", k.sep * 0.8, L.feet === "sneakers" ? INK : "#160F33")}
+        {L.feet === "sneakers" && !k.lo ? k.line("M34 382Q49 376 62 382M-34 382Q-49 376-62 382", 3.4, "#FF5A36") : null}
+        {L.feet !== "sneakers" ? k.line("M62 382Q68 381 70 384M-62 382Q-68 381-70 384", 3.4, WHITE) : null}
+      </g>
       {k.part(legs, L.pants, true)}
-      {k.line(`M3 ${Y.beltTop + Y.beltH}V250`, k.sep * 0.7, ink)}
-      {L.outfit === "overol" || k.lo ? null : k.line(`M${-ankle[0] - 17} ${hem}H${-ankle[0] + 17}M${ankle[0] + 17} ${hem}H${ankle[0] - 17}`, k.sep * 0.7, ink)}
-      {L.outfit === "overol" ? k.line(`M${-knee[0] - 16} 296Q${-knee[0]} 301 ${-knee[0] + 16} 296M${knee[0] + 16} 296Q${knee[0]} 301 ${knee[0] - 16} 296`, 2, "#9DC0FF", { opacity: 0.7 }) : null}
-      {L.outfit === "overol" ? k.line(`M${-B.beltW - 1} ${Y.beltTop + 6}H${B.beltW + 1}`, k.sep * 0.8, ink) : null}
+      {k.line(`M3 ${Y.beltTop + Y.beltH}V${LEG.top + 10}`, k.sep * 0.7, ink)}
+      {overol || k.lo ? null : k.line(`M${-ankle[0] - 17} ${hem}H${-ankle[0] + 17}M${ankle[0] + 17} ${hem}H${ankle[0] - 17}`, k.sep * 0.7, ink)}
+      {overol ? k.line(`M${-knee[0] - 16} ${knee[1] - 10}Q${-knee[0]} ${knee[1] - 5} ${-knee[0] + 16} ${knee[1] - 10}M${knee[0] + 16} ${knee[1] - 10}Q${knee[0]} ${knee[1] - 5} ${knee[0] - 16} ${knee[1] - 10}`, 2, "#9DC0FF", { opacity: 0.7 }) : null}
+      {overol ? k.line(`M${-B.beltW - 1} ${Y.beltTop + 6}H${B.beltW + 1}`, k.sep * 0.8, ink) : null}
     </>
   );
 }
@@ -393,13 +446,14 @@ export function paintLegs(k: Kit, L: Look): ReactNode {
 export function paintChestAccessory(k: Kit, L: Look): ReactNode {
   // Keep the badge / radio on the chest, clear of the sleeve cap (narrower builds have their
   // shoulder joints closer in, so the accessory slides toward the centre line).
-  const inset = r1(Math.max(0, 40 - (L.B.sx - L.B.dr - 6.7)));
+  // the sleeve cap's seam runs down to about (sx − 14, 92): keep the badge / radio inside it
+  const inset = r1(Math.max(0, 48 - (L.B.sx - 14)));
   if (L.accessory === "gafete") {
-    // a little more room on the badge side: its top corner sits level with the shoulder joint, where a
-    // raised arm (festeja) exposes the whole underside of the sleeve cap
-    const bi = inset + 2;
+    // On overalls the badge clips to the bib's top hem, centred between the strap buttons (the bib pin
+    // moves down under it: paintTorso); elsewhere it hangs on the left chest, clear of the sleeve cap.
+    const at = L.outfit === "overol" ? "translate(28 6)" : `translate(${r1(inset)} 0)`;
     return (
-      <g transform={`translate(${r1(bi)} 0)`}>
+      <g transform={at}>
         {k.part({ d: "M-40 94H-16V122H-40Z" }, WHITE, true)}
         {k.part({ d: "M-31 88H-25V98H-31Z" }, "#C9C6D6", k.sep * 0.7)}
         {k.lo ? null : k.flat({ d: "M-36 102H-28V111H-36Z" }, "#5CC3FF")}
@@ -412,8 +466,10 @@ export function paintChestAccessory(k: Kit, L: Look): ReactNode {
     // black radio, or a yellow one when it would vanish on a dark garment
     const behind = L.outfit === "chaleco" || L.outfit === "overol" || L.outfit === "mandil" ? (L.over ?? L.shirt) : L.shirt;
     const body = luma(behind) < 0.06 ? "#FFC93C" : "#2B2452";
+    // the uniform's shield emblem is on the right chest: the radio clips to the left one there
+    const side = L.outfit === "uniforme" ? "scale(-1 1) " : "";
     return (
-      <g transform={inset ? `translate(${-inset} 0)` : undefined}>
+      <g transform={side || inset ? `${side}translate(${-inset} 0)` : undefined}>
         {k.part({ p: [37, 88], q: [37, 68], w: 4 }, "#2B2452")}
         {k.part({ d: "M23 88Q23 84 27 84H39Q43 84 43 88V116Q43 120 39 120H27Q23 120 23 116Z" }, body, true)}
         {k.flat({ d: "M27 89H39V98H27Z" }, "#DDF78A")}

@@ -21,21 +21,26 @@ export type Sleeve = "short" | "rolled" | "long";
 export type Feet = "boots" | "sneakers" | "shoes";
 
 /**
- * Body build: the measurements every body part is laid out from (figure units, +x half-widths).
- * Vertical landmarks are shared (see body.tsx · Y); builds only change widths, the shoulder joint and
- * limb thickness, so poses, framings and arm length stay identical across builds.
+ * Body build ("Trabajador fuerte"): the measurements every body part is laid out from (figure units,
+ * +x half-widths). Vertical landmarks are shared (body.tsx · Y), so poses and framings fit every build.
+ *
+ * The shoulder is NOT a separate ball: the torso's trapezius line runs from the neck to the shoulder
+ * top (shX, shY), where the arm's sleeve cap takes over (arms.tsx · capRegion) and turns down into the
+ * arm's outer edge. Head = 74 wide × 90 tall → shoulders ≈ 1.8 × 74 ≈ ±66 outer edge, collar (y≈56)
+ * to belt (y 172) ≈ 1.3 × 90.
  */
 export type Build = {
-  /** Shoulder joint = deltoid centre (+x side). Arms hang from here and pivot here. */
+  /** Shoulder joint (arm pivot), +x side. */
   sx: number;
   sy: number;
-  /** Deltoid cap radius (bare arm). */
-  dr: number;
+  /** Shoulder top: where the trapezius line meets the sleeve cap. */
+  shX: number;
+  shY: number;
   /** Neck half-width at the collar. */
   nk: number;
-  /** Ribcage half-width just under the armpit. */
+  /** Torso half-width just under the armpit (y ≈ 102). */
   chest: number;
-  /** Half-width at the narrowest point (robusta: the belly). */
+  /** Half-width at the waist (y ≈ 150; robusta: the belly). */
   waist: number;
   /** Belt half-width (where a tucked shirt ends). */
   beltW: number;
@@ -45,12 +50,14 @@ export type Build = {
   sag: number;
   /** Limb thickness factor. */
   arm: number;
+  /** Extra outward angle (deg) of the relaxed arms. */
+  splay: number;
 };
 
 export const BUILDS: Record<Complexion, Build> = {
-  recta: { sx: 60, sy: 88, dr: 18, nk: 18, chest: 65.5, waist: 47.5, beltW: 49.5, hip: 54, sag: 0, arm: 1 },
-  curvas: { sx: 56, sy: 89, dr: 16.5, nk: 16.5, chest: 58, waist: 43, beltW: 45.5, hip: 57.5, sag: 0, arm: 0.9 },
-  robusta: { sx: 64, sy: 88, dr: 19.5, nk: 20, chest: 67, waist: 69, beltW: 62, hip: 62, sag: 9, arm: 1.12 },
+  recta: { sx: 50, sy: 76, shX: 50, shY: 66.5, nk: 18.5, chest: 55, waist: 45.5, beltW: 46.5, hip: 50, sag: 0, arm: 1, splay: 0 },
+  curvas: { sx: 47, sy: 77, shX: 47, shY: 68, nk: 16.5, chest: 50.5, waist: 42, beltW: 44, hip: 50, sag: 0, arm: 0.9, splay: 2.5 },
+  robusta: { sx: 53, sy: 76, shX: 53, shY: 66.5, nk: 20.5, chest: 58, waist: 60, beltW: 55.5, hip: 57, sag: 4, arm: 1.1, splay: 3 },
 };
 
 export type Look = {

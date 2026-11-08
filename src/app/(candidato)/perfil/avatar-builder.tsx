@@ -672,7 +672,8 @@ const CROPS: Record<Exclude<Crop, "busto">, readonly ["busto" | "medio", number,
   cara: ["busto", -4, 126],
   ropa: ["medio", 66, 224],
   extra: ["medio", 36, 214],
-  cuerpo: ["medio", 100, 290],
+  // ends at the medio frame's bottom edge (y ≈ 235.6), so the window never runs past the figure
+  cuerpo: ["medio", 95, 280],
 };
 
 /** The user's own avatar with one option applied (the thumbnail IS the preview). */

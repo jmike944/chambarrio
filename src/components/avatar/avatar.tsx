@@ -11,8 +11,8 @@
  */
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { type ArmPart, POSE_SPECS, paintArm, placeArm } from "./arms";
-import { paintChestAccessory, paintLegs, paintTorso } from "./body";
+import { type ArmPart, POSE_SPECS, isRelaxed, paintArm, placeArm, shoulderCaps } from "./arms";
+import { SOLE, chestAccessoryShown, paintChestAccessory, paintLegs, paintTorso } from "./body";
 import {
   type AvatarConfig,
   type AvatarFraming,
@@ -32,14 +32,15 @@ import "./avatar.css";
 
 /** viewBox per framing: [minX, minY, width, height]. */
 export const AVATAR_VIEWBOX: Record<AvatarFraming, readonly [number, number, number, number]> = {
-  busto: [-82, -88, 164, 164],
-  // Same aspect ratios as before (so avatarHeight() and every layout are unchanged), zoomed onto the
-  // stockier figure: medio is cut just under the belt, completo ends at the soles.
-  medio: [-142, -98, 284, 361.6],
-  completo: [-142, -96, 284, 502],
+  // Same aspect ratios as before (so avatarHeight() and every layout are unchanged). busto is a touch
+  // wide so the circles show the square shoulders; medio is cut a little under the hip; completo ends
+  // just under the soles (body.tsx · SOLE = 364) and is about as wide as medio (same figure scale).
+  busto: [-85, -86, 170, 170],
+  medio: [-131, -98, 262, 333.6],
+  completo: [(-466 * 142) / 502, -96, (466 * 284) / 502, 466],
 };
 
-const BUST_TIGHT = [-72, -80, 144, 144] as const;
+const BUST_TIGHT = [-80, -79, 160, 160] as const;
 
 /** Rendered height for a given width. */
 export const avatarHeight = (framing: AvatarFraming, width: number) => {
@@ -111,23 +112,30 @@ export function Avatar({
       node
     );
 
+  // crossed forearms cover the chest: the bib pin moves under them, chest accessories hide behind them
+  const crossed = !!spec.cover && !bust;
+  const caps = shoulderCaps(L, left, right);
   const armL: Draw = (k) =>
     placeArm(-1, L.B, paintArm(k, left, L, armPart, realPose === "festeja" ? -0.45 : undefined));
   const armR: Draw = (k) => placeArm(1, L.B, paintArm(k, right, L, armPart));
+  // crossed arms: the back arm's upper arm again, over the top arm's tucked hand
+  const cover: Draw = (k) =>
+    topSide === 1 ? placeArm(-1, L.B, paintArm(k, left, L, "upper")) : placeArm(1, L.B, paintArm(k, right, L, "upper"));
 
   const figureKey = `${JSON.stringify(cfg)}|${realPose}|${framing}|${flip ? 1 : 0}|${expression ?? ""}|${px}`;
   const layers: { key: string; draw: Draw; shadow?: number }[] = [
     { key: "hairBack", draw: (k) => headWrap(paintHairBack(k, L)) },
     ...(framing === "completo" ? [{ key: "legs", draw: ((k) => paintLegs(k, L)) as Draw }] : []),
     { key: "neck", draw: (k) => paintNeck(k, L) },
-    { key: "torso", draw: (k) => paintTorso(k, L, framing) },
-    ...(L.accessory === "gafete" || L.accessory === "radio" ? [{ key: "acc", draw: ((k) => paintChestAccessory(k, L)) as Draw }] : []),
+    { key: "torso", draw: (k) => paintTorso(k, L, framing, caps, crossed) },
+    ...(chestAccessoryShown(L, crossed) ? [{ key: "acc", draw: ((k) => paintChestAccessory(k, L)) as Draw }] : []),
     { key: "head", draw: (k) => headWrap(paintHead(k, L)) },
     ...(L.accessory === "audifonos" ? [{ key: "band", draw: ((k) => headWrap(paintHeadsetBand(k, L))) as Draw }] : []),
     ...(L.headwear !== "ninguno" ? [{ key: "hat", draw: ((k) => headWrap(paintHeadwear(k, L))) as Draw, shadow: bust ? 0 : 3 }] : []),
     ...(L.accessory === "audifonos" ? [{ key: "cups", draw: ((k) => headWrap(paintHeadsetCups(k))) as Draw }] : []),
-    { key: "armBack", draw: topSide === 1 ? armL : armR, shadow: bust ? 0 : 3 },
-    { key: "armTop", draw: topSide === 1 ? armR : armL, shadow: bust ? 0 : 3 },
+    { key: "armBack", draw: topSide === 1 ? armL : armR, shadow: bust || isRelaxed(topSide === 1 ? left : right) ? 0 : 3 },
+    { key: "armTop", draw: topSide === 1 ? armR : armL, shadow: bust || isRelaxed(topSide === 1 ? right : left) ? 0 : 3 },
+    ...(crossed ? [{ key: "armCover", draw: cover, shadow: 3 }] : []),
   ];
 
   return (
@@ -144,7 +152,7 @@ export function Avatar({
       data-animated={animated || undefined}
     >
       {title ? <title>{title}</title> : null}
-      {framing === "completo" ? <ellipse cx={0} cy={401} rx={90} ry={6.5} fill={INK} opacity={0.16} /> : null}
+      {framing === "completo" ? <ellipse cx={0} cy={SOLE + 1} rx={90} ry={6.5} fill={INK} opacity={0.16} /> : null}
       {/* Keyed by the look: a change remounts the whole figure, so the shadow, outline and colour
           copies of an animated arm restart their CSS motion together and stay in step. */}
       <g key={figureKey} className={cn("avA", realPose === "festeja" ? "avHop" : "avBob")}>

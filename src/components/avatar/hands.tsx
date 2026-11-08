@@ -9,7 +9,7 @@
 import type { ReactNode } from "react";
 import { type Kit, type Pt, type Shape, WHITE, r1 } from "./paint";
 
-export type HandPose = "open" | "choca" | "fist" | "thumb" | "point" | "relax";
+export type HandPose = "open" | "choca" | "fist" | "thumb" | "grip" | "point" | "relax";
 
 type Digit = { b: Pt; t: number; l: number; w: number };
 const RAD = Math.PI / 180;
@@ -114,18 +114,22 @@ export function paintHand(k: Kit, pose: HandPose, look: HandLook): ReactNode {
         {k.part({ p: [-31, -19], q: [3, -24], w: 15 + g }, fill, sep)}
       </>
     );
-  } else if (pose === "thumb") {
+  } else if (pose === "thumb" || pose === "grip") {
     // Thumbs-up, screen aligned: fist on its side, curled fingers stacked on the outer side, thumb up.
+    // grip: the same fist closed round a handle (which leaves its top), the thumb wrapped over the
+    // curled index finger instead of raised.
     const rolls = [-35, -25.5, -16, -6.5];
+    const grip = pose === "grip";
     body = (
       <>
-        {k.part({ p: [-9, -36], q: [-10, -72], w: 16.5 + g }, fill)}
+        {grip ? null : k.part({ p: [-9, -36], q: [-10, -72], w: 16.5 + g }, fill)}
         {k.part({ d: THUMB_BODY }, fill)}
         {rolls.map((y, i) => (
           <g key={i}>{k.part({ p: [-2, y], q: [21 - Math.abs(i - 1.5) * 1.5, y], w: 10.5 + g * 0.6 }, fill, sep)}</g>
         ))}
+        {grip ? k.part({ p: [-17, -36], q: [5, -31], w: 15 + g }, fill, sep) : null}
         {/* thumbnail */}
-        {!k.lo && !look.glove ? k.line("M-14.5-70Q-10-75-5.5-70", k.sep * 0.75) : null}
+        {!k.lo && !look.glove && !grip ? k.line("M-14.5-70Q-10-75-5.5-70", k.sep * 0.75) : null}
       </>
     );
   } else {
@@ -151,7 +155,7 @@ export function paintHand(k: Kit, pose: HandPose, look: HandLook): ReactNode {
           {!k.lo ? k.line("M-21 4H22", k.sep * 0.7, WHITE, { opacity: 0.7 }) : null}
         </>
       ) : null}
-      {look.glove && !k.lo && pose !== "thumb" ? k.line(pose === "fist" ? "M-20-44Q-20-50-13-51" : "M-21-42Q-22-54-13-58", k.sep * 1.1, WHITE) : null}
+      {look.glove && !k.lo && pose !== "thumb" && pose !== "grip" ? k.line(pose === "fist" ? "M-20-44Q-20-50-13-51" : "M-21-42Q-22-54-13-58", k.sep * 1.1, WHITE) : null}
     </>
   );
 }

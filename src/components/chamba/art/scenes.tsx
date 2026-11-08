@@ -682,7 +682,7 @@ function Exito({ animated }: { animated: boolean }) {
         spots={[
           [30, 20],
           [70, 6],
-          [110, 30],
+          [66, 100],
           [190, 10],
           [230, 34],
           [270, 14],
@@ -691,7 +691,7 @@ function Exito({ animated }: { animated: boolean }) {
           [150, 0],
           [20, 110],
           [282, 120],
-          [130, 54],
+          [238, 102],
         ]}
         fy="220px"
       />
