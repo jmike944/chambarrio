@@ -395,9 +395,9 @@ export function AppShell({
   useDevDemoViewAs(employer && ready && appMode === "demo");
 
   useEffect(() => {
-    if (signedOut) router.replace("/entrar");
+    if (signedOut) router.replace(employer ? "/entrar/empresa" : "/entrar");
     else if (unfinished) router.replace(role === "empresa" ? "/bienvenida/empresa" : "/bienvenida");
-  }, [signedOut, unfinished, role, router]);
+  }, [signedOut, unfinished, role, router, employer]);
 
   // Signed out: render nothing while redirecting so account data never flashes.
   if (signedOut || unfinished) return <div className="min-h-dvh" aria-busy="true" />;

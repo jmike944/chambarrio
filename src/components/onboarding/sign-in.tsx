@@ -59,8 +59,8 @@ function useInviteNext() {
 const linkCls =
   "rounded font-bold text-foreground underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
-/** "¿Solo quieres ver cómo funciona?" → straight into the demo. */
-function DemoOffer({ onPick, index = 3 }: { onPick: (r: Role) => void; index?: number }) {
+/** "¿Solo quieres ver cómo funciona?" → straight into this side's demo (the landing already said which). */
+function DemoOffer({ side, onPick, index = 3 }: { side: Role; onPick: (r: Role) => void; index?: number }) {
   const btn = cn(
     "press inline-flex h-12 items-center gap-2 rounded-full border-[2.5px] border-ink bg-white px-4 font-display text-[0.98rem] font-extrabold text-ink transition-[scale,background-color] hover:bg-block-sol",
     focusRing,
@@ -80,11 +80,8 @@ function DemoOffer({ onPick, index = 3 }: { onPick: (r: Role) => void; index?: n
         </span>
       </p>
       <div className="mt-3 flex flex-wrap gap-2.5">
-        <button type="button" className={btn} onClick={() => onPick("candidato")}>
-          Demo: busco chamba
-        </button>
-        <button type="button" className={btn} onClick={() => onPick("empresa")}>
-          Demo: tengo un negocio
+        <button type="button" className={btn} onClick={() => onPick(side)}>
+          {side === "empresa" ? "Ver el panel de demostración" : "Ver vacantes de ejemplo"}
         </button>
       </div>
     </Slab>
@@ -92,11 +89,13 @@ function DemoOffer({ onPick, index = 3 }: { onPick: (r: Role) => void; index?: n
 }
 
 /**
- * /entrar. Live: one screen — email code (default), SMS code or password. No "which side" step:
- * each account is one type, so after sign-in it goes to its own home (candidato → /inicio,
- * empresa → /empresa), or to onboarding if it never finished. Demo-only build: just the demo entry.
+ * /entrar (candidato side) and /entrar/empresa (empresa side, linked from /empresas). Live: one
+ * screen — email code (default), SMS code or password. No "which side" step: each account is one
+ * type, so after sign-in it goes to its own home (candidato → /inicio, empresa → /empresa), or to
+ * onboarding if it never finished. `side` (the landing they came from) only picks the demo, the
+ * sign-up link and the type a brand-new account gets. Demo-only build: just that side's demo entry.
  */
-export function SignIn() {
+export function SignIn({ side = "candidato" }: { side?: Role }) {
   const router = useRouter();
   const fire = useConfetti();
   const ready = useSessionReady();
@@ -187,24 +186,27 @@ export function SignIn() {
       >
         {pausedNote}
         <div className="space-y-4">
-          <ChoiceCard
-            tone="sol"
-            index={0}
-            art={<CategoryArt category="construccion" className="size-full" />}
-            title="Busco chamba"
-            description="Vacantes cerca de casa, postulaciones y avisos."
-            badge="Demo"
-            onClick={() => goDemo("candidato")}
-          />
-          <ChoiceCard
-            tone="cielo"
-            index={1}
-            art={<Scene name="negocio" className="w-full" />}
-            title="Tengo un negocio"
-            description="Publica vacantes y ve quién vive cerca."
-            badge="Demo"
-            onClick={() => goDemo("empresa")}
-          />
+          {side === "empresa" ? (
+            <ChoiceCard
+              tone="cielo"
+              index={0}
+              art={<Scene name="negocio" className="w-full" />}
+              title="Tengo un negocio"
+              description="Publica vacantes y ve quién vive cerca."
+              badge="Demo"
+              onClick={() => goDemo("empresa")}
+            />
+          ) : (
+            <ChoiceCard
+              tone="sol"
+              index={0}
+              art={<CategoryArt category="construccion" className="size-full" />}
+              title="Busco chamba"
+              description="Vacantes cerca de casa, postulaciones y avisos."
+              badge="Demo"
+              onClick={() => goDemo("candidato")}
+            />
+          )}
         </div>
       </FlowShell>
     );
@@ -239,6 +241,8 @@ export function SignIn() {
             onUseEmail={() => setMethod("email")}
             // A new account made to join a team is a company account (joining replaces onboarding).
             role={invite ? "empresa" : undefined}
+            // Otherwise a brand-new account gets this side's type (existing accounts keep theirs).
+            newRole={invite ? undefined : side}
             next={next ?? undefined}
           />
         )}
@@ -252,11 +256,17 @@ export function SignIn() {
         <>
           <p className="mt-7 text-[0.98rem] font-medium">
             ¿Primera vez?{" "}
-            <Link href="/bienvenida" className={linkCls}>
-              Crea tu cuenta gratis
-            </Link>
+            {side === "empresa" ? (
+              <Link href="/bienvenida/empresa" className={linkCls}>
+                Registra tu negocio gratis
+              </Link>
+            ) : (
+              <Link href="/bienvenida" className={linkCls}>
+                Crea tu cuenta gratis
+              </Link>
+            )}
           </p>
-          <DemoOffer onPick={(r) => goDemo(r)} index={4} />
+          <DemoOffer side={side} onPick={(r) => goDemo(r)} index={4} />
         </>
       )}
     </FlowShell>

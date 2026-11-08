@@ -52,15 +52,17 @@ function friendly(message: string | undefined): string {
 }
 
 /**
- * Sends a 6-digit code. New users are created on the fly: sign-up passes the role they picked;
- * sign-in (/entrar) passes none, so an existing account keeps its own and the email link lands on
- * /entrar/listo, which routes by the account's role.
+ * Sends a 6-digit code. New users are created on the fly: sign-up passes the role they picked, and
+ * the email link lands on that role's home. Sign-in (/entrar) lands on /entrar/listo, which routes by
+ * the account's own role; it may pass `newRole`, the type a brand-new account gets (the side of
+ * /entrar it came from). Either role only reaches a new account: the profile trigger reads it on insert.
  * `next`: a same-site path the email's link returns to instead (e.g. "/unirse?t=…" for a team invite,
  * so tapping the link instead of typing the code still lands on the same invite).
  */
-export async function sendCode(channel: Channel, to: string, role?: Role, next?: string): Promise<string | null> {
+export async function sendCode(channel: Channel, to: string, role?: Role, next?: string, newRole?: Role): Promise<string | null> {
   const sb = client();
-  const data = role ? { role } : undefined;
+  const metaRole = role ?? newRole;
+  const data = metaRole ? { role: metaRole } : undefined;
   if (channel === "email") {
     const custom = next && next.startsWith("/") && !next.startsWith("//") ? `?next=${encodeURIComponent(next)}` : "";
     const query = custom || (role ? `?next=${role === "empresa" ? "/empresa" : "/inicio"}` : "");

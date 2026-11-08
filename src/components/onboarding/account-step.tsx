@@ -64,7 +64,7 @@ export function AccountStep({
       </div>
       <p className="mt-6 text-[0.95rem] font-medium text-muted-foreground">
         ¿Ya tienes cuenta?{" "}
-        <Link href="/entrar" className={cn(linkBtn, "text-foreground")}>
+        <Link href={role === "empresa" ? "/entrar/empresa" : "/entrar"} className={cn(linkBtn, "text-foreground")}>
           Entra aquí
         </Link>
       </p>

@@ -306,7 +306,8 @@ export function FlowShell({
 }) {
   const key = stepKey ?? title;
   // "Salir" goes back to the page this visitor came from: companies to /empresas, everyone else to the landing.
-  const exitHref = usePathname().startsWith("/bienvenida/empresa") ? "/empresas" : "/";
+  const path = usePathname();
+  const exitHref = path.startsWith("/bienvenida/empresa") || path.startsWith("/entrar/empresa") ? "/empresas" : "/";
   const order = step ?? total ?? 99;
   // Slide direction follows the step number ("derive state from props" pattern, no effects).
   const [seen, setSeen] = useState({ key, order, dir: 0 });

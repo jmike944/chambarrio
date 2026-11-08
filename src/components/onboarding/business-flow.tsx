@@ -199,7 +199,8 @@ export function BusinessFlow() {
   }
 
   const next = () => setStep((s) => s + 1);
-  const back = () => (step === 0 ? router.push("/bienvenida") : setStep((s) => s - 1));
+  // Back from the first step: to the business landing ("Publicar vacante gratis" brought them here).
+  const back = () => (step === 0 ? router.push("/empresas") : setStep((s) => s - 1));
 
   async function finish(e: React.MouseEvent<HTMLButtonElement>) {
     if (!kind || !size || !place || !chosenPlan || !accepted || busy) return;

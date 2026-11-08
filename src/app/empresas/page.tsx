@@ -186,7 +186,7 @@ export default function EmpresasPage() {
         </nav>
         <div className="ml-auto flex items-center gap-2 whitespace-nowrap">
           <ThemeToggle className="size-11" />
-          <Link href="/entrar" className={chunky("white", "md")}>
+          <Link href="/entrar/empresa" className={chunky("white", "md")}>
             Entrar
           </Link>
           <Link href={PUBLISH} className={cn(chunky("lime", "md"), "hidden sm:inline-flex")}>
@@ -229,7 +229,7 @@ export default function EmpresasPage() {
               <DemoLiveNote className="mt-3" />
               <p className="mt-4 text-[0.98rem] font-medium">
                 ¿Ya tienes cuenta?{" "}
-                <Link href="/entrar" className={cn(focusLink, "inline-flex min-h-11 items-center font-bold underline decoration-2 underline-offset-4")}>
+                <Link href="/entrar/empresa" className={cn(focusLink, "inline-flex min-h-11 items-center font-bold underline decoration-2 underline-offset-4")}>
                   Entra aquí
                 </Link>
               </p>

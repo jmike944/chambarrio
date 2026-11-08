@@ -139,6 +139,7 @@ const smsOff = (msg: string) => msg.includes("SMS");
 export function CodeAuth({
   channel,
   role,
+  newRole,
   idPrefix,
   onVerified,
   onUseEmail,
@@ -148,6 +149,8 @@ export function CodeAuth({
   channel: Channel;
   /** Sign-up only: the side picked for a new account. Sign-in leaves it out. */
   role?: Role;
+  /** Sign-in: the type a brand-new account gets (the side of /entrar). Existing accounts keep theirs. */
+  newRole?: Role;
   /** Same-site path the email's sign-in link returns to (e.g. a team invite "/unirse?t=…"). */
   next?: string;
   idPrefix: string;
@@ -183,7 +186,7 @@ export function CodeAuth({
     leaveDemo();
     setBusy(true);
     setError(null);
-    const err = await sendCode(channel, to, role, next);
+    const err = await sendCode(channel, to, role, next, newRole);
     setBusy(false);
     if (err) {
       setError(err);

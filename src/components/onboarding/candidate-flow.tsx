@@ -1,7 +1,6 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -12,7 +11,6 @@ import { RadiusBar } from "@/components/chamba/radius-bar";
 import { CountUp, StepList, useConfetti } from "@/components/chamba/motion";
 import { CategoryArt, CategoryIcon } from "@/components/chamba/job-icons";
 import { Scene } from "@/components/chamba/art/scenes";
-import { Marquee } from "@/components/chamba/art/doodles";
 import { CATEGORIES } from "@/lib/data/categories";
 import type { CategoryId, Experience } from "@/lib/data/types";
 import { monthlySavings } from "@/lib/geo";
@@ -22,7 +20,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import {
   ArtTile,
-  ChoiceCard,
   FlowLabel,
   FlowShell,
   HAZARD,
@@ -38,7 +35,7 @@ import { PhoneField, PhoneVerify } from "./phone-verify";
 import { AccountStep, DemoVerifyNote, useExistingAccountExit } from "./account-step";
 import { LocationPicker, type Place } from "./location-picker";
 
-const TOTAL = 6;
+const TOTAL = 5;
 
 const EXPERIENCE: { value: Experience; label: string }[] = [
   { value: "Sin experiencia", label: "Sin experiencia" },
@@ -145,9 +142,13 @@ export function CandidateFlow() {
     };
   }, []);
 
+  // No "¿Qué buscas?" step: the landing's "Busco chamba" (or the account's own type) already said so.
   // Already signed in (came from /entrar or the email link): the account step is done.
-  const next = () => setStep((s) => (s === 0 && liveIn ? 2 : s + 1));
-  const back = () => setStep((s) => (s === 2 && liveIn ? 0 : Math.max(0, s - 1)));
+  const first = liveIn ? 1 : 0;
+  const at = Math.max(step, first);
+  const next = () => setStep(at + 1);
+  // Back from the first step: to the landing.
+  const back = () => (at === first ? router.push("/") : setStep(at - 1));
   // Signed up with an email that already has a finished profile: off to the app.
   const armExit = useExistingAccountExit("candidato", (s) => s.onboarded);
 
@@ -181,71 +182,12 @@ export function CandidateFlow() {
     router.push("/inicio");
   }
 
-  switch (step) {
+  switch (at) {
     case 0:
-      return (
-        <FlowShell
-          step={0}
-          total={TOTAL}
-          tone="uva"
-          art={{ scene: "reparto" }}
-          band
-          title="¿Qué buscas?"
-          hint="Buscar trabajo en Chambarrio es gratis."
-          aside="El trabajo que buscas, cerca de ti."
-        >
-          <div className="space-y-4">
-            <ChoiceCard
-              tone="sol"
-              index={0}
-              art={<CategoryArt category="construccion" className="size-full" />}
-              title="Busco trabajo"
-              description="Vacantes cerca de tu casa. Postúlate en un toque."
-              onClick={next}
-            />
-            <ChoiceCard
-              tone="cielo"
-              index={1}
-              art={<Scene name="negocio" className="w-full" />}
-              title="Quiero contratar"
-              description="Publica vacantes y encuentra personal que vive cerca."
-              onClick={() => router.push("/bienvenida/empresa")}
-            />
-          </div>
-
-          <Slab tone="limon" index={3} className="mt-6 px-0 pt-4 pb-1">
-            <p className="px-5 font-display text-[1.05rem] font-extrabold tracking-[-0.01em]">
-              {CATEGORIES.length} tipos de chamba, todos cerca
-            </p>
-            <Marquee
-              speed={30}
-              className="mt-1 py-3"
-              items={CATEGORIES.map((c) => (
-                <span key={c.id} className="inline-flex items-center gap-2 font-semibold">
-                  <CategoryIcon category={c.id} size="sm" />
-                  {c.label}
-                </span>
-              ))}
-            />
-          </Slab>
-
-          <p className="mt-8 text-[0.95rem] font-medium text-muted-foreground">
-            ¿Ya tienes cuenta?{" "}
-            <Link
-              href="/entrar"
-              className="rounded font-bold text-foreground underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              {real ? "Entra aquí" : "Entra con tu celular"}
-            </Link>
-          </p>
-        </FlowShell>
-      );
-
-    case 1:
       if (real && !liveIn) {
         return (
           <AccountStep
-            step={1}
+            step={0}
             total={TOTAL}
             role="candidato"
             onBack={back}
@@ -255,14 +197,14 @@ export function CandidateFlow() {
                 setContactPhone(to);
                 void setPhone(to);
               }
-              setStep(2);
+              setStep(1);
             }}
           />
         );
       }
       return (
         <FlowShell
-          step={1}
+          step={0}
           total={TOTAL}
           tone="mandarina"
           art={{ scene: "codigo" }}
@@ -281,10 +223,10 @@ export function CandidateFlow() {
         </FlowShell>
       );
 
-    case 2:
+    case 1:
       return (
         <FlowShell
-          step={2}
+          step={1}
           total={TOTAL}
           tone="uva"
           art={{ scene: "equipo" }}
@@ -343,10 +285,10 @@ export function CandidateFlow() {
         </FlowShell>
       );
 
-    case 3:
+    case 2:
       return (
         <FlowShell
-          step={3}
+          step={2}
           total={TOTAL}
           tone="mandarina"
           art={{ scene: "mapa" }}
@@ -370,10 +312,10 @@ export function CandidateFlow() {
         </FlowShell>
       );
 
-    case 4:
+    case 3:
       return (
         <FlowShell
-          step={4}
+          step={3}
           total={TOTAL}
           tone="uva"
           art={{ scene: "radar" }}
@@ -423,10 +365,10 @@ export function CandidateFlow() {
         </FlowShell>
       );
 
-    case 5:
+    case 4:
       return (
         <FlowShell
-          step={5}
+          step={4}
           total={TOTAL}
           tone="mandarina"
           art={{ scene: "busqueda" }}
