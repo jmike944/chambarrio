@@ -361,7 +361,8 @@ export function JobSearch() {
           variant="white"
           size="lg"
           onClick={clearFilters}
-          className="w-full border-2 border-ink text-ink"
+          // always white: it sits on a pastel block, where the dark-mode card color made it ink-on-indigo
+          className="w-full border-2 border-ink bg-white text-ink"
         >
           <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
           Limpiar filtros ({activeFilters})
@@ -371,7 +372,8 @@ export function JobSearch() {
   );
 
   return (
-    <div className="grid gap-5 lg:grid-cols-12 lg:items-start">
+    // grid-cols-1 = minmax(0, 1fr): on phones no child (e.g. a long filter summary) can widen the page.
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
       <PickHomeBanner className="lg:col-span-12" />
       {/* ---------------------------------------------------------- hero: search + radius */}
       <section
@@ -521,7 +523,7 @@ export function JobSearch() {
       </section>
 
       {/* ---------------------------------------------------------- filters: drawer on mobile */}
-      <div className="-mt-1 flex items-center gap-2 lg:hidden">
+      <div className="-mt-1 flex min-w-0 items-center gap-2 lg:hidden">
         <Drawer>
           <DrawerTrigger asChild>
             <button
@@ -537,17 +539,27 @@ export function JobSearch() {
               ) : null}
             </button>
           </DrawerTrigger>
-          <DrawerContent className="block-sol border-0">
-            <div className="relative overflow-y-auto px-5 pt-2 pb-8">
-              <DrawerHeader className="px-0 text-left">
-                <DrawerTitle className="font-display text-[1.6rem] font-extrabold tracking-[-0.03em]">Afina tu búsqueda</DrawerTitle>
-                <DrawerDescription className="text-muted-foreground">
-                  <CountUp value={results.length} /> {results.length === 1 ? "vacante" : "vacantes"} con estos filtros
-                </DrawerDescription>
-              </DrawerHeader>
-              <div className="space-y-6">{filterGroups}</div>
+          {/* A real sol block (same tone as the Filtros pill) in light and dark: the visible card is the
+              drawer's ::before, so it gets the block color too. Title and CTA stay put; the chips scroll. */}
+          <DrawerContent
+            className={cn(
+              "block-sol text-ink data-[vaul-drawer-direction=bottom]:max-h-[90dvh]",
+              "before:border-2 before:border-ink before:bg-block-sol dark:before:border-black/70",
+              "*:first:bg-ink/25",
+            )}
+          >
+            <DrawerHeader className="shrink-0 px-5 pt-3 pb-3 text-left">
+              <DrawerTitle className="font-display text-[1.6rem] leading-tight font-extrabold tracking-[-0.03em]">Afina tu búsqueda</DrawerTitle>
+              <DrawerDescription className="text-muted-foreground">
+                <CountUp value={results.length} /> {results.length === 1 ? "vacante" : "vacantes"} con estos filtros
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="min-h-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto overscroll-contain px-5 pt-1 pb-5">
+              {filterGroups}
+            </div>
+            <div className="shrink-0 border-t-2 border-dashed border-ink/20 px-5 pt-3 pb-[max(0.25rem,calc(env(safe-area-inset-bottom)-0.5rem))]">
               <DrawerClose asChild>
-                <Button size="xl" className="mt-6 w-full">
+                <Button size="xl" className="w-full">
                   ¡Ándale, ver {results.length}!
                 </Button>
               </DrawerClose>

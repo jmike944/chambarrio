@@ -5,6 +5,7 @@ import { cn } from "cn"
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
+import { useModalFocus } from "@/components/ui/use-modal-focus"
 
 function AlertDialog({
   ...props
@@ -44,13 +45,21 @@ function AlertDialogOverlay({
   )
 }
 
+/*
+ * Phone-safe by default: never taller than the screen (dvh, minus the notch and home-indicator
+ * insets); a long alert scrolls inside itself. overflow-y is !important so an alert that sets
+ * overflow-hidden (to clip a colored header strip) still scrolls instead of cutting off its buttons.
+ */
 function AlertDialogContent({
   className,
   size = "default",
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
   size?: "default" | "sm"
 }) {
+  const focus = useModalFocus("alert", { onOpenAutoFocus, onCloseAutoFocus })
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -58,10 +67,11 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-6 rounded-4xl bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full -translate-x-1/2 -translate-y-1/2 gap-6 overflow-x-hidden overflow-y-auto! overscroll-contain rounded-4xl bg-popover p-6 text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
+        {...focus}
       />
     </AlertDialogPortal>
   )
@@ -147,6 +157,9 @@ function AlertDialogDescription({
   )
 }
 
+/** Phones: the default-size buttons grow to the 48 px "lg" tap target (they stack full-width there). */
+const PHONE_BUTTON = "max-sm:h-12 max-sm:gap-2 max-sm:px-5 max-sm:text-base max-sm:font-semibold"
+
 function AlertDialogAction({
   className,
   variant = "default",
@@ -158,7 +171,7 @@ function AlertDialogAction({
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Action
         data-slot="alert-dialog-action"
-        className={cn(className)}
+        className={cn(size === "default" && PHONE_BUTTON, className)}
         {...props}
       />
     </Button>
@@ -176,7 +189,7 @@ function AlertDialogCancel({
     <Button variant={variant} size={size} asChild>
       <AlertDialogPrimitive.Cancel
         data-slot="alert-dialog-cancel"
-        className={cn(className)}
+        className={cn(size === "default" && PHONE_BUTTON, className)}
         {...props}
       />
     </Button>

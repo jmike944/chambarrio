@@ -12,6 +12,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Installed app (black-translucent status bar): keep toasts below the notch / Dynamic Island.
+      mobileOffset={{
+        top: "max(16px, calc(env(safe-area-inset-top) + 8px))",
+        bottom: "max(16px, calc(env(safe-area-inset-bottom) + 8px))",
+      }}
       icons={{
         success: (
           <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} className="size-4" />

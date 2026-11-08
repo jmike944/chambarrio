@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -83,6 +83,8 @@ export function AccountMenu() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** The menu item that opened the confirm is gone when it closes: send focus back to the avatar. */
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const live = appMode === "live";
   const demo = appMode === "demo";
 
@@ -125,6 +127,7 @@ export function AccountMenu() {
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
+          ref={triggerRef}
           aria-label={`Tu cuenta: ${displayName}`}
           className="press grid size-12 place-items-center rounded-full border-2 border-card bg-limon shadow-card outline-none hover:-translate-y-px focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=open]:ring-3 data-[state=open]:ring-primary/40"
         >
@@ -205,7 +208,12 @@ export function AccountMenu() {
       </DropdownMenu>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            triggerRef.current?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
             <AlertDialogDescription>

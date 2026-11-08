@@ -148,141 +148,160 @@ function SpotBody({
     .map((b) => ({ b, km: distanceKm(home, b.location), spot: spotsById.get(b.id) }))
     .toSorted((a, z) => a.km - z.km);
   const multi = company.locations.length > 1;
+  const mapButton = (
+    <Button size="lg" asChild className={cn("w-full", desktop && "relative mt-5 shrink-0")}>
+      <Link href="/mapa">
+        <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
+        Ver en el mapa
+      </Link>
+    </Button>
+  );
 
   return (
-    <div
-      key={spot.id}
-      className={cn(
-        "relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] motion-safe:animate-rise sm:px-6",
-        desktop ? "pt-6" : "pt-3",
-      )}
-    >
-      <span aria-hidden className="pointer-events-none absolute inset-0 bg-dots text-[color:var(--ink)]/[0.07]" />
-      <CategoryArt
-        category={spot.category}
-        animated
-        className={cn(
-          "pointer-events-none absolute -right-5 size-[7.25rem] rotate-[8deg] drop-shadow-[3px_4px_0_rgb(22_15_51/0.85)]",
-          desktop ? "-right-8 bottom-4 size-[13rem] -rotate-[8deg]! opacity-90" : "top-[4.25rem]",
-        )}
-      />
+    <>
+      {/* Outside the scroller (positioned on the sheet), so it stays put while the content scrolls. */}
       <DrawerClose asChild>
         <Button
           variant="white"
           size="icon-lg"
           aria-label="Cerrar"
-          className={cn("absolute right-4 z-10 border-2 border-[color:var(--ink)] bg-white text-ink shadow-[0_3px_0_var(--ink)]", desktop ? "top-4" : "top-2")}
+          className={cn(
+            "absolute right-4 z-10 border-2 border-[color:var(--ink)] bg-white text-ink shadow-[0_3px_0_var(--ink)]",
+            desktop ? "top-4" : "top-[1.625rem]",
+          )}
         >
           <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2.2} />
         </Button>
       </DrawerClose>
-
-      <DrawerHeader className={cn("relative gap-1 p-0 text-left! md:gap-1", desktop ? "pr-14" : "pr-24")}>
-        <Eyebrow>
-          {company.kind}
-          {multi ? ` · ${company.locations.length} sucursales` : ""}
-        </Eyebrow>
-        <DrawerTitle className="font-display text-[1.8rem] leading-[1.02] font-extrabold tracking-[-0.035em] text-foreground">
-          {company.name}
-        </DrawerTitle>
-        <DrawerDescription className="text-[1rem] leading-snug font-semibold text-foreground">
-          {branch.name}
-          {branch.colonia !== branch.name ? <span className="font-normal text-muted-foreground"> · {branch.colonia}</span> : null}
-        </DrawerDescription>
-      </DrawerHeader>
-
-      {/* distance + how you'd get there */}
-      <div className={cn("relative mt-4 flex flex-wrap items-center gap-2", desktop ? "pr-0" : "pr-24")}>
-        <span className="inline-flex h-9 items-center gap-2 rounded-full border-2 border-[color:var(--ink)] bg-white px-3 text-[0.95rem] font-bold text-ink tabular-nums shadow-[0_2px_0_var(--ink)]">
-          <span aria-hidden className="size-2.5 rounded-full ring-2 ring-[color:var(--ink)]/15" style={{ background: bandColor(band) }} />
-          a {formatKm(km)} de tu casa
+      <div
+        key={spot.id}
+        className={cn(
+          "relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-5 motion-safe:animate-rise sm:px-6",
+          desktop ? "pt-6 pb-6" : "pt-3 pb-5",
+        )}
+      >
+        <span aria-hidden className="pointer-events-none absolute inset-0 bg-dots text-[color:var(--ink)]/[0.07]" />
+        {/* The tilted art pokes past the right edge on purpose. Clipped in its own box so the body never
+            gets wider than the sheet (it used to pan 28 px sideways and cut the text at the left). */}
+        <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+          <CategoryArt
+            category={spot.category}
+            animated
+            className={cn(
+              "pointer-events-none absolute -right-5 size-[7.25rem] rotate-[8deg] drop-shadow-[3px_4px_0_rgb(22_15_51/0.85)]",
+              desktop ? "-right-8 bottom-4 size-[13rem] -rotate-[8deg]! opacity-90" : "top-[4.25rem]",
+            )}
+          />
         </span>
-        {walk ? <Hint icon={WalkingIcon} text={`${walk.minutes} min`} label="caminando" /> : null}
-        {bus ? <Hint icon={Bus01Icon} text={`${bus.minutes} min`} label="en camión" /> : null}
-      </div>
 
-      {spot.inside ? null : (
-        <div className="relative mt-4 rounded-tile border-2 border-dashed border-[color:var(--ink)]/45 bg-white/55 p-4">
-          <p className="font-display text-lg leading-tight font-extrabold">Fuera de tu radio de {radiusKm} km</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Queda a {formatKm(km)}. {next ? `Con ${next} km ya entra en tu búsqueda.` : "Está más lejos que el radio máximo."}
-          </p>
-          {next ? (
-            <Button size="lg" className="mt-3 w-full" onClick={() => onWiden(next)}>
-              Ampliar mi radio a {next} km
-            </Button>
-          ) : null}
+        <DrawerHeader className={cn("relative gap-1 p-0 text-left! md:gap-1", desktop ? "pr-14" : "pr-24")}>
+          <Eyebrow>
+            {company.kind}
+            {multi ? ` · ${company.locations.length} sucursales` : ""}
+          </Eyebrow>
+          <DrawerTitle className="font-display text-[1.8rem] leading-[1.02] font-extrabold tracking-[-0.035em] text-foreground">
+            {company.name}
+          </DrawerTitle>
+          <DrawerDescription className="text-[1rem] leading-snug font-semibold text-foreground">
+            {branch.name}
+            {branch.colonia !== branch.name ? <span className="font-normal text-muted-foreground"> · {branch.colonia}</span> : null}
+          </DrawerDescription>
+        </DrawerHeader>
+
+        {/* distance + how you'd get there */}
+        <div className={cn("relative mt-4 flex flex-wrap items-center gap-2", desktop ? "pr-0" : "pr-24")}>
+          <span className="inline-flex h-9 items-center gap-2 rounded-full border-2 border-[color:var(--ink)] bg-white px-3 text-[0.95rem] font-bold text-ink tabular-nums shadow-[0_2px_0_var(--ink)]">
+            <span aria-hidden className="size-2.5 rounded-full ring-2 ring-[color:var(--ink)]/15" style={{ background: bandColor(band) }} />
+            a {formatKm(km)} de tu casa
+          </span>
+          {walk ? <Hint icon={WalkingIcon} text={`${walk.minutes} min`} label="caminando" /> : null}
+          {bus ? <Hint icon={Bus01Icon} text={`${bus.minutes} min`} label="en camión" /> : null}
         </div>
-      )}
 
-      <section aria-labelledby="spot-jobs" className="relative mt-5">
-        <h3 id="spot-jobs" className="font-display text-[1.2rem] font-extrabold">
-          {jobs.length === 1 ? "1 vacante aquí" : `${jobs.length} vacantes aquí`}
-        </h3>
-        <ul className="mt-1 divide-y-2 divide-dashed divide-[color:var(--ink)]/15">
-          {jobs.map((j) => (
-            <li key={j.id}>
-              <JobRow job={j} km={j.km} radiusKm={radiusKm} meta={j.shift} className="hover:bg-white/55 dark:hover:bg-white/55" />
-            </li>
-          ))}
-        </ul>
-      </section>
+        {spot.inside ? null : (
+          <div className="relative mt-4 rounded-tile border-2 border-dashed border-[color:var(--ink)]/45 bg-white/55 p-4">
+            <p className="font-display text-lg leading-tight font-extrabold">Fuera de tu radio de {radiusKm} km</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Queda a {formatKm(km)}. {next ? `Con ${next} km ya entra en tu búsqueda.` : "Está más lejos que el radio máximo."}
+            </p>
+            {next ? (
+              <Button size="lg" className="mt-3 w-full" onClick={() => onWiden(next)}>
+                Ampliar mi radio a {next} km
+              </Button>
+            ) : null}
+          </div>
+        )}
 
-      {others.length ? (
-        <section aria-labelledby="spot-others" className="relative mt-5 rounded-tile border-2 border-[color:var(--ink)]/15 bg-white/50 p-3">
-          <h3 id="spot-others" className="px-1 text-[0.78rem] font-bold tracking-[0.12em] uppercase">
-            Otras sucursales de {company.name}
+        <section aria-labelledby="spot-jobs" className="relative mt-5">
+          <h3 id="spot-jobs" className="font-display text-[1.2rem] font-extrabold">
+            {jobs.length === 1 ? "1 vacante aquí" : `${jobs.length} vacantes aquí`}
           </h3>
-          <ul className="mt-1.5 space-y-1">
-            {others.map(({ b, km: bk, spot: s }) => {
-              const n = s?.jobs.length ?? 0;
-              const body = (
-                <>
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-[color:var(--ink)] bg-white text-ink">
-                    <HugeiconsIcon icon={Store01Icon} className="size-5" strokeWidth={2} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{b.name}</span>
-                    <span className="block truncate text-sm text-muted-foreground">
-                      {n ? vacantes(n) : bk > 15 ? "Fuera del radar" : "Sin vacantes ahorita"}
-                      {b.colonia !== b.name ? ` · ${b.colonia}` : ""}
-                    </span>
-                  </span>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-bold tabular-nums">
-                    <span aria-hidden className="size-2 rounded-full" style={{ background: bandColor(bandFor(bk)) }} />
-                    {formatKm(bk)}
-                  </span>
-                  {s ? <HugeiconsIcon icon={ArrowRight01Icon} className="size-4 shrink-0" strokeWidth={2.4} /> : null}
-                </>
-              );
-              return (
-                <li key={b.id}>
-                  {s ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelect(b.id)}
-                      aria-label={`Ver ${b.name}: ${n ? vacantes(n) : "sin vacantes"} a ${formatKm(bk)}`}
-                      className={cn("press flex min-h-12 w-full items-center gap-3 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-white/70", RING)}
-                    >
-                      {body}
-                    </button>
-                  ) : (
-                    <div className="flex min-h-12 items-center gap-3 px-1.5 py-1.5 opacity-75">{body}</div>
-                  )}
-                </li>
-              );
-            })}
+          <ul className="mt-1 divide-y-2 divide-dashed divide-[color:var(--ink)]/15">
+            {jobs.map((j) => (
+              <li key={j.id}>
+                <JobRow job={j} km={j.km} radiusKm={radiusKm} meta={j.shift} className="hover:bg-white/55 dark:hover:bg-white/55" />
+              </li>
+            ))}
           </ul>
         </section>
-      ) : null}
 
-      <Button size="lg" asChild className="relative mt-5 w-full shrink-0">
-        <Link href="/mapa">
-          <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
-          Ver en el mapa
-        </Link>
-      </Button>
-    </div>
+        {others.length ? (
+          <section aria-labelledby="spot-others" className="relative mt-5 rounded-tile border-2 border-[color:var(--ink)]/15 bg-white/50 p-3">
+            <h3 id="spot-others" className="px-1 text-[0.78rem] font-bold tracking-[0.12em] uppercase">
+              Otras sucursales de {company.name}
+            </h3>
+            <ul className="mt-1.5 space-y-1">
+              {others.map(({ b, km: bk, spot: s }) => {
+                const n = s?.jobs.length ?? 0;
+                const body = (
+                  <>
+                    <span className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-[color:var(--ink)] bg-white text-ink">
+                      <HugeiconsIcon icon={Store01Icon} className="size-5" strokeWidth={2} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{b.name}</span>
+                      <span className="block truncate text-sm text-muted-foreground">
+                        {n ? vacantes(n) : bk > 15 ? "Fuera del radar" : "Sin vacantes ahorita"}
+                        {b.colonia !== b.name ? ` · ${b.colonia}` : ""}
+                      </span>
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-bold tabular-nums">
+                      <span aria-hidden className="size-2 rounded-full" style={{ background: bandColor(bandFor(bk)) }} />
+                      {formatKm(bk)}
+                    </span>
+                    {s ? <HugeiconsIcon icon={ArrowRight01Icon} className="size-4 shrink-0" strokeWidth={2.4} /> : null}
+                  </>
+                );
+                return (
+                  <li key={b.id}>
+                    {s ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelect(b.id)}
+                        aria-label={`Ver ${b.name}: ${n ? vacantes(n) : "sin vacantes"} a ${formatKm(bk)}`}
+                        className={cn("press flex min-h-12 w-full items-center gap-3 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-white/70", RING)}
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <div className="flex min-h-12 items-center gap-3 px-1.5 py-1.5 opacity-75">{body}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
+        {desktop ? mapButton : null}
+      </div>
+      {/* Phone bottom sheet: pinned footer, so the main action is on screen and above the home indicator. */}
+      {desktop ? null : (
+        <div className="shrink-0 border-t-2 border-dashed border-[color:var(--ink)]/20 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+          {mapButton}
+        </div>
+      )}
+    </>
   );
 }
 

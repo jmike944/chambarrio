@@ -157,6 +157,15 @@ type Draft = {
   description: string;
 };
 
+/** Editing: start the "Tipo de chamba" row scrolled to the chosen type (on a phone it can sit off-screen). */
+function revealPressedChip(row: HTMLDivElement | null) {
+  const chip = row?.querySelector<HTMLElement>("[aria-pressed=true]");
+  if (!row || !chip) return;
+  const r = row.getBoundingClientRect();
+  const c = chip.getBoundingClientRect();
+  row.scrollLeft += c.left - r.left - (r.width - c.width) / 2;
+}
+
 function toDraft(e: StoredExperience | null): Draft {
   const a = parseMonth(e?.startMonth);
   const b = parseMonth(e?.endMonth);
@@ -297,7 +306,7 @@ function ExperienceDrawer({
                 <legend className="mb-2 text-[0.95rem] font-bold">
                   Tipo de chamba <span className="font-normal text-muted-foreground">(opcional)</span>
                 </legend>
-                <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
+                <div ref={revealPressedChip} className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
                   {CATEGORIES.map((c) => {
                     const on = d.category === c.id;
                     return (
@@ -379,7 +388,7 @@ function ExperienceDrawer({
                   variant="ghost"
                   size="xl"
                   onClick={() => setConfirm(true)}
-                  className="shrink-0 px-4 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  className="shrink-0 px-4 text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:px-3"
                 >
                   <HugeiconsIcon icon={Delete02Icon} className="size-5" strokeWidth={2.2} />
                   Borrar
@@ -389,10 +398,27 @@ function ExperienceDrawer({
                 type="submit"
                 size="xl"
                 aria-disabled={saving || undefined}
-                className={cn("min-w-0 flex-1 text-[1.05rem] font-bold", INK_BUTTON, WW_HARD_SM, saving && "opacity-80")}
+                className={cn(
+                  "min-w-0 flex-1 text-[1.05rem] font-bold max-sm:px-4",
+                  INK_BUTTON,
+                  WW_HARD_SM,
+                  // ink would sink into the dark sheet: lime there (same as the team dialogs' submit)
+                  "dark:border-ink dark:bg-limon dark:text-ink dark:hover:bg-limon/90 dark:[&_svg]:text-ink",
+                  saving && "opacity-80",
+                )}
               >
                 <HugeiconsIcon icon={Tick02Icon} className="size-5 text-limon" strokeWidth={2.6} />
-                {saving ? "Guardando…" : editing ? "Guardar cambios" : "Agregar"}
+                {saving ? (
+                  "Guardando…"
+                ) : editing ? (
+                  // next to "Borrar" on a phone the long label ran into the pill's edge
+                  <>
+                    <span className="sm:hidden">Guardar</span>
+                    <span className="max-sm:hidden">Guardar cambios</span>
+                  </>
+                ) : (
+                  "Agregar"
+                )}
               </Button>
             </div>
           </form>

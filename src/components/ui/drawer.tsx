@@ -4,6 +4,8 @@ import * as React from "react"
 import { cn } from "cn"
 import { Drawer as DrawerPrimitive } from "vaul"
 
+import { useModalFocus } from "@/components/ui/use-modal-focus"
+
 function Drawer({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
@@ -44,21 +46,31 @@ function DrawerOverlay({
   )
 }
 
+/*
+ * Sheets size with dvh (vh is the tallest iPhone viewport, so an 80vh sheet could run under the
+ * Safari toolbar). For a sheet longer than the screen, lay it out as a flex column: a shrink-0
+ * header, a `min-h-0 flex-1 overflow-y-auto` body and a shrink-0 footer padded with
+ * env(safe-area-inset-bottom), so the title and the main button never scroll away.
+ */
 function DrawerContent({
   className,
   children,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
+  const focus = useModalFocus("sheet", { onOpenAutoFocus, onCloseAutoFocus })
   return (
     <DrawerPortal data-slot="drawer-portal">
       <DrawerOverlay />
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          "group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-sm text-popover-foreground before:absolute before:inset-2 before:-z-10 before:rounded-4xl before:border before:border-border before:bg-popover data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[80vh] data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:sm:max-w-sm data-[vaul-drawer-direction=right]:sm:max-w-sm",
+          "group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-sm text-popover-foreground outline-none before:absolute before:inset-2 before:-z-10 before:rounded-4xl before:border before:border-border before:bg-popover data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=bottom]:bottom-0 data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[80dvh] data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80dvh] data-[vaul-drawer-direction=left]:sm:max-w-sm data-[vaul-drawer-direction=right]:sm:max-w-sm",
           className
         )}
         {...props}
+        {...focus}
       >
         <div className="mx-auto mt-4 hidden h-1.5 w-[100px] shrink-0 rounded-full bg-muted group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
         {children}

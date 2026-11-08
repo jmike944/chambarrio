@@ -5,6 +5,7 @@ import { cn } from "cn"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
+import { useModalFocus } from "@/components/ui/use-modal-focus"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Cancel01Icon } from "@hugeicons/core-free-icons"
 
@@ -48,31 +49,41 @@ function DialogOverlay({
   )
 }
 
+/*
+ * Phone-safe by default: never taller than the screen (dvh, minus the notch and home-indicator
+ * insets); a long dialog scrolls inside itself. Dialogs with their own header/body/footer layout
+ * override max-h and overflow. See use-modal-focus for the focus rules.
+ */
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const focus = useModalFocus("dialog", { onOpenAutoFocus, onCloseAutoFocus })
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-4xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 overflow-x-hidden overflow-y-auto overscroll-contain rounded-4xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/5 duration-100 outline-none sm:max-w-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
+        {...focus}
       >
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
+            {/* 32 px to look at, 44 px to tap (the ::after widens the hit area) */}
             <Button
               variant="ghost"
-              className="absolute top-4 right-4"
+              className="absolute top-4 right-4 after:absolute after:-inset-2"
               size="icon-sm"
             >
               <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
