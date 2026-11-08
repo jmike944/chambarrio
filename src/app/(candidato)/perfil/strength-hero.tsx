@@ -4,11 +4,11 @@ import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon, CheckmarkBadge01Icon, Location06Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon, CheckmarkBadge01Icon, Location06Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
+import { Avatar, avatarCircleBg } from "@/components/avatar";
 import { HeroCard } from "@/components/chamba/primitives";
 import { CountUp, springs, Sticker, useConfetti } from "@/components/chamba/motion";
-import { useOwnFileUrl } from "@/lib/live/profile-files";
-import { useApp } from "@/lib/store";
+import { useApp, useMyAvatar } from "@/lib/store";
 import { PROFILE_COMPLETE_AT, pointsToComplete, STRENGTH_LEVEL_LABEL, strengthLevel } from "@/lib/profile-strength";
 import { cn } from "@/lib/utils";
 import { HARD, HARD_SM, HazardTape, Rivets } from "../postulaciones/rugged";
@@ -18,7 +18,8 @@ import { editedRecently, goToSection, sectionForTip, useProfileStrength, type CS
 const WORK_CONFETTI = ["#FFC93C", "#DDF78A", "#FF6B2C", "#5CC3FF", "#FFFFFF"];
 
 /**
- * "Fuerza de tu perfil": the candidate's identity + a big 0–100 meter (same weights as the server),
+ * "Fuerza de tu perfil": the candidate's identity (their avatar, which is what companies see first, with a
+ * "Tu avatar" shortcut to the builder) + a big 0–100 meter (same weights as the server),
  * a "Perfil completo" sticker at ≥ 80 and the three best next steps as tappable chips that jump to
  * their section. Confetti when the user's own edit crosses 80.
  */
@@ -27,7 +28,8 @@ export function StrengthHero() {
   const colonia = useApp((s) => s.colonia);
   const hasHome = useApp((s) => s.hasHome);
   const radiusKm = useApp((s) => s.radiusKm);
-  const { url: photo } = useOwnFileUrl("avatar");
+  const avatar = useMyAvatar();
+  const avatarSaved = useApp((s) => s.avatarSaved);
   const { value, tips } = useProfileStrength();
   const top = tips.slice(0, 3);
   const level = strengthLevel(value);
@@ -49,13 +51,6 @@ export function StrengthHero() {
     }
   }, [value, fire]);
 
-  const initials =
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => w[0]?.toUpperCase() ?? "")
-      .join("") || "?";
   const firstName = name.trim().split(/\s+/)[0] || "Tú";
 
   return (
@@ -80,20 +75,24 @@ export function StrengthHero() {
 
       {/* ------------------------------------------------ who */}
       <div className={cn("mt-3 flex items-center gap-3.5", complete && "pr-20")}>
-        <span
-          className={cn(
-            "grid size-16 shrink-0 -rotate-3 place-items-center overflow-hidden rounded-2xl bg-limon font-display text-[1.7rem] font-extrabold text-ink",
-            HARD_SM,
-          )}
+        {/* The avatar is a big tap target too; the "Tu avatar" pill below is its accessible twin. */}
+        <button
+          type="button"
+          tabIndex={-1}
           aria-hidden
+          onClick={() => goToSection("avatar")}
+          className="group press relative size-[4.75rem] shrink-0 -rotate-3 outline-none"
         >
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element -- local blob / short-lived signed URL
-            <img src={photo} alt="" className="size-full object-cover" />
-          ) : (
-            initials
-          )}
-        </span>
+          <span
+            className={cn("absolute inset-0 overflow-hidden rounded-2xl", HARD_SM)}
+            style={{ background: avatarCircleBg(avatar) }}
+          >
+            <Avatar config={avatar} framing="busto" size={76} animated={false} className="block size-full" />
+          </span>
+          <span className="absolute -right-2 -bottom-2 grid size-7 rotate-3 place-items-center rounded-full border-2 border-ink bg-limon text-ink transition-transform group-hover:scale-110">
+            <HugeiconsIcon icon={PencilEdit02Icon} className="size-3.5" strokeWidth={2.4} />
+          </span>
+        </button>
         <div className="min-w-0">
           <p className="truncate font-display text-[1.75rem] leading-[1.02] font-extrabold tracking-[-0.035em] sm:text-[2rem]">
             {firstName}
@@ -110,6 +109,14 @@ export function StrengthHero() {
               )}
             </span>
           </p>
+          <button
+            type="button"
+            onClick={() => goToSection("avatar")}
+            className="press group relative mt-2 inline-flex h-8 items-center gap-1.5 rounded-full bg-white/14 pr-2.5 pl-3 text-[0.82rem] font-semibold outline-none transition-colors before:absolute before:-inset-y-1.5 before:inset-x-0 hover:bg-white/22 focus-visible:ring-3 focus-visible:ring-limon"
+          >
+            {avatarSaved ? "Tu avatar · Editar" : "Crea tu avatar"}
+            <HugeiconsIcon icon={ArrowRight01Icon} className="size-4 transition-transform group-hover:translate-x-0.5" strokeWidth={2.2} />
+          </button>
         </div>
       </div>
 

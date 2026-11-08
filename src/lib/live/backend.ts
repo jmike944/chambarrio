@@ -15,6 +15,7 @@ import { emitLive } from "./events";
  */
 
 export type {
+  AvatarWriteResult,
   BusinessInput,
   CompanyPatch,
   ExperienceInput,
@@ -42,6 +43,7 @@ export {
   insertExperience,
   listApplicants,
   removeBranch,
+  saveAvatarConfig,
   saveProfile,
   setHome,
   toggleSaved,

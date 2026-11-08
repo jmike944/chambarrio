@@ -8,7 +8,7 @@ import { Building06Icon, LockIcon, SquareUnlock02Icon } from "@hugeicons/core-fr
 import { ApplicantCard } from "@/components/empresa/applicant-card";
 import type { ApplicantProfile } from "@/lib/live/applicant-profiles";
 import { useOwnFileUrl } from "@/lib/live/profile-files";
-import { useApp, useJobsByDistance } from "@/lib/store";
+import { useApp, useJobsByDistance, useMyAvatar } from "@/lib/store";
 import { sortExperiencesByRecency, strengthOf, type WorkExperience } from "@/lib/profile-strength";
 import { cn } from "@/lib/utils";
 import { HARD } from "../postulaciones/rugged";
@@ -46,6 +46,8 @@ export function EmployerPreview({ index }: { index: number }) {
     })),
   );
   const input = useStrengthInput();
+  // What companies see from the start ("Crea tu avatar"); the photo only once unlocked.
+  const avatar = useMyAvatar();
   const { url: photoUrl } = useOwnFileUrl("avatar");
   const nearest = useJobsByDistance()[0];
   const demo = s.mode !== "live";
@@ -92,13 +94,13 @@ export function EmployerPreview({ index }: { index: number }) {
       name: unlocked ? s.name.trim() || "Tu nombre" : null,
       phone: unlocked ? s.phone || null : null,
       photoUrl: unlocked ? photoUrl : null,
-      photoArt: null,
+      photoArt: avatar,
       cvPath: unlocked ? s.cvPath : null,
       cvUrl: null,
       signedAt: null,
       demo,
     };
-  }, [s, input, unlocked, photoUrl, nearest, demo]);
+  }, [s, input, unlocked, photoUrl, avatar, nearest, demo]);
 
   /** Read-only: explain the contact buttons instead of dialing yourself. */
   function intercept(e: React.MouseEvent) {
@@ -128,7 +130,7 @@ export function EmployerPreview({ index }: { index: number }) {
             Así te ven las empresas
           </h2>
           <p className="mt-1 text-[0.92rem] leading-snug text-muted-foreground">
-            Cuando te postulas, la empresa ve tu perfil sin tus datos de contacto. Tu nombre, teléfono, foto y CV aparecen solo si desbloquea la vacante.
+            Cuando te postulas, la empresa ve tu avatar y tu perfil sin tus datos de contacto. Tu nombre, teléfono, foto y CV aparecen solo si desbloquea la vacante.
           </p>
         </div>
       </header>

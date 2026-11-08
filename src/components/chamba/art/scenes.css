@@ -31,13 +31,10 @@
   [data-animated] .sc-flash { animation-name: scKFlash; animation-timing-function: steps(1, end); }
   [data-animated] .sc-drift { animation-name: scKDrift; }
   [data-animated] .sc-swing { animation-name: scKSwing; }
-  [data-animated] .sc-wave { animation-name: scKWave; }
   [data-animated] .sc-fall { animation-name: scKFall; animation-timing-function: linear; }
   [data-animated] .sc-pop { animation-name: scKPop; }
-  [data-animated] .sc-zz { animation-name: scKZz; animation-timing-function: ease-out; }
   [data-animated] .sc-speed { animation-name: scKSpeed; animation-timing-function: linear; }
   [data-animated] .sc-coin { animation-name: scKCoin; animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
-  [data-animated] .sc-hi5 { animation-name: scKHi5; }
   [data-animated] .sc-burst { animation-name: scKBurst; }
   [data-animated] .sc-shake { animation-name: scKShake; }
   [data-animated] .sc-blink { animation-name: scKBlink; }
@@ -103,13 +100,6 @@
     0%, 100% { transform: rotate(var(--a, 8deg)); }
     50% { transform: rotate(calc(var(--a, 8deg) * -1)); }
   }
-  @keyframes scKWave {
-    0%, 100% { transform: rotate(0deg); }
-    15% { transform: rotate(var(--a, 16deg)); }
-    30% { transform: rotate(calc(var(--a, 16deg) * -0.6)); }
-    45% { transform: rotate(var(--a, 16deg)); }
-    60% { transform: rotate(0deg); }
-  }
   @keyframes scKFall {
     0% { transform: translateY(-30px) rotate(0deg); opacity: 0; }
     10% { opacity: 1; }
@@ -122,11 +112,6 @@
     14%, 84% { transform: scale(1); opacity: 1; }
     92%, 100% { transform: scale(0.85); opacity: 0; }
   }
-  @keyframes scKZz {
-    0% { transform: translate(0, 0) scale(0.4) rotate(-10deg); opacity: 0; }
-    20% { opacity: 1; }
-    100% { transform: translate(28px, -70px) scale(1.15) rotate(12deg); opacity: 0; }
-  }
   @keyframes scKSpeed {
     0% { transform: translateX(40px) scaleX(0.4); opacity: 0; }
     25% { opacity: 1; }
@@ -137,12 +122,6 @@
     12% { opacity: 1; }
     62% { transform: translateY(16px); opacity: 1; }
     74%, 100% { transform: translateY(46px); opacity: 0; }
-  }
-  @keyframes scKHi5 {
-    0%, 22%, 100% { transform: rotate(-9deg); }
-    44% { transform: rotate(3deg); }
-    50% { transform: rotate(-2deg); }
-    56%, 72% { transform: rotate(0deg); }
   }
   @keyframes scKBurst {
     0%, 40% { transform: scale(0.2) rotate(-20deg); opacity: 0; }
@@ -165,6 +144,14 @@
   @keyframes scKFlutter {
     0%, 100% { transform: scaleY(1); }
     50% { transform: scaleY(0.88); }
+  }
+}
+
+/* Engine figures inside a scene (equipo crew): offset each member's idle motion. Beats the
+   engine's `.avRoot[data-animated] .avX` shorthand on specificity, same layer. */
+@layer components {
+  [data-scene] .scCrew .avRoot .avA {
+    animation-delay: var(--crew-dl, 0s);
   }
 }
 

@@ -9,10 +9,74 @@ export type Database = {
   };
   public: {
     Tables: {
+      // Hiring pipeline (20261107233000): the timeline, written only by a trigger; readable by the
+      // candidate and the vacancy's company.
+      application_events: {
+        Row: { actor: "candidato" | "empresa"; application_id: string; created_at: string; id: number; interview_at: string | null; status: E["application_status"] };
+        Insert: { actor: "candidato" | "empresa"; application_id: string; created_at?: string; id?: never; interview_at?: string | null; status: E["application_status"] };
+        Update: { actor?: "candidato" | "empresa"; application_id?: string; created_at?: string; id?: never; interview_at?: string | null; status?: E["application_status"] };
+        Relationships: [
+          { foreignKeyName: "application_events_application_id_fkey"; columns: ["application_id"]; isOneToOne: false; referencedRelation: "applications"; referencedColumns: ["id"] },
+        ];
+      };
+      // Private recruiter notes: read / insert / delete-own by the vacancy's company only.
+      application_notes: {
+        Row: { application_id: string; author_id: string; body: string; created_at: string; id: string };
+        Insert: { application_id: string; author_id?: string; body: string; created_at?: string; id?: string };
+        Update: { application_id?: string; author_id?: string; body?: string; created_at?: string; id?: string };
+        Relationships: [
+          { foreignKeyName: "application_notes_application_id_fkey"; columns: ["application_id"]; isOneToOne: false; referencedRelation: "applications"; referencedColumns: ["id"] },
+        ];
+      };
       applications: {
-        Row: { candidate_id: string; created_at: string; id: string; job_id: string; status: E["application_status"]; updated_at: string };
-        Insert: { candidate_id: string; created_at?: string; id?: string; job_id: string; status?: E["application_status"]; updated_at?: string };
-        Update: { candidate_id?: string; created_at?: string; id?: string; job_id?: string; status?: E["application_status"]; updated_at?: string };
+        Row: {
+          candidate_id: string;
+          closed_at: string | null;
+          closed_by: "empresa" | "candidato" | null;
+          company_message: string | null;
+          created_at: string;
+          hired_at: string | null;
+          id: string;
+          interview_at: string | null;
+          interview_note: string | null;
+          interview_place: string | null;
+          job_id: string;
+          seen_at: string | null;
+          status: E["application_status"];
+          updated_at: string;
+        };
+        Insert: {
+          candidate_id: string;
+          closed_at?: string | null;
+          closed_by?: "empresa" | "candidato" | null;
+          company_message?: string | null;
+          created_at?: string;
+          hired_at?: string | null;
+          id?: string;
+          interview_at?: string | null;
+          interview_note?: string | null;
+          interview_place?: string | null;
+          job_id: string;
+          seen_at?: string | null;
+          status?: E["application_status"];
+          updated_at?: string;
+        };
+        Update: {
+          candidate_id?: string;
+          closed_at?: string | null;
+          closed_by?: "empresa" | "candidato" | null;
+          company_message?: string | null;
+          created_at?: string;
+          hired_at?: string | null;
+          id?: string;
+          interview_at?: string | null;
+          interview_note?: string | null;
+          interview_place?: string | null;
+          job_id?: string;
+          seen_at?: string | null;
+          status?: E["application_status"];
+          updated_at?: string;
+        };
         Relationships: [
           { foreignKeyName: "applications_job_id_fkey"; columns: ["job_id"]; isOneToOne: false; referencedRelation: "jobs"; referencedColumns: ["id"] },
         ];
@@ -158,6 +222,8 @@ export type Database = {
           expected_period: E["pay_period"] | null;
           avatar_path: string | null;
           cv_path: string | null;
+          /** 20261108000000_avatar_config.sql (app AvatarConfig; absent from `select *` until applied). */
+          avatar_config: Json | null;
           role: E["app_role"];
           unsubscribe_token: string;
           updated_at: string;
@@ -190,6 +256,7 @@ export type Database = {
           expected_period?: E["pay_period"] | null;
           avatar_path?: string | null;
           cv_path?: string | null;
+          avatar_config?: Json | null;
           role?: E["app_role"];
           unsubscribe_token?: string;
           updated_at?: string;
@@ -247,6 +314,8 @@ export type Database = {
     Functions: {
       add_branch: { Args: { lat: number; lng: number; p_colonia: string; p_company_id: string; p_name: string }; Returns: string };
       is_company_owner: { Args: { cid: string }; Returns: boolean };
+      /** The signed-in user owns the company of this application's vacancy. */
+      owns_application: { Args: { p_app: string }; Returns: boolean };
       job_applicants: {
         Args: { p_job_id: string };
         Returns: {

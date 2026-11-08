@@ -4,7 +4,8 @@ import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Json } from "@/lib/supabase/database.types";
-import { APPLICANTS, demoProfile, type AvatarArt, type DemoPersonKey } from "@/lib/data/applicants";
+import { APPLICANTS, demoAvatar, demoProfile, type DemoPersonKey } from "@/lib/data/applicants";
+import { type AvatarConfig, randomAvatar, sanitizeAvatar } from "@/components/avatar/config";
 import type { ApplicationStatus, CategoryId, Experience, PayPeriod, Shift } from "@/lib/data/types";
 import { useMyCompany, type CatalogStatus } from "@/lib/data/catalog";
 import { useApp } from "@/lib/store";
@@ -31,6 +32,9 @@ import { onLive } from "./events";
  *    1 h signed URLs for the photo / CV from the private "avatars" / "cvs" buckets. If the detail RPC
  *    fails, the cards fall back to the plain rows (strength null).
  *  - demo: the mock applicants + DEMO_PROFILES. Never touches Supabase.
+ * Every card carries an avatar look (`photoArt`): the one the candidate built (`profile.avatar` from
+ * job_applicants_detail, sanitized), else a deterministic random look seeded by the application id.
+ * It isn't contact info, so it shows while locked too; the real photo only while unlocked.
  */
 
 export type ApplicantDetails = Omit<CandidateProfileExtras, "avatarPath" | "cvPath">;
@@ -60,8 +64,8 @@ export type ApplicantProfile = {
   phone: string | null;
   /** Live: signed URL of the photo (unlocked only). */
   photoUrl: string | null;
-  /** Demo: illustrated stand-in for the photo. */
-  photoArt: AvatarArt | null;
+  /** The applicant's avatar look (avatar engine), locked or not. null → <ApplicantAvatar> picks a random one. */
+  photoArt: AvatarConfig | null;
   /** Live: storage path of the CV (unlocked only), to re-sign a stale link. */
   cvPath: string | null;
   /** Live: signed URL of the CV, valid ~1 h from `signedAt`. */
@@ -144,7 +148,7 @@ export function demoApplicantProfile(base: DemoBase, person: DemoPersonKey): App
     name: base.unlocked ? base.name : null,
     phone: base.unlocked ? p.phone : null,
     photoUrl: null,
-    photoArt: base.unlocked ? (p.photo ?? null) : null,
+    photoArt: demoAvatar(person),
     cvPath: null,
     cvUrl: null,
     signedAt: null,
@@ -158,6 +162,8 @@ const APPLICANT_BY_ID = Object.fromEntries(APPLICANTS.map((a) => [a.id, a]));
 
 type DetailRow = {
   id: string;
+  /** The candidate's own avatar (profile.avatar), sanitized; null until they build one. */
+  avatar: AvatarConfig | null;
   strength: number;
   unlocked: boolean;
   details: ApplicantDetails;
@@ -257,6 +263,9 @@ async function fetchDetails(jobId: string): Promise<DetailResult> {
       const c = r.unlocked && isObj(r.contact) ? r.contact : null;
       return {
         id: r.application_id,
+        // `profile.avatar` (jsonb) arrives with the avatar migration; unknown values fall back field by
+        // field to this applicant's random look, so a half-valid value still draws one consistent person.
+        avatar: p.avatar ? sanitizeAvatar(p.avatar, randomAvatar(r.application_id)) : null,
         strength: Math.max(0, Math.min(100, Math.round(r.strength ?? 0))),
         unlocked: r.unlocked,
         details: parseDetails(r.profile),
@@ -384,7 +393,7 @@ function fallbackProfile(a: ApplicantView): ApplicantProfile {
     name: a.unlocked ? a.name : null,
     phone: a.unlocked ? a.phone : null,
     photoUrl: null,
-    photoArt: null,
+    photoArt: randomAvatar(a.id),
     cvPath: null,
     cvUrl: null,
     signedAt: null,
@@ -444,6 +453,7 @@ export function useApplicantProfiles(jobId?: string): ApplicantProfilesResult {
         experiences: d.experiences,
         hasPhoto: d.hasPhoto,
         hasCv: d.hasCv,
+        photoArt: d.avatar ?? randomAvatar(a.id),
         name: unlocked ? (d.name ?? a.name) : null,
         phone: unlocked ? (d.phone ?? a.phone) : null,
         photoUrl: unlocked ? d.photoUrl : null,

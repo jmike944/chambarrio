@@ -74,6 +74,7 @@ export function useProfileStrength() {
 
 /** Section anchor ids in this editor (tips scroll to them). */
 export type SectionId =
+  | "avatar"
   | "datos"
   | "intereses"
   | "zona"

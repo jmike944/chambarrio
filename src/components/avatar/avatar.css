@@ -1,0 +1,180 @@
+/*
+ * Chambarrio · avatar engine motion (avatar.tsx).
+ * Global CSS (the project's Turbopack *.css rule), so every class is `av`-prefixed.
+ * Transform only. Runs only when the root svg has `data-animated`, and only when the user has not
+ * asked for reduced motion (the resting pose is the static image).
+ *
+ * Pivots: `.avA` groups are drawn with their joint at the LOCAL origin (shoulder, elbow, neck, wrist
+ * stub), so `transform-origin: 0 0` in the view-box reference box is exactly the joint.
+ */
+@layer components {
+  .avRoot .avA {
+    transform-box: view-box;
+    transform-origin: 0 0;
+  }
+  .avRoot .avEye {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .avRoot[data-animated] .avBob {
+      animation: av-bob 3.4s ease-in-out infinite;
+    }
+    .avRoot[data-animated] .avHop {
+      animation: av-hop 0.9s cubic-bezier(0.3, 0, 0.5, 1) infinite;
+    }
+    .avRoot[data-animated] .avBlink {
+      animation: av-blink 4.6s linear infinite;
+    }
+    .avRoot[data-animated] .avWave {
+      animation: av-wave 2.4s ease-in-out infinite;
+    }
+    .avRoot[data-animated] .avWaveFore {
+      animation: av-wave-fore 0.55s ease-in-out infinite alternate;
+    }
+    .avRoot[data-animated] .avPump {
+      animation: av-pump 0.9s ease-in-out infinite;
+    }
+    .avRoot[data-animated] .avThumb {
+      animation: av-thumb 1.8s cubic-bezier(0.5, 0, 0.3, 1.4) infinite;
+    }
+    .avRoot[data-animated] .avPoint {
+      animation: av-point 1.5s ease-in-out infinite;
+    }
+    .avRoot[data-animated] .avNod {
+      animation: av-nod 3.2s ease-in-out infinite;
+    }
+    .avRoot[data-animated] .avHandWave {
+      animation: av-hand-wave 0.6s ease-in-out infinite alternate;
+    }
+    .avRoot[data-animated] .avHi5 {
+      animation: av-hi5 1.8s cubic-bezier(0.5, 0, 0.3, 1.3) infinite;
+    }
+    .avRoot[data-animated] .avThumbPop {
+      animation: av-thumb-pop 1.8s cubic-bezier(0.5, 0, 0.3, 1.5) infinite;
+    }
+  }
+
+  @keyframes av-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2.5px);
+    }
+  }
+  @keyframes av-hop {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    45% {
+      transform: translateY(-9px);
+    }
+    80% {
+      transform: translateY(0);
+    }
+  }
+  @keyframes av-blink {
+    0%,
+    91%,
+    97%,
+    100% {
+      transform: scaleY(1);
+    }
+    94% {
+      transform: scaleY(0.12);
+    }
+  }
+  @keyframes av-wave {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    50% {
+      transform: rotate(-7deg);
+    }
+  }
+  @keyframes av-wave-fore {
+    from {
+      transform: rotate(-14deg);
+    }
+    to {
+      transform: rotate(5deg);
+    }
+  }
+  @keyframes av-pump {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    50% {
+      transform: rotate(-9deg);
+    }
+  }
+  @keyframes av-thumb {
+    0%,
+    55%,
+    100% {
+      transform: rotate(0deg);
+    }
+    20% {
+      transform: rotate(-9deg);
+    }
+  }
+  @keyframes av-point {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    50% {
+      transform: rotate(-6deg);
+    }
+  }
+  @keyframes av-nod {
+    0%,
+    70%,
+    100% {
+      transform: rotate(0deg);
+    }
+    80% {
+      transform: rotate(4deg);
+    }
+    90% {
+      transform: rotate(-1deg);
+    }
+  }
+  @keyframes av-hand-wave {
+    from {
+      transform: rotate(-9deg);
+    }
+    to {
+      transform: rotate(9deg);
+    }
+  }
+  @keyframes av-hi5 {
+    0%,
+    60%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-12deg);
+    }
+    40% {
+      transform: rotate(4deg);
+    }
+  }
+  @keyframes av-thumb-pop {
+    0%,
+    60%,
+    100% {
+      transform: rotate(0deg) scale(1);
+    }
+    22% {
+      transform: rotate(-8deg) scale(1.06);
+    }
+  }
+}

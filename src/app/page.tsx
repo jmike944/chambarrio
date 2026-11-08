@@ -457,9 +457,11 @@ export default function LandingPage() {
                 <Reveal
                   inView
                   index={1}
-                  className="relative flex min-w-0 items-center overflow-hidden rounded-panel border-[3px] border-white/80 bg-block-sol p-3 text-ink lg:p-5"
+                  className="relative flex min-w-0 items-end overflow-hidden rounded-panel border-[3px] border-white/80 bg-block-sol p-3 pb-0 text-ink lg:p-5 lg:pb-0"
                 >
-                  <Scene name="equipo" className="w-full" title="Un equipo de trabajadores listos para empezar" />
+                  {/* items-end + no bottom padding: the crew is cut at the hips by the card's edge, not mid-card;
+                      bleed: the sunburst fills the card above the scene instead of leaving a plain band */}
+                  <Scene name="equipo" bleed className="w-full" title="Un equipo de trabajadores listos para empezar" />
                   <Rivets inset="0.6rem" />
                 </Reveal>
               </div>

@@ -33,6 +33,7 @@ import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { HARD, HARD_SM, HazardTape, STENCIL } from "../postulaciones/rugged";
 import { AccountBlock } from "./account-block";
+import { AvatarBuilder } from "./avatar-builder";
 import { EmailAlertsBlock } from "./email-alerts-block";
 import { EmployerPreview } from "./employer-preview";
 import { ExperienceBlock } from "./experience-block";
@@ -44,9 +45,9 @@ import { Block, markEdited, PointsBadge, SUBLABEL, type CSSVars } from "./ui";
 /*
  * /perfil (candidate). Mobile-first, one column; on desktop the live "Así te ven las empresas"
  * preview sits in a sticky column next to the editor.
- *   1. Strength hero (meter + best next steps)   2. Tus datos
- *   3. "Destácate": the optional richer profile, each section says why it helps
- *   4. Preview   5. Tu búsqueda (chamba, experiencia total + distancia, zona)   6. Avisos y cuenta
+ *   1. Strength hero (who you are + meter + best next steps)   2. Crea tu avatar   3. Tus datos
+ *   4. "Destácate": the optional richer profile, each section says why it helps
+ *   5. Preview   6. Tu búsqueda (chamba, experiencia total + distancia, zona)   7. Avisos y cuenta
  */
 
 const EXPERIENCE: Experience[] = ["Sin experiencia", "6 meses", "1 año", "2 años o más"];
@@ -70,7 +71,8 @@ export function ProfileForm() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-7">
         <div className="grid min-w-0 grid-cols-1 content-start gap-6 lg:col-span-7">
           <StrengthHero />
-          <DatosBlock index={1} />
+          <AvatarBuilder tone="durazno" index={1} />
+          <DatosBlock index={2} />
 
           <SectionLabel
             className="mt-2 animate-rise"

@@ -16,6 +16,7 @@ import type {
   Shift,
 } from "@/lib/data/types";
 import { RADIUS_STOPS, type LatLng, type RadiusKm } from "@/lib/geo";
+import { sanitizeAvatar, type AvatarConfig } from "@/components/avatar/config";
 import {
   EDUCATION_LEVELS,
   EMPTY_PROFILE_EXTRAS,
@@ -81,6 +82,13 @@ export type LiveProfile = {
   extras: CandidateProfileExtras;
   /** public.profile_strength(profiles), 0–100; null when the server didn't send it. */
   strength: number | null;
+  /** profiles.avatar_config, sanitized; null = never saved. */
+  avatar: AvatarConfig | null;
+  /**
+   * false when the row came back without an avatar_config column (migration
+   * 20261108000000_avatar_config.sql not applied yet): the store then keeps the avatar on the device.
+   */
+  avatarStored: boolean;
 };
 
 /** A saved work-history row (server id). */
@@ -439,6 +447,8 @@ const BLANK_PROFILE: LiveProfile = {
   emailUpdates: true,
   extras: EMPTY_PROFILE_EXTRAS,
   strength: null,
+  avatar: null,
+  avatarStored: false,
 };
 
 function oneOf<T extends string>(v: unknown, allowed: readonly T[]): T | null {
@@ -554,6 +564,7 @@ export async function fetchSessionData(userId: string): Promise<Result<LiveSessi
           emailUpdates: p.email_updates ?? true,
           extras: profileExtras(p),
           strength: typeof p.profile_strength === "number" ? p.profile_strength : null,
+          ...profileAvatar(p),
         }
       : BLANK_PROFILE;
 
@@ -596,6 +607,39 @@ export async function saveProfile(patch: ProfilePatch): Promise<WriteResult> {
     return data?.length ? {} : { error: MSG.session };
   } catch (e) {
     return { error: profileError(e as DbError) };
+  }
+}
+
+/** The saved avatar (sanitized), and whether the database has the column at all. */
+function profileAvatar(p: ProfileRow): Pick<LiveProfile, "avatar" | "avatarStored"> {
+  const stored = Object.prototype.hasOwnProperty.call(p, "avatar_config");
+  const raw: unknown = stored ? p.avatar_config : null;
+  return { avatar: raw && typeof raw === "object" && !Array.isArray(raw) ? sanitizeAvatar(raw) : null, avatarStored: stored };
+}
+
+/** `missingColumn`: the database doesn't have profiles.avatar_config yet (migration not applied). */
+export type AvatarWriteResult = WriteResult & { missingColumn?: true };
+
+/** Saves (or clears, with null) the signed-in user's illustrated avatar. Never throws. */
+export async function saveAvatarConfig(config: AvatarConfig | null): Promise<AvatarWriteResult> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  try {
+    const id = await currentUserId();
+    if (!id) return { error: MSG.session };
+    const value = config ? sanitizeAvatar(config) : null;
+    const { data, error } = await sb.from("profiles").update({ avatar_config: value }).eq("id", id).select("id");
+    if (error) {
+      // PGRST204: column not in PostgREST's schema cache · 42703: undefined column.
+      const m = `${error.message ?? ""}`.toLowerCase();
+      if (error.code === "PGRST204" || error.code === "42703" || (m.includes("avatar_config") && m.includes("column")))
+        return { missingColumn: true };
+      if (error.code === "23514") return { error: "No pudimos guardar ese avatar. Intenta con otro." };
+      return { error: friendlyError(error) };
+    }
+    return data?.length ? {} : { error: MSG.session };
+  } catch (e) {
+    return { error: friendlyError(e as DbError) };
   }
 }
 

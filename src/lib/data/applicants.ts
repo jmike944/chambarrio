@@ -1,5 +1,6 @@
 import type { CategoryId, Experience } from "./types";
 import type { CandidateProfileExtras, WorkExperience } from "@/lib/profile-strength";
+import type { AvatarConfig } from "@/components/avatar/config";
 
 export type Applicant = {
   id: string;
@@ -15,18 +16,8 @@ export type Applicant = {
   person: DemoPersonKey;
 };
 
-/**
- * Illustrated stand-in for a profile photo in the demo (no real people): a flat sticker bust,
- * no facial features. Rendered by <ApplicantAvatar/>.
- */
-export type AvatarArt = {
-  /** 0 (lightest) … 3 (darkest) */
-  skin: 0 | 1 | 2 | 3;
-  hair: "corto" | "largo" | "chongo" | "rapado";
-  hat?: "casco" | "gorra";
-  top: "chaleco" | "playera" | "camisa" | "overol";
-  bg: "sol" | "cielo" | "menta" | "lila" | "durazno" | "limon";
-};
+/** @deprecated An applicant's look is an engine AvatarConfig; kept as an alias for older imports. */
+export type AvatarArt = AvatarConfig;
 
 /** A demo candidate's optional profile. Anything left out is simply not filled in. */
 export type DemoProfile = Partial<Omit<CandidateProfileExtras, "avatarPath" | "cvPath">> & {
@@ -34,11 +25,38 @@ export type DemoProfile = Partial<Omit<CandidateProfileExtras, "avatarPath" | "c
   phone: string;
   interests: CategoryId[];
   experiences?: WorkExperience[];
-  /** Has a "photo" (shown as AvatarArt). */
-  photo?: AvatarArt;
+  /** The avatar they built (avatar engine). Shown on every card, locked or not. */
+  avatar: AvatarConfig;
+  /** Has a photo on file (counts toward the profile strength; the demo has no real photos, so the
+   * avatar stands in for it). */
+  photo?: boolean;
   /** Has a CV on file. */
   cv?: boolean;
 };
+
+/** Compact avatar literal: skin, hair, hair colour, headwear (+colour), facial hair, outfit (+colour), extras. */
+const av = (
+  skin: AvatarConfig["skin"],
+  hair: AvatarConfig["hair"],
+  hairColor: AvatarConfig["hairColor"],
+  [headwear, headwearColor]: [AvatarConfig["headwear"], AvatarConfig["headwearColor"]],
+  facialHair: AvatarConfig["facialHair"],
+  [outfit, outfitColor]: [AvatarConfig["outfit"], AvatarConfig["outfitColor"]],
+  extra: Partial<Pick<AvatarConfig, "glasses" | "expression" | "accessory">> = {},
+): AvatarConfig => ({
+  v: 1,
+  skin,
+  hair,
+  hairColor,
+  headwear,
+  headwearColor,
+  facialHair,
+  glasses: extra.glasses ?? false,
+  outfit,
+  outfitColor,
+  expression: extra.expression ?? "sonrisa",
+  accessory: extra.accessory ?? "ninguno",
+});
 
 const job = (
   title: string,
@@ -60,10 +78,13 @@ const job = (
 /*
  * Demo people (fictional) near Saltillo's industrial parks. A few very complete profiles with a
  * photo and CV, several in between and a few bare ones, so the difference shows on the cards.
+ * Everyone has an avatar that fits their name and trade (inclusive on purpose).
  * Employers here are generic local businesses, not real companies.
  */
 export const DEMO_PROFILES = {
   jorge: {
+    avatar: av("tono-4", "corto", "negro", ["casco", "sol"], "bigote", ["chaleco", "naranja"], { accessory: "radio" }),
+    photo: true,
     phone: "8445550101",
     interests: ["montacargas", "almacen"],
     headline: "Montacarguista con 5 años en CEDIS y patio de embarques",
@@ -81,11 +102,11 @@ export const DEMO_PROFILES = {
       job("Operador de montacargas", "Almacenes del Norte · Derramadero", "montacargas", "2021-02", null, "Surtido a rampas y acomodo en rack de 9 m."),
       job("Auxiliar de almacén", "Distribuidora La Laguna", "almacen", "2018-06", "2021-01", "Recibo de mercancía y conteos cíclicos."),
     ],
-    photo: { skin: 2, hair: "corto", hat: "casco", top: "chaleco", bg: "cielo" },
     cv: true,
   },
-  juanpablo: { phone: "8445550102", interests: ["montacargas"] },
+  juanpablo: { phone: "8445550102", interests: ["montacargas"], avatar: av("tono-3", "rapado", "negro", ["gorra", "denim"], "ninguno", ["playera", "cielo"]) },
   luisalberto: {
+    avatar: av("tono-5", "rizado", "negro", ["ninguno", "sol"], "candado", ["playera", "concreto"], { expression: "seria" }),
     phone: "8445550103",
     interests: ["montacargas", "produccion"],
     headline: "Operador de montacargas, aprendo rápido",
@@ -97,6 +118,8 @@ export const DEMO_PROFILES = {
     experiences: [job("Ayudante general", "Autopartes Arteaga", "produccion", "2023-03", "2024-04")],
   },
   arturo: {
+    avatar: av("tono-2", "rapado", "castano", ["gorra", "violeta"], "barba", ["overol", "cielo"]),
+    photo: true,
     phone: "8445550104",
     interests: ["montacargas", "almacen"],
     headline: "Montacarguista certificado, turnos rotativos sin problema",
@@ -115,9 +138,10 @@ export const DEMO_PROFILES = {
       job("Operador de montacargas", "Planta de autopartes · Ramos Arizpe", "montacargas", "2017-05", "2024-08"),
       job("Almacenista", "Ferretera Coahuila", "almacen", "2015-01", "2017-04"),
     ],
-    photo: { skin: 1, hair: "rapado", hat: "gorra", top: "overol", bg: "sol" },
   },
   hector: {
+    avatar: av("tono-6", "corto", "canoso", ["casco", "blanco"], "bigote", ["chaleco", "limon"], { accessory: "gafete" }),
+    photo: true,
     phone: "8445550105",
     interests: ["montacargas", "almacen", "seguridad"],
     headline: "Líder de montacargas: 10 años sin incidentes",
@@ -136,10 +160,10 @@ export const DEMO_PROFILES = {
       job("Supervisor de montacargas", "Logística Industrial del Norte", "montacargas", "2019-01", null, "Turno matutino, 6 operadores a cargo."),
       job("Operador de montacargas", "Bodega Ramos", "montacargas", "2014-03", "2018-12"),
     ],
-    photo: { skin: 3, hair: "corto", hat: "casco", top: "chaleco", bg: "menta" },
     cv: true,
   },
   emilio: {
+    avatar: av("tono-3", "corto", "negro", ["gorra", "naranja"], "ninguno", ["playera", "sol"], { expression: "emocion" }),
     phone: "8445550106",
     interests: ["montacargas"],
     headline: "Ayudante de patio, quiero manejar montacargas",
@@ -148,9 +172,11 @@ export const DEMO_PROFILES = {
     availableFrom: "inmediata",
     transport: ["moto"],
   },
-  ricardo: { phone: "8445550107", interests: [] },
-  ivan: { phone: "8445550108", interests: ["almacen"] },
+  ricardo: { phone: "8445550107", interests: [], avatar: av("tono-4", "calvo", "negro", ["ninguno", "sol"], "barba", ["playera", "tinta"], { expression: "seria" }) },
+  ivan: { phone: "8445550108", interests: ["almacen"], avatar: av("tono-1", "rizado", "castano", ["ninguno", "sol"], "ninguno", ["playera", "menta"], { accessory: "audifonos" }) },
   daniela: {
+    avatar: av("tono-2", "chongo", "castano", ["ninguno", "sol"], "ninguno", ["playera", "violeta"], { accessory: "gafete" }),
+    photo: true,
     phone: "8445550109",
     interests: ["almacen", "caja"],
     headline: "Auxiliar de almacén con experiencia en surtido y embarques",
@@ -168,10 +194,11 @@ export const DEMO_PROFILES = {
       job("Auxiliar de almacén", "CEDIS de tiendas de conveniencia", "almacen", "2023-10", null, "Surtido por escáner para 40 tiendas."),
       job("Cajera", "Abarrotes Doña Mary", "caja", "2020-06", "2021-12"),
     ],
-    photo: { skin: 1, hair: "chongo", top: "playera", bg: "lila" },
     cv: true,
   },
   monica: {
+    avatar: av("tono-1", "largo", "miel", ["ninguno", "sol"], "ninguno", ["camisa", "blanco"], { glasses: true }),
+    photo: true,
     phone: "8445550110",
     interests: ["almacen", "oficina"],
     headline: "Inventarios y control de stock en tienda departamental",
@@ -185,9 +212,9 @@ export const DEMO_PROFILES = {
     expectedPay: 12000,
     expectedPeriod: "mes",
     experiences: [job("Auxiliar de inventarios", "Tienda departamental · Saltillo", "almacen", "2023-02", "2025-06")],
-    photo: { skin: 0, hair: "largo", top: "camisa", bg: "durazno" },
   },
   karla: {
+    avatar: av("tono-5", "coleta", "negro", ["gorra", "limon"], "ninguno", ["playera", "sol"]),
     phone: "8445550111",
     interests: ["almacen"],
     shifts: ["Vespertino"],
@@ -195,6 +222,7 @@ export const DEMO_PROFILES = {
     transport: ["caminando"],
   },
   diego: {
+    avatar: av("tono-4", "rapado", "negro", ["ninguno", "sol"], "ninguno", ["playera", "chile"], { expression: "guino" }),
     phone: "8445550112",
     interests: ["almacen", "chofer"],
     headline: "Cargador con ganas de aprender almacén",
@@ -203,6 +231,8 @@ export const DEMO_PROFILES = {
     experiences: [job("Cargador", "Mudanzas del Valle", "almacen", "2024-01", "2024-09")],
   },
   rosa: {
+    avatar: av("tono-4", "chongo", "negro", ["ninguno", "sol"], "ninguno", ["chaleco", "naranja"], { accessory: "radio" }),
+    photo: true,
     phone: "8445550113",
     interests: ["almacen", "limpieza"],
     headline: "Almacenista con licencia de montacargas",
@@ -217,11 +247,11 @@ export const DEMO_PROFILES = {
     expectedPay: 2500,
     expectedPeriod: "semana",
     experiences: [job("Almacenista", "Distribuidora de abarrotes · Centro", "almacen", "2019-08", "2024-12")],
-    photo: { skin: 2, hair: "chongo", top: "chaleco", bg: "limon" },
   },
-  brenda: { phone: "8445550114", interests: ["almacen"] },
-  lucia: { phone: "8445550115", interests: ["almacen", "caja"] },
+  brenda: { phone: "8445550114", interests: ["almacen"], avatar: av("tono-6", "rizado", "negro", ["paliacate", "violeta"], "ninguno", ["playera", "menta"]) },
+  lucia: { phone: "8445550115", interests: ["almacen", "caja"], avatar: av("tono-3", "coleta", "castano", ["ninguno", "sol"], "ninguno", ["playera", "limon"], { expression: "guino" }) },
   andrea: {
+    avatar: av("tono-2", "largo", "negro", ["gorra", "denim"], "ninguno", ["playera", "naranja"]),
     phone: "8445550116",
     interests: ["almacen"],
     about: "Trabajé medio año en una paquetería separando envíos. Quiero un trabajo de tiempo completo cerca de Valle de las Flores.",
@@ -229,6 +259,8 @@ export const DEMO_PROFILES = {
     transport: ["camion"],
   },
   miguel: {
+    avatar: av("tono-4", "rapado", "negro", ["gorra", "violeta"], "bigote", ["camisa", "cielo"]),
+    photo: true,
     phone: "8445550117",
     interests: ["chofer", "almacen"],
     headline: "Chofer con licencia tipo C, rutas Saltillo–Monterrey",
@@ -246,10 +278,10 @@ export const DEMO_PROFILES = {
       job("Chofer repartidor", "Paquetería Express Saltillo", "chofer", "2020-04", null),
       job("Ayudante de reparto", "Refresquera regional", "chofer", "2017-02", "2020-03"),
     ],
-    photo: { skin: 2, hair: "rapado", hat: "gorra", top: "playera", bg: "sol" },
     cv: true,
   },
   fernando: {
+    avatar: av("tono-5", "corto", "negro", ["cofia", "blanco"], "ninguno", ["uniforme", "cielo"], { accessory: "gafete" }),
     phone: "8445550118",
     interests: ["produccion"],
     headline: "Operador de producción, línea de ensamble",
@@ -260,6 +292,8 @@ export const DEMO_PROFILES = {
     experiences: [job("Operador de producción", "Maquiladora de arneses · Derramadero", "produccion", "2026-05", null)],
   },
   patricia: {
+    avatar: av("tono-2", "largo", "castano", ["ninguno", "sol"], "ninguno", ["camisa", "violeta"], { glasses: true, accessory: "audifonos" }),
+    photo: true,
     phone: "8445550119",
     interests: ["almacen", "oficina"],
     headline: "Analista de inventarios con Excel y SAP",
@@ -274,9 +308,9 @@ export const DEMO_PROFILES = {
     expectedPay: 14000,
     expectedPeriod: "mes",
     experiences: [job("Analista de inventarios", "Refaccionaria industrial", "almacen", "2021-09", null)],
-    photo: { skin: 1, hair: "largo", top: "camisa", bg: "menta" },
   },
   oscar: {
+    avatar: av("tono-3", "corto", "canoso", ["gorra", "tinta"], "bigote", ["camisa", "blanco"], { expression: "seria" }),
     phone: "8445550120",
     interests: ["chofer"],
     certifications: ["Licencia tipo B"],
@@ -284,13 +318,18 @@ export const DEMO_PROFILES = {
     availableFrom: "1_semana",
     experiences: [job("Chofer de taxi", "Sitio Alameda", "chofer", "2016-01", "2023-05")],
   },
-  gabriela: { phone: "8445550121", interests: ["produccion"] },
+  gabriela: { phone: "8445550121", interests: ["produccion"], avatar: av("tono-6", "coleta", "negro", ["paliacate", "chile"], "ninguno", ["uniforme", "menta"]) },
 } satisfies Record<string, DemoProfile>;
 
 export type DemoPersonKey = keyof typeof DEMO_PROFILES;
 
 export function demoProfile(person: DemoPersonKey): DemoProfile {
   return DEMO_PROFILES[person];
+}
+
+/** A demo person's avatar. */
+export function demoAvatar(person: DemoPersonKey): AvatarConfig {
+  return DEMO_PROFILES[person].avatar;
 }
 
 // Demo data — fictional people who applied to Logística Zapalinamé's vacancies.

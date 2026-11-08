@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { toast } from "sonner";
+import { AVATAR_PRESETS, randomAvatar, sanitizeAvatar, type AvatarConfig } from "@/components/avatar/config";
 import { COMPANY_BY_ID, DEMO_COMPANY_ID } from "@/lib/data/jobs";
 import type { Application, ApplicationStatus, Branch, CategoryId, CompanySize, Experience } from "@/lib/data/types";
 import { SALTILLO_CENTER, type LatLng, type RadiusKm } from "@/lib/geo";
@@ -101,6 +102,19 @@ type UserData = {
   cvFileName: string | null;
   /** Demo only: a small data-URL thumbnail of the "uploaded" photo (never sent anywhere). */
   demoAvatarUrl: string | null;
+  /**
+   * "Crea tu avatar": the illustrated avatar (live: profiles.avatar_config). null = never built; read it
+   * through useMyAvatar(), which falls back to a deterministic look. Non-identifying: companies see it
+   * before they unlock an application (the photo stays locked).
+   */
+  avatarConfig: AvatarConfig | null;
+  /** The user saved their own avatar at least once (the demo's preset doesn't count; live: avatar_config is set). */
+  avatarSaved: boolean;
+  /**
+   * The avatar is only on this device: a visitor's draft, or live while the database can't store it yet
+   * (migration 20261108000000_avatar_config.sql pending). Uploaded on the next session load that can.
+   */
+  avatarLocalOnly: boolean;
 } & CandidateProfileExtras;
 
 type Actions = {
@@ -133,6 +147,12 @@ type Actions = {
   addExperience: (experience: WorkExperience) => Promise<WriteResult & { id?: string }>;
   updateExperience: (id: string, patch: Partial<WorkExperience>) => Promise<WriteResult>;
   removeExperience: (id: string) => Promise<WriteResult>;
+  /**
+   * Saves the illustrated avatar (sanitized). Live: written to profiles.avatar_config (optimistic, rollback +
+   * toast on error). If the database doesn't have the column yet it stays on this device instead
+   * (avatarLocalOnly) and resolves without error.
+   */
+  setAvatarConfig: (config: AvatarConfig | null) => Promise<WriteResult>;
   /** Live: creates the company + branches the first time, afterwards updates name/kind/size/phone only. */
   setBusiness: (business: Business | null) => Promise<WriteResult>;
   completeOnboarding: (role: Role) => Promise<WriteResult>;
@@ -182,6 +202,9 @@ const BLANK: UserData = {
   serverStrength: null,
   cvFileName: null,
   demoAvatarUrl: null,
+  avatarConfig: null,
+  avatarSaved: false,
+  avatarLocalOnly: false,
 };
 
 /**
@@ -223,6 +246,8 @@ function demoSeed(role: Role): UserData {
       { jobId: "cajera-mirasierra", status: "enviada", minutesAgo: 45 },
     ],
     ...DEMO_EXTRAS,
+    // A look that fits her (cashier). Not "saved" yet, so her first save in the builder celebrates.
+    avatarConfig: AVATAR_PRESETS.caja.config,
   };
 }
 
@@ -252,6 +277,16 @@ export const useApp = create<State>()(
       setEmailAlerts: (on) => writeProfile("emailAlerts", on),
       setEmailUpdates: (on) => writeProfile("emailUpdates", on),
       updateProfile: (patch) => writeProfileMany(cleanExtrasPatch(patch)),
+
+      setAvatarConfig: (input) => {
+        const config = input ? sanitizeAvatar(input) : null;
+        const prev = pick(get(), ["avatarConfig", "avatarSaved", "avatarLocalOnly"]);
+        const mode = get().mode;
+        // A visitor's avatar is a draft on this device (pushed when their account loads).
+        set({ avatarConfig: config, avatarSaved: config !== null, avatarLocalOnly: mode === null && config !== null });
+        if (mode !== "live") return DONE;
+        return pushAvatar(config, prev);
+      },
 
       addExperience: async (input) => {
         const entry = normalizeExperience(input);
@@ -500,7 +535,7 @@ export const useApp = create<State>()(
       name: "chamba-a-lado",
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const s = persisted as Record<string, unknown> & { business?: (Record<string, unknown> & { plan?: string }) | null };
         // v0 → v1: the per-hire plan was replaced by per-vacancy-per-month billing.
@@ -527,6 +562,17 @@ export const useApp = create<State>()(
           for (const [k, v] of Object.entries(seed)) if (s[k] === undefined) s[k] = v;
           if (!Array.isArray(s.workExperiences)) s.workExperiences = [];
           for (const k of ["serverStrength", "cvFileName", "demoAvatarUrl"]) if (s[k] === undefined) s[k] = null;
+        }
+        // v5 → v6: "Crea tu avatar". Nobody has saved one yet; the curated demo gets a look that fits Mariana.
+        if (version < 6) {
+          s.avatarConfig =
+            s.avatarConfig != null
+              ? sanitizeAvatar(s.avatarConfig)
+              : s.mode === "demo" && s.name === "Mariana"
+                ? AVATAR_PRESETS.caja.config
+                : null;
+          if (typeof s.avatarSaved !== "boolean") s.avatarSaved = false;
+          if (typeof s.avatarLocalOnly !== "boolean") s.avatarLocalOnly = false;
         }
         return s as unknown as State;
       },
@@ -828,6 +874,36 @@ export function trackWrite<T>(p: Promise<T>): Promise<T> {
   return p;
 }
 
+// Avatar: one explicit save at a time (not debounced like the text fields).
+/** Avatar saves still waiting for the server (a session load then keeps the local value). */
+let avatarWrites = 0;
+
+/** Writes the avatar to profiles.avatar_config. `prev`: what to restore if the server refuses it. */
+async function pushAvatar(config: AvatarConfig | null, prev?: Pick<UserData, "avatarConfig" | "avatarSaved" | "avatarLocalOnly">): Promise<WriteResult> {
+  const gen = generation;
+  avatarWrites++;
+  let r: api.AvatarWriteResult;
+  try {
+    r = await trackWrite(api.saveAvatarConfig(config));
+  } finally {
+    if (gen === generation) avatarWrites = Math.max(0, avatarWrites - 1);
+  }
+  if (gen !== generation || !isLive()) return r.error ? { error: r.error } : {};
+  if (r.missingColumn) {
+    // Fail soft: the database can't store it yet. Keep it here; the builder says so quietly.
+    if (!get().avatarLocalOnly) set({ avatarLocalOnly: true });
+    return {};
+  }
+  if (r.error) {
+    // Undo only if the user hasn't picked another avatar since.
+    if (prev && same(get().avatarConfig, config)) set(prev);
+    toast.error(r.error);
+    return { error: r.error };
+  }
+  if (get().avatarLocalOnly && same(get().avatarConfig, config)) set({ avatarLocalOnly: false });
+  return {};
+}
+
 function normalizeExperience(e: WorkExperience): WorkExperience {
   return {
     title: e.title.trim(),
@@ -887,6 +963,7 @@ function resetLiveWork() {
   confirmed = {};
   pendingBranchIds.clear();
   pendingExperienceIds.clear();
+  avatarWrites = 0;
 }
 
 /** Back to a signed-out visitor, with no trace of the previous user (demo or live). */
@@ -982,8 +1059,17 @@ export function applyLiveSnapshot(d: LiveSessionData) {
     if (home && !s.hasHome) Object.assign(patch, home);
     if (d.company) patch.business = toBusiness(d.company);
   }
+  // Avatar: the server's copy, unless a save is still on its way. While the database can't store it
+  // (migration pending) the device copy stays; a copy saved only here is uploaded once it can.
+  let uploadAvatar: AvatarConfig | null = null;
+  if (!p.avatarStored) patch.avatarLocalOnly = true;
+  else if (avatarWrites === 0) {
+    if (p.avatar === null && s.avatarLocalOnly && s.avatarSaved && s.avatarConfig) uploadAvatar = s.avatarConfig;
+    else Object.assign(patch, { avatarConfig: p.avatar, avatarSaved: p.avatar !== null, avatarLocalOnly: false });
+  }
   confirmed = server;
   set(patch);
+  if (uploadAvatar) void pushAvatar(uploadAvatar);
 }
 
 // ------------------------------------------------------------------ hooks & helpers
@@ -1001,6 +1087,16 @@ export function useHydrated() {
     () => useApp.persist.hasHydrated(),
     () => false,
   );
+}
+
+/**
+ * The signed-in user's illustrated avatar, ready for <Avatar config=…/> / <AvatarCircle/>: what they saved in
+ * "Crea tu avatar", else a deterministic look seeded by their user id (live) or name. Stable reference.
+ */
+export function useMyAvatar(): AvatarConfig {
+  const saved = useApp((s) => s.avatarConfig);
+  const seed = useApp((s) => s.userId || s.name.trim() || "chambarrio");
+  return useMemo(() => (saved ? sanitizeAvatar(saved) : randomAvatar(seed)), [saved, seed]);
 }
 
 /** "demo" | "live" | null (visitor). */

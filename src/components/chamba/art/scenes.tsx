@@ -1,13 +1,15 @@
 /*
  * Chambarrio · hero scenes ("bold workwear sticker" style).
  * Thick ink outlines, flat fills, hard offset ink shadows, one white shine per main object,
- * hazard stripes / rivets / halftone accents. No faces on objects; people get simple confident faces.
+ * hazard stripes / rivets / halftone accents. No faces on objects. People and hands are drawn by the
+ * avatar engine (@/components/avatar), nested as <svg>s, so they match every avatar in the app.
  * Server-component safe (no hooks, deterministic). All motion is CSS (scenes.css), transform/opacity only,
  * gated by `data-animated` and switched off under prefers-reduced-motion.
  * Each scene has a FIXED aspect ratio (SCENE_RATIO = width / height); viewBox height is 300.
  */
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { AVATAR_PRESETS, Avatar, AvatarHand, type AvatarConfig, type AvatarFraming, type AvatarHandProps, type AvatarPose, avatarHeight } from "@/components/avatar";
 import { Mascot } from "./mascot";
 import "./scenes.css";
 
@@ -18,12 +20,12 @@ export type SceneName =
   | "exito" // Chambita celebrating with a trophy + confetti (application sent / hired)
   | "busqueda" // Chambita with a magnifying glass over a mini map
   | "vacio" // empty state: Chambita napping on a bench / tumbleweed, zZz
-  | "contratado" // high-five / handshake + party hat: you got the job
-  | "negocio" // storefront with striped awning + "open" sign, customers — employer side
+  | "contratado" // high-five (a worker's glove meets the boss's bare hand): you got the job
+  | "negocio" // storefront with striped awning + "open" sign, a regular giving a thumbs up — employer side
   | "codigo" // phone with chat bubbles + a code bubble, Chambita waving — sign-in / OTP
   | "mapa" // folded map with bouncing pins and a dashed route
   | "ahorro" // steel savings box + coins + clock: saved time & money from working close
-  | "equipo"; // a small crew of workers (hard hat, apron, cap) waving — employer hiring
+  | "equipo"; // a small crew of workers (hard hat + vest, apron, cap + overalls) waving — employer hiring
 
 export const SCENE_RATIO: Record<SceneName, number> = {
   barrio: 3,
@@ -47,6 +49,11 @@ export type SceneProps = {
   /** Moving parts (vehicles drive, pins pop, steam rises, confetti falls). Default true. */
   animated?: boolean;
   title?: string;
+  /**
+   * Let the backdrop (rays) run past the scene box, e.g. to fill a card that's taller than the
+   * scene. The parent must clip (overflow-hidden) — figures cut at the bottom edge rely on it.
+   */
+  bleed?: boolean;
 };
 
 /* ------------------------------------------------------------------ */
@@ -67,7 +74,6 @@ const CREAM = "#FFF6E0";
 const WHITE = "#FFFFFF";
 const KRAFT = "#F2B36B";
 const ROAD = "#2A2352";
-const SKIN = ["#8A5A3B", "#C68642", "#F1C27D", "#5C3A24"] as const;
 
 const SW = 5; // outline at viewBox height 300
 const SH = 5; // hard offset shadow
@@ -83,14 +89,11 @@ type Anim =
   | "flash"
   | "drift"
   | "swing"
-  | "wave"
   | "fall"
   | "pop"
-  | "zz"
   | "speed"
   | "scroll"
   | "coin"
-  | "hi5"
   | "burst"
   | "shake"
   | "blink"
@@ -274,102 +277,95 @@ function Halftone({ x, y, cols, rows, gap = 14, r = 3.2, c = INK, op = 0.22 }: {
   );
 }
 
-/** Work glove / hand, wrist at (0,0), fingers up, thumb on the -x side. */
-function Hand({ fill, cuff }: { fill: string; cuff?: string }) {
-  return (
-    <>
-      <P d="M-30-58Q-50-62-56-84Q-59-96-50-98Q-42-99-38-88Q-34-78-24-76Z" fill={fill} sh={false} />
-      <R x={-30} y={-124} w={15} h={70} r={7.5} fill={fill} sh={false} />
-      <R x={-15} y={-134} w={15} h={80} r={7.5} fill={fill} sh={false} />
-      <R x={0} y={-130} w={15} h={76} r={7.5} fill={fill} sh={false} />
-      <R x={15} y={-116} w={14} h={62} r={7} fill={fill} sh={false} />
-      <R x={-32} y={-78} w={64} h={80} r={18} fill={fill} sh={false} />
-      <Shine d="M-20-60Q-20-68-12-70" w={4.5} />
-      {cuff ? <R x={-36} y={-6} w={72} h={24} r={6} fill={cuff} sh={false} /> : null}
-    </>
-  );
-}
+/* ------------------------------------------------------------------ */
+/* People (avatar engine)                                              */
+/* ------------------------------------------------------------------ */
 
-type Hat = "casco" | "gorra" | "chongo";
-/** Bust of a worker: head centre at (0,0), torso to y=+180. */
-function Worker({ skin, hat, shirt, outfit, waveSide, dl = 0 }: { skin: string; hat: Hat; shirt: string; outfit: "chaleco" | "mandil" | "overol"; waveSide: 1 | -1; dl?: number }) {
-  const arm = (
-    <G x={waveSide * 52} y={70} r={waveSide * 28}>
-      <g {...a("wave", 2.2, { dl, o: "50% 100%", v: { "--a": `${waveSide * 16}deg` } })}>
-        <R x={-17} y={-80} w={34} h={96} r={17} fill={shirt} />
-        <G y={-74} s={0.62}>
-          <Hand fill={outfit === "chaleco" ? SUN : skin} cuff={outfit === "chaleco" ? ORA : undefined} />
-        </G>
-      </g>
-    </G>
-  );
+/**
+ * An engine figure placed by the bottom-centre of its frame (`x`, `y` in scene units). Medio is cut
+ * at the hips by its frame, so put that bottom edge on (or below) the scene edge.
+ */
+function Person({
+  config,
+  x,
+  y,
+  w,
+  pose,
+  framing = "medio",
+  flip,
+  animated,
+}: {
+  config: AvatarConfig;
+  x: number;
+  y: number;
+  w: number;
+  pose: AvatarPose;
+  framing?: AvatarFraming;
+  flip?: boolean;
+  animated: boolean;
+}) {
   return (
-    <g {...a("bob", 2.2, { dl: dl - 0.4, v: { "--a": "-5px" } })}>
-      {arm}
-      {/* torso */}
-      <P d="M-66 180V104Q-66 56-24 52H24Q66 56 66 104V180Z" fill={shirt} />
-      {outfit === "chaleco" ? (
-        <>
-          <P d="M-60 180V100Q-58 62-26 56L-12 120V180Z" fill={ORA} sh={false} sw={4} />
-          <P d="M60 180V100Q58 62 26 56L12 120V180Z" fill={ORA} sh={false} sw={4} />
-          <rect x={-60} y={132} width={48} height={11} fill={CONC} stroke={INK} strokeWidth={3.5} />
-          <rect x={12} y={132} width={48} height={11} fill={CONC} stroke={INK} strokeWidth={3.5} />
-        </>
-      ) : null}
-      {outfit === "mandil" ? (
-        <>
-          <L d="M-22 54L-28 96M22 54L28 96" w={6} />
-          <P d="M-34 96H34V180H-34Z" fill={LIME} sh={false} sw={4.5} />
-          <R x={-18} y={124} w={36} h={26} r={6} fill={WHITE} sh={false} sw={4} />
-        </>
-      ) : null}
-      {outfit === "overol" ? (
-        <>
-          <L d="M-34 58L-30 112M34 58L30 112" w={10} c={INK} />
-          <L d="M-34 58L-30 112M34 58L30 112" w={4} c={DENIM} />
-          <P d="M-40 110H40V180H-40Z" fill={DENIM} sh={false} sw={4.5} />
-          <circle cx={-30} cy={114} r={5} fill={SUN} stroke={INK} strokeWidth={3} />
-          <circle cx={30} cy={114} r={5} fill={SUN} stroke={INK} strokeWidth={3} />
-          <R x={-18} y={128} w={36} h={22} r={4} fill={SKY} sh={false} sw={4} />
-        </>
-      ) : null}
-      {/* neck + head */}
-      <rect x={-15} y={30} width={30} height={28} fill={skin} stroke={INK} strokeWidth={SW} />
-      <circle cx={-38} cy={6} r={11} fill={skin} stroke={INK} strokeWidth={SW} />
-      <circle cx={38} cy={6} r={11} fill={skin} stroke={INK} strokeWidth={SW} />
-      <R x={-38} y={-44} w={76} h={88} r={34} fill={skin} sh={4} />
-      {hat === "chongo" ? (
-        <>
-          <C cx={0} cy={-56} r={17} fill={INK} sh={false} />
-          <P d="M-39 2Q-44-50 0-50Q44-50 39 2Q36-26 12-30Q-14-34-39 2Z" fill="#2B1B10" sh={false} />
-          <path d="M-36-20Q0-46 36-20" fill="none" stroke={CHILE} strokeWidth={7} strokeLinecap="round" />
-        </>
-      ) : null}
-      {/* face: confident, simple */}
-      <ellipse cx={-14} cy={0} rx={4.5} ry={6.5} fill={INK} />
-      <ellipse cx={14} cy={0} rx={4.5} ry={6.5} fill={INK} />
-      <L d="M-25-13L-6-11M6-11L25-13" w={6} />
-      <L d="M-2 6Q6 12 0 16" w={4} />
-      <P d="M-17 22Q0 40 17 22Z" fill={WHITE} sh={false} sw={4} />
-      {hat === "casco" ? (
-        <>
-          <P d="M-44-26Q-44-76 0-76Q44-76 44-26Z" fill={SUN} sh={4} />
-          <L d="M0-75V-30" w={4} />
-          <R x={-56} y={-32} w={112} h={13} r={6.5} fill={SUN} sh={false} />
-          <Shine d="M-30-44Q-28-62-14-68" w={5} />
-        </>
-      ) : null}
-      {hat === "gorra" ? (
-        <>
-          <P d="M-41-20Q-41-68 0-68Q41-68 41-20Z" fill={CHILE} sh={4} />
-          <P d="M-46-20Q0-34 46-20Q0-4-46-20Z" fill={CHILE} sh={false} sw={4.5} />
-          <circle cx={0} cy={-68} r={5} fill={INK} />
-          <Shine d="M-26-38Q-24-54-12-60" w={5} />
-        </>
-      ) : null}
+    <g transform={`translate(${x - w / 2} ${y - avatarHeight(framing, w)})`}>
+      <Avatar config={config} framing={framing} pose={pose} size={w} flip={flip} animated={animated} />
     </g>
   );
 }
+
+/** One big engine hand, placed by the bottom-centre of its frame and tilted `r`° around that point. */
+function BigHand({ x, y, r = 0, w, ...hand }: { x: number; y: number; r?: number; w: number } & Omit<AvatarHandProps, "size">) {
+  return (
+    <g transform={`translate(${x} ${y})${r ? ` rotate(${r})` : ""}`}>
+      <g transform={`translate(${-w / 2} ${-Math.round(w * 1.375)})`}>
+        <AvatarHand size={w} {...hand} />
+      </g>
+    </g>
+  );
+}
+
+/** The equipo crew + the negocio customer: inclusive, rugged-but-friendly looks. */
+const CREW_LEFT: AvatarConfig = AVATAR_PRESETS.construccion.config; // hard hat + safety vest + radio
+const CREW_CENTER: AvatarConfig = {
+  v: 1,
+  skin: "tono-3",
+  hair: "chongo",
+  hairColor: "negro",
+  headwear: "ninguno",
+  headwearColor: "chile",
+  facialHair: "ninguno",
+  glasses: false,
+  outfit: "mandil",
+  outfitColor: "limon",
+  expression: "sonrisa",
+  accessory: "ninguno",
+};
+const CREW_RIGHT: AvatarConfig = {
+  v: 1,
+  skin: "tono-2",
+  hair: "corto",
+  hairColor: "castano",
+  headwear: "gorra",
+  headwearColor: "chile",
+  facialHair: "bigote",
+  glasses: false,
+  outfit: "overol",
+  outfitColor: "blanco",
+  expression: "guino",
+  accessory: "ninguno",
+};
+const CUSTOMER: AvatarConfig = {
+  v: 1,
+  skin: "tono-5",
+  hair: "largo",
+  hairColor: "negro",
+  headwear: "ninguno",
+  headwearColor: "sol",
+  facialHair: "ninguno",
+  glasses: false,
+  outfit: "playera",
+  outfitColor: "chile",
+  expression: "sonrisa",
+  accessory: "ninguno",
+};
 
 /* ------------------------------------------------------------------ */
 /* Scenes                                                              */
@@ -675,9 +671,9 @@ function Exito({ animated }: { animated: boolean }) {
       <Shine d="M120 210V230" />
       <rect x={18} y={282} width={264} height={12} rx={6} fill={INK} />
       {/* champion */}
-      <G x={92} y={58}>
-        <g {...a("hop", 1.1, { v: { "--a": "-10px" } })}>
-          <Mascot mood="festeja" prop="trofeo" size={116} animated={animated} />
+      <G x={80} y={27}>
+        <g {...a("hop", 1.1, { v: { "--a": "-8px" } })}>
+          <Mascot mood="festeja" prop="trofeo" size={140} animated={animated} />
         </g>
       </G>
       <Confetti
@@ -729,9 +725,9 @@ function Busqueda({ animated }: { animated: boolean }) {
       <SlamPin x={164} y={206} fill={CHILE} dl={0} s={0.85} />
       <SlamPin x={250} y={180} fill={SUN} dl={-1} s={0.8} />
       <SlamPin x={232} y={268} fill={VIO} dl={-2} s={0.8} />
-      <G x={6} y={40}>
+      <G x={-8} y={10}>
         <g {...a("bob", 2.4, { v: { "--a": "-7px" } })}>
-          <Mascot mood="piensa" prop="lupa" size={124} animated={animated} />
+          <Mascot mood="piensa" prop="lupa" size={152} animated={animated} />
         </g>
       </G>
     </>
@@ -744,17 +740,6 @@ function Tumbleweed() {
       <C cx={0} cy={0} r={22} fill={KRAFT} sw={4.5} sh={false} />
       <path d="M-14-10Q4-20 14 4Q4 18-12 8Q-18-4-2-8Q10-4 4 6M-20 2Q-6 14 8 16M-4-21Q-10-6 6 0" fill="none" stroke={INK} strokeWidth={3.5} strokeLinecap="round" />
     </>
-  );
-}
-
-function Zee({ x, y, s, dl }: { x: number; y: number; s: number; dl: number }) {
-  return (
-    <G x={x} y={y} s={s}>
-      <g {...a("zz", 2.7, { dl })}>
-        <path d="M0 0H18L0 22H18" fill="none" stroke={WHITE} strokeWidth={11} strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M0 0H18L0 22H18" fill="none" stroke={INK} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
-      </g>
-    </G>
   );
 }
 
@@ -784,14 +769,11 @@ function Vacio({ animated }: { animated: boolean }) {
         <P d="M-20 226H20V250Q20 266 0 272Q-20 266-20 250Z" fill={CONC} sw={4.5} />
       </G>
       {/* napping worker */}
-      <G x={160} y={110} r={-6}>
+      <G x={140} y={72} r={-4}>
         <g {...a("bob", 3.2, { v: { "--a": "-3px" } })}>
-          <Mascot mood="duerme" prop="casco" size={112} animated={animated} />
+          <Mascot mood="duerme" prop="casco" size={150} animated={animated} />
         </g>
       </G>
-      <Zee x={262} y={98} s={1} dl={0} />
-      <Zee x={262} y={98} s={0.75} dl={-0.9} />
-      <Zee x={262} y={98} s={0.55} dl={-1.8} />
       {/* tumbleweed */}
       <G x={60} y={262}>
         <g {...a("drive", 6, { v: { "--from": "-110px", "--to": "380px" } })}>
@@ -806,31 +788,21 @@ function Vacio({ animated }: { animated: boolean }) {
   );
 }
 
-function Contratado() {
-  const arm = (fill: string, sleeve: string, cuff: string) => (
-    <g {...a("hi5", 2.4, { o: "50% 100%" })}>
-      <R x={-31} y={-150} w={62} h={160} r={14} fill={sleeve} />
-      <G y={-150}>
-        <Hand fill={fill} cuff={cuff} />
-      </G>
-    </g>
-  );
+function Contratado({ animated }: { animated: boolean }) {
   return (
     <>
       <Halftone x={20} y={170} cols={7} rows={6} gap={15} r={4} />
       <Rays cx={150} cy={96} r={160} n={14} t={30} />
-      {/* impact burst */}
-      <G x={150} y={70}>
-        <g {...a("burst", 2.4)}>
+      {/* impact burst — same 1.8 s beat as the engine's high-five swing (slap at ~40 %) */}
+      <G x={150} y={84}>
+        <g {...a("burst", 1.8)}>
           <P d="M0-62L14-30L50-44L32-12L66 0L32 12L50 44L14 30L0 62L-14 30L-50 44L-32 12L-66 0L-32-12L-50-44L-14-30Z" fill={SUN} />
           <L d="M-86-30L-106-44M86-30L106-44M-90 20L-112 26M90 20L112 26M0-84V-106" w={7} />
         </g>
       </G>
-      {/* worker glove (left) + boss hand (right, mirrored) */}
-      <G x={74} y={296} r={13}>
-        {arm(SUN, DENIM, ORA)}
-      </G>
-      <g transform="translate(226 296) scale(-1 1) rotate(13)">{arm(SKIN[1], VIO, WHITE)}</g>
+      {/* the boss's bare hand (right, mirrored) and the worker's glove (left, in front) slap palms */}
+      <BigHand x={222} y={322} r={-21} w={158} variant="choca" skin="tono-2" sleeve="violeta" cuff="blanco" mirror animated={animated} />
+      <BigHand x={78} y={322} r={21} w={158} variant="choca" skin="tono-5" glove sleeve="denim" animated={animated} />
       <Confetti
         spots={[
           [24, 10],
@@ -850,43 +822,7 @@ function Contratado() {
   );
 }
 
-function Customer() {
-  return (
-    <>
-      {/* legs swing from the hip */}
-      <G x={-10} y={70}>
-        <g {...a("swing", 0.8, { o: "50% 0%", v: { "--a": "14deg" } })}>
-          <R x={-9} y={0} w={18} h={52} r={6} fill={DENIM} sh={false} sw={4.5} />
-          <rect x={-12} y={46} width={26} height={12} rx={6} fill={INK} />
-        </g>
-      </G>
-      <G x={10} y={70}>
-        <g {...a("swing", 0.8, { dl: -0.4, o: "50% 0%", v: { "--a": "14deg" } })}>
-          <R x={-9} y={0} w={18} h={52} r={6} fill={DENIM} sh={false} sw={4.5} />
-          <rect x={-12} y={46} width={26} height={12} rx={6} fill={INK} />
-        </g>
-      </G>
-      <P d="M-26 76V30Q-26 10-6 10H6Q26 10 26 30V76Z" fill={CHILE} />
-      {/* arm + bag */}
-      <G x={20} y={24}>
-        <g {...a("swing", 0.8, { dl: -0.4, o: "50% 0%", v: { "--a": "10deg" } })}>
-          <R x={-7} y={0} w={14} h={44} r={7} fill={CHILE} sh={false} sw={4.5} />
-          <L d="M-6 44Q0 34 6 44" w={4} />
-          <R x={-14} y={44} w={30} h={30} r={5} fill={SUN} sh={false} sw={4.5} />
-        </g>
-      </G>
-      <rect x={-7} y={-6} width={14} height={18} fill={SKIN[2]} stroke={INK} strokeWidth={4.5} />
-      <P d="M-4-50Q-30-50-30-26Q-30-4-8-2Q-24 4-30 22Q-34-4-34-24Q-34-54-4-54Z" fill="#2B1B10" sh={false} sw={4} />
-      <R x={-24} y={-48} w={46} h={50} r={20} fill={SKIN[2]} sh={3} sw={4.5} />
-      <P d="M-24-22Q-26-52 0-52Q24-52 22-26Q10-38-24-22Z" fill="#2B1B10" sh={false} sw={4} />
-      <ellipse cx={6} cy={-20} rx={3} ry={4.5} fill={INK} />
-      <ellipse cx={16} cy={-20} rx={3} ry={4.5} fill={INK} />
-      <L d="M4-10Q11-5 17-10" w={4} />
-    </>
-  );
-}
-
-function Negocio() {
+function Negocio({ animated }: { animated: boolean }) {
   const stripes = [];
   for (let i = 0; i < 8; i++) stripes.push(<rect key={i} x={30 + i * 30} y={100} width={30} height={30} fill={i % 2 ? WHITE : ORA} />);
   const scallops = [];
@@ -948,30 +884,13 @@ function Negocio() {
       </G>
       {/* sidewalk */}
       <rect x={-6} y={280} width={312} height={16} rx={4} fill={CONC} stroke={INK} strokeWidth={4} />
-      {/* customer walking in */}
-      <G x={118} y={190} s={0.8}>
-        <g {...a("bob", 0.4, { v: { "--a": "-4px" } })}>
-          <Customer />
-        </g>
-      </G>
+      {/* a happy regular in front of the window: thumbs up for the shop */}
+      <Person config={CUSTOMER} framing="completo" pose="pulgar" x={112} y={292} w={98} animated={animated} />
     </>
   );
 }
 
-function ThumbsUp() {
-  return (
-    <>
-      <R x={-36} y={0} w={60} h={90} r={14} fill={DENIM} />
-      <R x={-46} y={-14} w={76} h={24} r={6} fill={ORA} sh={false} sw={4.5} />
-      <R x={-26} y={-104} w={26} h={60} r={13} fill={SUN} sh={false} sw={4.5} />
-      <R x={-44} y={-62} w={74} h={52} r={16} fill={SUN} sw={4.5} />
-      <L d="M10-50H30M10-36H30M10-22H28" w={4} />
-      <Shine d="M-32-48Q-32-56-24-56" w={4.5} />
-    </>
-  );
-}
-
-function Codigo() {
+function Codigo({ animated }: { animated: boolean }) {
   return (
     <>
       <Halftone x={14} y={18} cols={6} rows={9} gap={15} r={4} />
@@ -1004,12 +923,10 @@ function Codigo() {
           <Shine d="M-52 50V60" w={4} />
         </g>
       </G>
-      {/* thumbs up */}
-      <G x={248} y={222} r={-10} s={0.85}>
-        <g {...a("hop", 1.3, { dl: 0.2, v: { "--a": "-16px" } })}>
-          <ThumbsUp />
-        </g>
-      </G>
+      {/* gloved thumbs up popping in from the corner */}
+      <g {...a("hop", 1.3, { dl: 0.2, o: "50% 100%", v: { "--a": "-12px" } })}>
+        <BigHand x={252} y={330} r={-12} w={112} variant="pulgar" glove sleeve="denim" animated={animated} />
+      </g>
     </>
   );
 }
@@ -1145,26 +1062,26 @@ function Ahorro() {
   );
 }
 
-function Equipo() {
+function Equipo({ animated }: { animated: boolean }) {
+  // Medio framing: each worker is cut at the hips by the bottom of the scene. The crew members'
+  // motion is offset (scenes.css → --crew-dl) so they don't wave in lockstep.
   return (
     <>
-      <Rays cx={300} cy={150} r={320} n={18} t={40} />
+      <Rays cx={300} cy={150} r={620} n={18} t={40} />
       <Halftone x={20} y={24} cols={8} rows={5} gap={16} r={4.2} />
       <Halftone x={470} y={24} cols={8} rows={5} gap={16} r={4.2} />
-      <G x={130} y={130} s={0.9}>
-        <Worker skin={SKIN[0]} hat="casco" shirt={DENIM} outfit="chaleco" waveSide={-1} dl={0} />
-      </G>
-      <G x={470} y={130} s={0.9}>
-        <Worker skin={SKIN[2]} hat="gorra" shirt={WHITE} outfit="overol" waveSide={1} dl={-0.7} />
-      </G>
-      <G x={300} y={116}>
-        <Worker skin={SKIN[1]} hat="chongo" shirt={SKY} outfit="mandil" waveSide={1} dl={-1.4} />
-      </G>
+      <g className="scCrew" style={{ "--crew-dl": "-0.9s" } as CSSProperties}>
+        <Person config={CREW_LEFT} pose="saluda" flip x={136} y={318} w={204} animated={animated} />
+      </g>
+      <g className="scCrew" style={{ "--crew-dl": "-1.7s" } as CSSProperties}>
+        <Person config={CREW_RIGHT} pose="saluda" x={464} y={318} w={204} animated={animated} />
+      </g>
+      <Person config={CREW_CENTER} pose="pulgar" x={300} y={312} w={232} animated={animated} />
     </>
   );
 }
 
-export function Scene({ name, className, animated = true, title }: SceneProps) {
+export function Scene({ name, className, animated = true, title, bleed = false }: SceneProps) {
   const r = SCENE_RATIO[name];
   const w = 300 * r;
   let art: ReactNode;
@@ -1188,13 +1105,13 @@ export function Scene({ name, className, animated = true, title }: SceneProps) {
       art = <Vacio animated={animated} />;
       break;
     case "contratado":
-      art = <Contratado />;
+      art = <Contratado animated={animated} />;
       break;
     case "negocio":
-      art = <Negocio />;
+      art = <Negocio animated={animated} />;
       break;
     case "codigo":
-      art = <Codigo />;
+      art = <Codigo animated={animated} />;
       break;
     case "mapa":
       art = <Mapa />;
@@ -1203,7 +1120,7 @@ export function Scene({ name, className, animated = true, title }: SceneProps) {
       art = <Ahorro />;
       break;
     case "equipo":
-      art = <Equipo />;
+      art = <Equipo animated={animated} />;
       break;
   }
   return (
@@ -1217,7 +1134,7 @@ export function Scene({ name, className, animated = true, title }: SceneProps) {
     >
       {title ? <title>{title}</title> : null}
       {/* nested viewport clips bursts, drives and confetti to the scene box (no ids needed) */}
-      <svg x={0} y={0} width={w} height={300} overflow="hidden">
+      <svg x={0} y={0} width={w} height={300} overflow={bleed ? "visible" : "hidden"}>
         {art}
       </svg>
     </svg>
