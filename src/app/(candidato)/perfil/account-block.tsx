@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BLOCK_CLASS } from "@/components/chamba/primitives";
 import { PasswordDialog } from "@/components/onboarding/password-dialog";
+import { PhoneLoginDialog } from "@/components/onboarding/phone-login-dialog";
 import { isLiveAvailable, useApp } from "@/lib/store";
 import { signOutEverywhere, useLiveUser } from "@/lib/live/session";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export function AccountBlock({ index }: { index: number }) {
   const exitDemo = useApp((s) => s.exitDemo);
   const { user, hasPassword } = useLiveUser();
   const [pwOpen, setPwOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
@@ -72,11 +74,30 @@ export function AccountBlock({ index }: { index: number }) {
               </p>
             ) : null}
             {user?.phone ? (
-              <p className={cn("flex min-h-12 items-center gap-3 rounded-tile bg-white/70 px-4 text-[0.95rem] text-ink", HARD_SM)}>
+              <div className={cn("flex min-h-12 items-center gap-3 rounded-tile bg-white/70 py-1 pr-1.5 pl-4 text-[0.95rem] text-ink", HARD_SM)}>
                 <HugeiconsIcon icon={SmartPhone01Icon} className="size-5 shrink-0" strokeWidth={2} />
-                <span className="font-semibold tabular-nums">+52 {formatE164(user.phone)}</span>
-              </p>
-            ) : null}
+                <span className="min-w-0 flex-1 font-semibold tabular-nums">+52 {formatE164(user.phone)}</span>
+                <button
+                  type="button"
+                  onClick={() => setPhoneOpen(true)}
+                  className="press h-10 shrink-0 rounded-full px-3.5 text-[0.9rem] font-semibold underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ink/60"
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPhoneOpen(true)}
+                className="press flex min-h-12 w-full items-center gap-3 rounded-tile border-2 border-dashed border-ink/60 bg-white/40 px-4 py-2 text-left text-[0.95rem] text-ink outline-none hover:bg-white/70 focus-visible:ring-3 focus-visible:ring-ink/60"
+              >
+                <HugeiconsIcon icon={SmartPhone01Icon} className="size-5 shrink-0" strokeWidth={2} />
+                <span className="min-w-0">
+                  <span className="block font-semibold">Verifica tu celular</span>
+                  <span className="block text-[0.85rem] text-ink/70">Para entrar también con un código por SMS</span>
+                </span>
+              </button>
+            )}
           </div>
           <p className="mt-4 text-[0.95rem] text-muted-foreground">
             {hasPassword
@@ -98,6 +119,7 @@ export function AccountBlock({ index }: { index: number }) {
             </button>
           </div>
           <PasswordDialog open={pwOpen} onOpenChange={setPwOpen} hasPassword={hasPassword} />
+          <PhoneLoginDialog open={phoneOpen} onOpenChange={setPhoneOpen} current={user?.phone ?? null} />
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>

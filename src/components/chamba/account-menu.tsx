@@ -8,6 +8,7 @@ import {
   Download04Icon,
   LockPasswordIcon,
   Logout01Icon,
+  SmartPhone01Icon,
   UserAdd01Icon,
   UserEdit01Icon,
   UserIcon,
@@ -39,6 +40,7 @@ import { isLiveAvailable, useApp, useHydrated } from "@/lib/store";
 import { useActingAvatar, useCandidateSwitch } from "@/lib/team";
 import { signOutEverywhere, useLiveUser } from "@/lib/live/session";
 import { PasswordDialog } from "@/components/onboarding/password-dialog";
+import { PhoneLoginDialog } from "@/components/onboarding/phone-login-dialog";
 import { useInstallAction } from "@/components/install/install-sheet";
 import { useInstallState } from "@/lib/install/client";
 
@@ -90,6 +92,7 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   /** The menu item that opened the confirm is gone when it closes: send focus back to the avatar. */
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -206,6 +209,15 @@ export function AccountMenu() {
               </span>
             </DropdownMenuItem>
           ) : null}
+          {live ? (
+            <DropdownMenuItem className="h-auto min-h-12 py-2 text-[0.95rem]" onSelect={() => setPhoneOpen(true)}>
+              <HugeiconsIcon icon={SmartPhone01Icon} className="size-5" strokeWidth={1.6} />
+              <span className="min-w-0">
+                <span className="block">{user?.phone ? "Cambiar mi celular" : "Verificar mi celular"}</span>
+                <span className="block text-[0.8rem] text-muted-foreground">Entra con un código por SMS</span>
+              </span>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           {demo ? (
             <>
@@ -262,6 +274,7 @@ export function AccountMenu() {
         </AlertDialogContent>
       </AlertDialog>
       {live ? <PasswordDialog open={pwOpen} onOpenChange={setPwOpen} hasPassword={hasPassword} /> : null}
+      {live ? <PhoneLoginDialog open={phoneOpen} onOpenChange={setPhoneOpen} current={user?.phone ?? null} /> : null}
     </>
   );
 }

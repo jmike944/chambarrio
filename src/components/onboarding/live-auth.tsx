@@ -251,6 +251,22 @@ export function CodeAuth({
             <PhoneField id={`${idPrefix}-phone`} value={phone} onChange={setPhone} label="Tu celular (10 dígitos)" />
           )}
         </Slab>
+        {/* Sign-in only: a celular typed in the profile is contact info, not a login. Without this, an
+            email account's owner gets a brand-new empty account here and is asked to register again. */}
+        {channel === "sms" && !role && !error ? (
+          <p className="mt-4 text-[0.95rem] leading-snug text-muted-foreground">
+            <strong className="font-semibold text-foreground">¿Te registraste con tu correo?</strong> Entra con tu
+            correo y verifica tu celular en tu cuenta; después ya puedes entrar con SMS.
+            {onUseEmail ? (
+              <>
+                {" "}
+                <button type="button" onClick={onUseEmail} className={cn(linkBtn, "h-auto text-foreground")}>
+                  Usar mi correo
+                </button>
+              </>
+            ) : null}
+          </p>
+        ) : null}
         {error ? (
           <AuthNote
             tone={channel === "sms" && smsOff(error) ? "info" : "error"}

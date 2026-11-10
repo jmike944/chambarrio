@@ -80,11 +80,14 @@ export function CodeField({
   onChange,
   onComplete,
   disabled,
+  compact,
 }: {
   value: string;
   onChange: (v: string) => void;
   onComplete?: (v: string) => void;
   disabled?: boolean;
+  /** Smaller slots on phones, for dialogs (6 × 48px doesn't fit a 375px-wide dialog). */
+  compact?: boolean;
 }) {
   return (
     <InputOTP
@@ -107,6 +110,7 @@ export function CodeField({
             index={i}
             className={cn(
               "size-12 rounded-[0.9rem] border-[3px] border-ink bg-white font-display text-[1.5rem] font-extrabold text-ink shadow-[3px_3px_0_0_var(--ink)] first:rounded-[0.9rem] first:border-l-[3px] last:rounded-[0.9rem] data-[active=true]:-translate-y-1 data-[active=true]:border-ink data-[active=true]:ring-4 data-[active=true]:ring-primary/40 sm:size-14",
+              compact && "size-10 text-[1.3rem] sm:size-12",
               i < value.length && "bg-block-sol",
             )}
           />

@@ -56,6 +56,8 @@ function friendly(error: { message?: string; code?: string } | null | undefined)
     return `Espera ${secs ? `${secs} segundos` : "un momento"} antes de pedir otro código.`;
   }
   if (m.includes("expired") || (m.includes("invalid") && (m.includes("otp") || m.includes("token")))) return "El código no es válido o ya venció. Pide uno nuevo.";
+  if (error?.code === "phone_exists" || m.includes("phone number has already been registered"))
+    return "Ese celular ya es de otra cuenta de Chambarrio. Escribe otro número.";
   if (m.includes("invalid login credentials")) return "El correo/teléfono o la contraseña no coinciden.";
   if (m.includes("not confirmed")) return "Todavía no confirmas tu cuenta. Entra con un código y listo.";
   if (m.includes("different from the old")) return "Esa ya es tu contraseña. Escribe una nueva.";
@@ -103,6 +105,25 @@ export async function verifyCode(channel: Channel, to: string, token: string): P
     channel === "email"
       ? await sb.auth.verifyOtp({ email: to.trim().toLowerCase(), token: code, type: "email" })
       : await sb.auth.verifyOtp({ phone: toE164MX(to) ?? to, token: code, type: "sms" });
+  return error ? friendly(error) : null;
+}
+
+/**
+ * Adds (or changes) the celular you sign in with, on the account you're already in: Supabase texts a
+ * code to the new number and only links it once that code comes back (verifyPhoneChange). The phone
+ * typed in the profile is contact info only, so an email account can't "Entrar con SMS" until this.
+ */
+export async function sendPhoneChangeCode(raw: string): Promise<string | null> {
+  const phone = toE164MX(raw);
+  if (!phone) return "Escribe tu número de 10 dígitos.";
+  const { error } = await client().auth.updateUser({ phone });
+  return error ? friendly(error) : null;
+}
+
+export async function verifyPhoneChange(raw: string, token: string): Promise<string | null> {
+  const phone = toE164MX(raw);
+  if (!phone) return "Escribe tu número de 10 dígitos.";
+  const { error } = await client().auth.verifyOtp({ phone, token: token.replace(/\D/g, ""), type: "phone_change" });
   return error ? friendly(error) : null;
 }
 
