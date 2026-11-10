@@ -15,7 +15,12 @@ import { cn } from "@/lib/utils";
 
 /** "system" (the default, nothing saved) follows the phone or computer's own light/dark setting. */
 export type ThemePref = "light" | "dark" | "system";
-const KEY = "chamba-theme";
+/*
+ * A new key: choices saved under the old one ("chamba-theme", from the light/dark-only toggle) are
+ * dropped, so everyone starts on Sistema once; what they pick from here on is kept.
+ */
+const KEY = "chamba-tema";
+const OLD_KEY = "chamba-theme";
 
 /** The three choices, in the order they're offered (Sistema first: it's the default). */
 export const THEME_OPTIONS = [
@@ -29,7 +34,7 @@ const isPref = (v: unknown): v is ThemePref => v === "light" || v === "dark" || 
 export const THEME_COLOR = { light: "#f4f2ff", dark: "#0f0b26" } as const;
 
 /** Inline, pre-paint theme script (rendered from the root layout's <head>). */
-export const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("${KEY}")||"system";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";}catch(e){}})()`;
+export const THEME_SCRIPT = `(function(){try{localStorage.removeItem("${OLD_KEY}");var t=localStorage.getItem("${KEY}")||"system";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";}catch(e){}})()`;
 
 const listeners = new Set<() => void>();
 function emit() {
