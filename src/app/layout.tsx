@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Lexend } from "next/font/google";
 import "./globals.css";
 import { THEME_SCRIPT } from "@/components/theme";
+import { INSTALL_SCRIPT } from "@/lib/install/script";
+import { SITE_URL } from "@/lib/site";
 import { Providers } from "@/components/providers";
 import { cn } from "@/lib/utils";
 
@@ -16,17 +18,6 @@ const bricolage = Bricolage_Grotesque({
   axes: ["opsz"],
 });
 
-/**
- * Absolute base for Open Graph / Twitter image URLs. NEXT_PUBLIC_SITE_URL wins; production is the
- * canonical https://chambarrio.com; Vercel previews use their own URL; locally, localhost.
- */
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_ENV === "production"
-    ? "https://chambarrio.com"
-    : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -54,6 +45,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="es-MX" className={cn("antialiased", lexend.variable, bricolage.variable)} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Keeps Chrome's install prompt from the first moment, before hydration (lib/install). */}
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_SCRIPT }} />
       </head>
       <body className="min-h-dvh">
         <Providers>{children}</Providers>

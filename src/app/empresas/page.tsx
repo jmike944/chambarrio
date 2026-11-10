@@ -33,6 +33,7 @@ import { CompanyDemoButton } from "@/components/empresas-landing/company-demo-bu
 import { CATEGORIES } from "@/lib/data/categories";
 import { cn } from "@/lib/utils";
 import { AudienceSwitch } from "@/components/landing/audience-switch";
+import { InstallBar, StandaloneLanding } from "@/components/install/install-promos";
 
 /*
  * The page for companies: pitch, how it works, what the panel does, plans and FAQ. The landing ("/")
@@ -150,6 +151,7 @@ const CLOSING = ["Publicar es gratis", "Todas tus sucursales en un panel", "Cont
 const NAV: [href: string, label: string][] = [
   ["#como-funciona", "Cómo funciona"],
   ["#precios", "Precios"],
+  ["/instalar?lado=empresa", "Instalar la app"],
 ];
 
 /** Icon in an ink tile, for the feature cards. */
@@ -614,11 +616,14 @@ export default function EmpresasPage() {
       <LandingFooter
         links={[
           { href: "/", label: "Busco trabajo" },
+          { href: "/instalar?lado=empresa", label: "Instalar la app" },
           { href: "/terminos", label: "Términos y condiciones" },
           { href: "/privacidad", label: "Aviso de privacidad" },
           { href: "/empresa", label: "Panel de empresa" },
         ]}
       />
+      <InstallBar side="empresa" />
+      <StandaloneLanding />
     </div>
   );
 }

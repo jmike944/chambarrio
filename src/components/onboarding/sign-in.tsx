@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { ChoiceCard, FlowShell, Slab, WORK_CONFETTI, focusRing } from "./flow";
 import { AuthNote, CodeAuth, MethodPicker, PasswordAuth, useRouteAfterSignIn, type Method } from "./live-auth";
 import { isInvitePath, readNextParam } from "./next-path";
+import { rememberSide } from "@/lib/install/client";
 
 const METHODS = ["email", "sms", "password"] as const satisfies readonly Method[];
 /** A team invite is for an email address: no SMS (a phone account has no email to match). */
@@ -115,6 +116,8 @@ export function SignIn({ side = "candidato" }: { side?: Role }) {
   const method: Method = invite && chosen === "sms" ? "email" : chosen;
   const { start, reset, pending } = useRouteAfterSignIn(next);
   const finished = useRef(false);
+  // The installed app opens on this side next time it starts signed out (/app).
+  useEffect(() => rememberSide(side), [side]);
 
   // Routes stay mounted after navigation; start fresh next time once sign-in completes.
   useLayoutEffect(() => {

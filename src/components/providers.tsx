@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { useStoreHydration } from "@/lib/store";
 import { LiveSession } from "@/lib/live/session";
+import { InstallSheetHost } from "@/components/install/install-sheet";
 // Side effect: a new demo (or account) starts with a clean demo pipeline on every page.
 import "@/lib/pipeline/demo-reset";
 
@@ -38,6 +39,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <OfflineBanner />
         <LiveSession />
         {children}
+        <InstallSheetHost />
         <Toaster position="top-center" />
       </TooltipProvider>
     </MotionConfig>

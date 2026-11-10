@@ -11,7 +11,7 @@ import { Doodle, Marquee } from "@/components/chamba/art/doodles";
 import { BLOCK_CLASS, type BlockTone } from "@/components/chamba/primitives";
 import { ThemeToggle } from "@/components/theme";
 import { HeroDemo } from "@/components/landing/hero-demo";
-import { InstallButton } from "@/components/landing/install-button";
+import { InstallBar, InstallButton, StandaloneLanding } from "@/components/install/install-promos";
 import { DemoShowcase } from "@/components/landing/demo-entry";
 import { CategoryCount } from "@/components/landing/category-count";
 import { ChambitaHello, Squiggle } from "@/components/landing/fx";
@@ -82,6 +82,7 @@ const CLOSING = [
 const NAV: [href: string, label: string][] = [
   ["#como-funciona", "Cómo funciona"],
   ["#por-que-cerca", "Por qué cerca"],
+  ["/instalar", "Instalar la app"],
 ];
 
 export default function LandingPage() {
@@ -438,7 +439,7 @@ export default function LandingPage() {
                     Buscar trabajo cerca
                     <HugeiconsIcon icon={ArrowRight02Icon} className="size-5 transition-transform group-hover:translate-x-1" strokeWidth={2.4} />
                   </Link>
-                  <InstallButton />
+                  <InstallButton side="candidato" className={cn(chunky("white"), "group")} />
                 </div>
               </div>
               <div className={cn("relative isolate flex min-w-0 flex-col overflow-hidden rounded-tile bg-block-cielo text-ink", HARD_SM)}>
@@ -457,12 +458,15 @@ export default function LandingPage() {
 
       <LandingFooter
         links={[
+          { href: "/instalar", label: "Instalar la app" },
           { href: "/terminos", label: "Términos y condiciones" },
           { href: "/privacidad", label: "Aviso de privacidad" },
           { href: "/empresas", label: "Para empresas" },
           { href: "/empresa", label: "Panel de empresa" },
         ]}
       />
+      <InstallBar side="candidato" />
+      <StandaloneLanding />
     </div>
   );
 }

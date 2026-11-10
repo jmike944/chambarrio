@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Building06Icon,
+  Download04Icon,
   LockPasswordIcon,
   Logout01Icon,
   UserAdd01Icon,
@@ -38,6 +39,8 @@ import { isLiveAvailable, useApp, useHydrated } from "@/lib/store";
 import { useActingAvatar, useCandidateSwitch } from "@/lib/team";
 import { signOutEverywhere, useLiveUser } from "@/lib/live/session";
 import { PasswordDialog } from "@/components/onboarding/password-dialog";
+import { useInstallAction } from "@/components/install/install-sheet";
+import { useInstallState } from "@/lib/install/client";
 
 function maskPhone(phone: string) {
   const d = phone.replace(/\D/g, "");
@@ -92,6 +95,10 @@ export function AccountMenu() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const live = appMode === "live";
   const demo = appMode === "demo";
+  // Always reachable from here (the cards can be put away): hidden only once it's installed.
+  const install = useInstallState();
+  const startInstall = useInstallAction(isEmpresa ? "empresa" : "candidato");
+  const canInstall = install.kind !== "installed" && install.kind !== "unknown";
 
   // Pages stay mounted when you navigate away; don't come back to an open menu.
   useLayoutEffect(() => {
@@ -169,6 +176,12 @@ export function AccountMenu() {
               </DropdownMenuItem>
             </>
           )}
+          {canInstall ? (
+            <DropdownMenuItem className="h-12 text-[0.95rem]" onSelect={() => startInstall(null, triggerRef.current)}>
+              <HugeiconsIcon icon={Download04Icon} className="size-5" strokeWidth={1.6} />
+              {install.kind === "desktop" ? "Llévala en tu teléfono" : "Instalar la app"}
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             className="h-12 text-[0.95rem]"
             onSelect={(e) => {
