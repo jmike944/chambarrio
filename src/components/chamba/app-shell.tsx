@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ChambarrioLogo } from "@/components/brand/chambarrio-logo";
 import { springs } from "./motion";
-import { ThemeToggle } from "@/components/theme";
+import { ThemePicker } from "@/components/theme";
 import { isLiveAvailable, useApp, useEmployerLocations } from "@/lib/store";
 import { useSessionLoaded, useSessionReady } from "@/lib/live/session";
 import { DEMO_RECRUITER_ID, ROLE_META, setDemoViewAs, useCandidateSwitch, useMyMembership, useTeam, type TeamPermissions } from "@/lib/team";
@@ -470,8 +470,10 @@ export function AppShell({
               </Link>
             ) : null}
             <div className="flex items-center justify-between rounded-full border border-border bg-card py-1 pr-1 pl-4 shadow-card">
-              <span className="text-sm text-muted-foreground">Tema</span>
-              <ThemeToggle className="size-10 border-0 bg-tile shadow-none" />
+              <span aria-hidden className="text-sm text-muted-foreground">
+                Tema
+              </span>
+              <ThemePicker />
             </div>
           </div>
         </aside>

@@ -10,8 +10,6 @@ import {
   Logout01Icon,
   UserAdd01Icon,
   UserEdit01Icon,
-  Moon02Icon,
-  Sun03Icon,
   UserIcon,
   UserSearch01Icon,
 } from "@hugeicons/core-free-icons";
@@ -20,6 +18,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { setTheme, useTheme } from "@/components/theme";
+import { THEME_OPTIONS, setTheme, useTheme, type ThemePref } from "@/components/theme";
 import { AvatarCircle } from "@/components/avatar";
 import { isLiveAvailable, useApp, useHydrated } from "@/lib/store";
 import { useActingAvatar, useCandidateSwitch } from "@/lib/team";
@@ -86,7 +86,7 @@ export function AccountMenu() {
   // A company team member's account stays a company account: no "Cambiar a modo candidato".
   const canBeCandidate = useCandidateSwitch();
   const showSwitch = !isEmpresa || canBeCandidate;
-  const { resolvedTheme } = useTheme();
+  const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -182,16 +182,21 @@ export function AccountMenu() {
               {install.kind === "desktop" ? "Llévala en tu teléfono" : "Instalar la app"}
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem
-            className="h-12 text-[0.95rem]"
-            onSelect={(e) => {
-              e.preventDefault();
-              setTheme(resolvedTheme === "dark" ? "light" : "dark");
-            }}
-          >
-            <HugeiconsIcon icon={resolvedTheme === "dark" ? Sun03Icon : Moon02Icon} className="size-5" strokeWidth={1.6} />
-            {resolvedTheme === "dark" ? "Usar tema claro" : "Usar tema oscuro"}
-          </DropdownMenuItem>
+          {/* Tema: Sistema (default) / Claro / Oscuro, as one row; the menu stays open to show the change. */}
+          <DropdownMenuLabel className="px-3 pt-2 pb-1">Tema</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as ThemePref)} className="flex gap-1 px-1 pb-1">
+            {THEME_OPTIONS.map((o) => (
+              <DropdownMenuRadioItem
+                key={o.value}
+                value={o.value}
+                onSelect={(e) => e.preventDefault()}
+                className="h-auto flex-1 flex-col justify-center gap-1 px-1 py-2 text-[0.8rem] font-semibold data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:focus:bg-primary data-[state=checked]:focus:text-primary-foreground [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
+              >
+                <HugeiconsIcon icon={o.icon} className="size-5" strokeWidth={1.8} />
+                {o.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
           {live ? (
             <DropdownMenuItem className="h-auto min-h-12 py-2 text-[0.95rem]" onSelect={() => setPwOpen(true)}>
               <HugeiconsIcon icon={LockPasswordIcon} className="size-5" strokeWidth={1.6} />
