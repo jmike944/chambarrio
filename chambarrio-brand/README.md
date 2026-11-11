@@ -14,5 +14,6 @@ Logo, icons and drop-in React components for rebranding the app from "Chamb-a la
 | `app-icon/` | App icon SVGs (rounded, square, maskable, favicon, WhatsApp) |
 | `png/` | PWA icons (192, 512, maskable), `apple-icon.png`, `favicon.ico`, large logo PNGs |
 | `social/` | `opengraph-image.png` (1200x630) and `whatsapp-profile-640.png` |
+| `social/POSTS.md`, `social/posts/` | Instagram and Facebook launch kit: captions, feed posts, stories and the Facebook cover |
 
 The wordmark in the SVG files is outlined from Bricolage Grotesque ExtraBold (SIL Open Font License), so the files don't need the font installed.
