@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
  */
 
 const EMPTY: ExternalJobsResponse = { jobs: [], providers: [] };
+/** Cards per "Ver más". */
+const PAGE = 20;
 const PROVIDERS = new Set<ExternalProvider>(["jooble", "careerjet"]);
 
 let flight: Promise<ExternalJobsResponse> | null = null;
@@ -70,11 +72,16 @@ export function ExternalJobs({
   className?: string;
 }) {
   const data = useExternalJobs(enabled);
+  // A page at a time; back to the first page whenever the filters change.
+  const filterKey = `${category ?? ""}|${query}`;
+  const [page, setPage] = useState({ key: filterKey, count: PAGE });
+  if (page.key !== filterKey) setPage({ key: filterKey, count: PAGE });
   if (!data || data.jobs.length === 0) return null;
   const jobs = data.jobs.filter(
     (j) => (!category || j.category === category) && (!query || [j.title, j.company, j.location].join(" ").toLowerCase().includes(query)),
   );
   if (jobs.length === 0) return null;
+  const visible = jobs.slice(0, page.count);
   const shown = data.providers.filter((p) => jobs.some((j) => j.provider === p));
 
   return (
@@ -91,12 +98,21 @@ export function ExternalJobs({
         De otras bolsas de trabajo. Te postulas en su página, y como no dicen la sucursal exacta, no salen en el mapa.
       </p>
       <ul className="grid grid-cols-1 gap-3">
-        {jobs.map((j, i) => (
-          <li key={j.id} className="min-w-0 animate-rise [--rise:16px]" style={{ "--i": Math.min(i, 8) } as React.CSSProperties}>
+        {visible.map((j, i) => (
+          <li key={j.id} className="min-w-0 animate-rise [--rise:16px]" style={{ "--i": Math.min(i % PAGE, 8) } as React.CSSProperties}>
             <ExternalJobCard job={j} />
           </li>
         ))}
       </ul>
+      {jobs.length > visible.length ? (
+        <button
+          type="button"
+          onClick={() => setPage({ key: filterKey, count: page.count + PAGE })}
+          className="press mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full border-2 border-ink bg-white px-5 text-[0.98rem] font-semibold text-ink outline-none hover:bg-white/90 focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          Ver más ({jobs.length - visible.length})
+        </button>
+      ) : null}
       <p className="mt-4 text-[0.85rem] text-muted-foreground">
         Vacantes de{" "}
         {shown.map((p, i) => (

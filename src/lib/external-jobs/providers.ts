@@ -25,7 +25,7 @@ const REVALIDATE_S = 3600;
 /** Raw items asked per board (before keeping only operative jobs in our area). */
 const PER_BOARD = 100;
 /** At most this many go back to the page. */
-const MAX_JOBS = 60;
+const MAX_JOBS = 120;
 
 type Raw = Omit<ExternalJob, "category"> & { category?: undefined };
 
@@ -244,8 +244,17 @@ export async function getExternalJobs(visitor: Visitor | null): Promise<External
       if (!seen || (!seen.pay && job.pay)) byKey.set(key, job);
     }
   });
-  const jobs = [...byKey.values()]
-    .sort((a, b) => (b.postedAt ?? "").localeCompare(a.postedAt ?? ""))
-    .slice(0, MAX_JOBS);
-  return { jobs, providers };
+  return { jobs: interleave([...byKey.values()]).slice(0, MAX_JOBS), providers };
+}
+
+/**
+ * Newest first within each board, then the boards take turns, so one board's volume (Jooble sends
+ * ~60 a search) never pushes the other off the first screen.
+ */
+function interleave(jobs: ExternalJob[]): ExternalJob[] {
+  const newest = (a: ExternalJob, b: ExternalJob) => (b.postedAt ?? "").localeCompare(a.postedAt ?? "");
+  const lanes = [...new Set(jobs.map((j) => j.provider))].map((p) => jobs.filter((j) => j.provider === p).sort(newest));
+  const out: ExternalJob[] = [];
+  for (let i = 0; out.length < jobs.length; i++) for (const lane of lanes) if (lane[i]) out.push(lane[i]);
+  return out;
 }
