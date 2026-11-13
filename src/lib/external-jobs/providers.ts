@@ -155,7 +155,16 @@ async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
     dispatcher: careerjetProxy(proxyUrl),
     signal: withTimeout(TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`careerjet ${res.status}${res.status === 403 ? " (is the proxy's IP on Careerjet's allowlist?)" : ""}`);
+  if (!res.ok) {
+    // Their error says why ("Unauthorized access from IP …", "Missing param user_ip …"). IPs keep only
+    // their first three parts: enough to tell the proxy's from a visitor's, without logging the visitor.
+    const why = await res
+      .text()
+      .then((t) => str((JSON.parse(t) as { error?: unknown }).error))
+      .catch(() => "");
+    const masked = why.replace(/\b(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}\b/g, "$1.x").slice(0, 160);
+    throw new Error(`careerjet ${res.status}${masked ? `: ${masked}` : ""}`);
+  }
   const data = (await res.json()) as { type?: string; jobs?: unknown[] };
   if (data.type !== "JOBS") return [];
   return (data.jobs ?? []).flatMap((r, i): Raw[] => {
