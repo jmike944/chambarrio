@@ -14,11 +14,11 @@ import { cn } from "@/lib/utils";
  * "Más vacantes en Saltillo": vacancies from other job boards (GET /api/vacantes-externas). Live mode
  * only (the demo never calls anything). They only say the city, so they live in this list, never on
  * the map or the radar, and people apply on the board's own page. Each card names its board with a
- * link (Adzuna's terms ask for that on every listing). Renders nothing until there's something to show.
+ * link. Renders nothing until there's something to show.
  */
 
 const EMPTY: ExternalJobsResponse = { jobs: [], providers: [] };
-const PROVIDERS = new Set<ExternalProvider>(["adzuna", "jooble", "careerjet"]);
+const PROVIDERS = new Set<ExternalProvider>(["jooble", "careerjet"]);
 
 let flight: Promise<ExternalJobsResponse> | null = null;
 

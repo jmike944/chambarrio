@@ -7,12 +7,11 @@ import type { ExternalJob, ExternalProvider, ExternalJobsResponse } from "./type
  * Settings → Environment Variables; see .env.example), so without keys nothing is called and the
  * section doesn't show. Keys never reach the browser.
  *
- *   Adzuna     GET  api.adzuna.com/v1/api/jobs/mx/search/1   ADZUNA_APP_ID + ADZUNA_APP_KEY
  *   Jooble     POST {JOOBLE_API_HOST}/api/{key}               JOOBLE_API_KEY (a key for Mexico)
  *   Careerjet  GET  search.api.careerjet.net/v4/query         CAREERJET_API_KEY (Basic auth)
  *
- * Adzuna and Jooble answers are cached for an hour (Next fetch cache: shared by every visitor,
- * survives instances), which keeps us far under their daily limits (Jooble's free key: 100/day).
+ * Jooble's answer is cached for an hour (Next fetch cache: shared by every visitor, survives
+ * instances), which keeps us far under its free key's 100 requests a day.
  * Careerjet requires the visitor's IP and user agent on every query, so it's asked live, per visit.
  */
 
@@ -41,67 +40,6 @@ const httpUrl = (v: unknown): string | null => {
 
 function withTimeout(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
-}
-
-// ------------------------------------------------------------------ Adzuna
-
-/**
- * Adzuna's salaries are yearly in most markets; Mexican postings sometimes come monthly. Operative
- * monthly pay in Saltillo is ~7k–30k MXN, so anything ≥ 60,000 is read as yearly and shown per month.
- * Their estimates (salary_is_predicted = 1) are never shown.
- */
-function adzunaPay(min: number | null, max: number | null, predicted: unknown): string | null {
-  if (String(predicted) === "1") return null;
-  const top = Math.max(min ?? 0, max ?? 0);
-  if (!top) return null;
-  const k = top >= 60000 ? 1 / 12 : 1;
-  return payText(min != null ? min * k : null, max != null ? max * k : null, "al mes");
-}
-
-async function fetchAdzuna(): Promise<Raw[] | null> {
-  const id = process.env.ADZUNA_APP_ID?.trim();
-  const key = process.env.ADZUNA_APP_KEY?.trim();
-  if (!id || !key) return null;
-  const q = new URLSearchParams({
-    app_id: id,
-    app_key: key,
-    where: "Saltillo",
-    distance: "25",
-    max_days_old: "30",
-    sort_by: "date",
-    results_per_page: String(PER_BOARD),
-    "content-type": "application/json",
-  });
-  const res = await fetch(`https://api.adzuna.com/v1/api/jobs/mx/search/1?${q}`, {
-    headers: { Accept: "application/json" },
-    next: { revalidate: REVALIDATE_S },
-    signal: withTimeout(TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`adzuna ${res.status}`);
-  const data = (await res.json()) as { results?: unknown[] };
-  return (data.results ?? []).flatMap((r): Raw[] => {
-    const j = r as Record<string, unknown>;
-    const url = httpUrl(j.redirect_url);
-    const title = str(j.title).replace(/<[^>]*>/g, "");
-    if (!url || !title) return [];
-    const company = str((j.company as Record<string, unknown> | undefined)?.display_name) || null;
-    const loc = j.location as { display_name?: unknown; area?: unknown } | undefined;
-    const area = Array.isArray(loc?.area) ? (loc.area as unknown[]).map(str).filter(Boolean) : [];
-    const location = str(loc?.display_name) || area.slice(-2).join(", ");
-    return [
-      {
-        id: `adzuna:${str(j.id) || url}`,
-        provider: "adzuna",
-        title,
-        company,
-        location,
-        pay: adzunaPay(num(j.salary_min), num(j.salary_max), j.salary_is_predicted),
-        snippet: plainSnippet(str(j.description)),
-        postedAt: isoOrNull(j.created),
-        url,
-      },
-    ];
-  });
 }
 
 // ------------------------------------------------------------------ Jooble
@@ -212,12 +150,7 @@ async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
 // ------------------------------------------------------------------ all of them
 
 /** True when at least one board has its key (the page shows the section only then). */
-export const externalJobsConfigured = () =>
-  !!(
-    (process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY) ||
-    process.env.JOOBLE_API_KEY ||
-    process.env.CAREERJET_API_KEY
-  );
+export const externalJobsConfigured = () => !!(process.env.JOOBLE_API_KEY?.trim() || process.env.CAREERJET_API_KEY?.trim());
 
 /**
  * Operative vacancies in Saltillo / Ramos Arizpe / Arteaga from every configured board: classified
@@ -226,7 +159,6 @@ export const externalJobsConfigured = () =>
  */
 export async function getExternalJobs(visitor: Visitor | null): Promise<ExternalJobsResponse> {
   const boards: [ExternalProvider, () => Promise<Raw[] | null>][] = [
-    ["adzuna", fetchAdzuna],
     ["jooble", fetchJooble],
     ["careerjet", () => fetchCareerjet(visitor)],
   ];

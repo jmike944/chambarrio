@@ -1,12 +1,12 @@
 import type { CategoryId } from "@/lib/data/types";
 
 /*
- * Vacancies from other job boards (Adzuna, Jooble, Careerjet), shown in their own section
+ * Vacancies from other job boards (Jooble, Careerjet), shown in their own section
  * ("Más vacantes en Saltillo"), never on the map or the radar: they only say the city, not the
  * branch. Read-only and never stored: each one links back to the board, where people apply.
  */
 
-export type ExternalProvider = "adzuna" | "jooble" | "careerjet";
+export type ExternalProvider = "jooble" | "careerjet";
 
 export type ExternalJob = {
   /** `${provider}:${their id}`. */
@@ -35,7 +35,6 @@ export type ExternalJobsResponse = {
 };
 
 export const PROVIDER_META: Record<ExternalProvider, { label: string; home: string }> = {
-  adzuna: { label: "Adzuna", home: "https://www.adzuna.com.mx" },
   jooble: { label: "Jooble", home: "https://mx.jooble.org" },
   careerjet: { label: "Careerjet", home: "https://www.careerjet.com.mx" },
 };
