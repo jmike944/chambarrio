@@ -34,7 +34,7 @@ export default function PrivacidadPage() {
         {
           title: "Tus derechos",
           body: [
-            "Puedes acceder, rectificar, cancelar u oponerte al uso de tus datos (derechos ARCO), así como revocar tu consentimiento, escribiendo a privacidad@chambalado.mx. Te responderemos en los plazos que marca la ley aplicable en materia de protección de datos personales.",
+            "Puedes acceder, rectificar, cancelar u oponerte al uso de tus datos (derechos ARCO), así como revocar tu consentimiento, escribiendo a privacidad@chambarrio.com. Te responderemos en los plazos que marca la ley aplicable en materia de protección de datos personales.",
           ],
         },
       ]}

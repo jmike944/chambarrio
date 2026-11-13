@@ -80,7 +80,7 @@ export function LegalPage({
 
         <div className={cn("mt-14 flex flex-col gap-4 rounded-panel bg-card p-5 text-card-foreground sm:flex-row sm:items-center sm:p-6", HARD_SM)}>
           <p className="text-[0.98rem] text-muted-foreground">
-            ¿Dudas? Escríbenos a <span className="font-semibold text-foreground">hola@chambalado.mx</span>. Última actualización: noviembre de 2026.
+            ¿Dudas? Escríbenos a <span className="font-semibold text-foreground">hola@chambarrio.com</span>. Última actualización: noviembre de 2026.
           </p>
           <Link href="/" className={cn(chunky("ink", "md"), "group shrink-0 sm:ml-auto")}>
             <HugeiconsIcon icon={ArrowLeft02Icon} className="size-4 transition-transform group-hover:-translate-x-1" strokeWidth={2.4} />
