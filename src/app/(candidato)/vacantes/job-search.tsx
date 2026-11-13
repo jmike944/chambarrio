@@ -39,6 +39,7 @@ import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
 import { useApp, useJobsByDistance } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { CatalogErrorPanel, InkSkeleton, JobCardSkeletons, LiveEmptyNearby, LoadingNote, PickHomeBanner, StaleNote } from "./_seeker/states";
+import { ExternalJobs } from "./_seeker/external-jobs";
 import { MyMascot, MyScene } from "@/components/chamba/art/my-mascot";
 
 const SHIFTS: Shift[] = ["Matutino", "Vespertino", "Nocturno", "Mixto", "Rotativo"];
@@ -644,6 +645,7 @@ export function JobSearch() {
             ))}
           </ul>
         )}
+        {loading ? null : <ExternalJobs enabled={live} category={category} query={q} />}
       </section>
     </div>
   );
