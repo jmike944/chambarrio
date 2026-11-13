@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowRight01Icon,
+  Call02Icon,
   Cancel01Icon,
   Clock01Icon,
   FilterHorizontalIcon,
@@ -231,6 +232,12 @@ function JobBlockCard({
           <span className="inline-flex h-7 items-center gap-1 rounded-full bg-chile px-2.5 text-[0.75rem] font-bold tracking-wide text-white uppercase">
             <span aria-hidden className="size-1.5 animate-beat rounded-full bg-white" />
             Urge
+          </span>
+        ) : null}
+        {job.curated ? (
+          <span className="inline-flex h-7 items-center gap-1 rounded-md border-2 border-ink bg-white px-2 text-[0.75rem] font-bold">
+            <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.2} />
+            Por teléfono
           </span>
         ) : null}
         {company && company.locations.length > 1 ? (

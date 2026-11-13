@@ -16,6 +16,8 @@ import {
   CheckListIcon,
   CheckmarkBadge01Icon,
   Clock01Icon,
+  InformationCircleIcon,
+  LinkSquare02Icon,
   Location01Icon,
   Money03Icon,
   Note01Icon,
@@ -575,6 +577,9 @@ function ApplyConfirmation({ company, km, tone }: { company: Company; km: number
   );
 }
 
+/** "8441234501" → "844 123 4501" (anything else as it is). */
+const prettyPhone = (d: string) => (/^\d{10}$/.test(d) ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : d);
+
 const INK_LINK =
   "press inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink px-5 text-[0.98rem] font-semibold text-white outline-none focus-visible:ring-3 focus-visible:ring-ink/40";
 const WHITE_LINK =
@@ -639,6 +644,9 @@ function JobDetailView({
   /** The vacancy's phone, else the company's. */
   const phone = job.phone || company.phone || "";
   const hasPhone = !!phone;
+  /** A vacante curada: nobody at the company reads applications here, so candidates call / text / open the original. */
+  const curated = job.curated ?? null;
+  const originalUrl = curated?.sourceUrl ?? null;
 
   async function onApply(e: React.MouseEvent<HTMLButtonElement>) {
     const origin = e.currentTarget;
@@ -671,9 +679,25 @@ function JobDetailView({
     if (!r.error) toast(saved ? "Quitada de tus guardadas" : "Guardada para después");
   }
 
-  /** The big lime button: apply, or (once applied) jump to the application's status. */
+  /** The big lime button: apply, or (once applied) jump to the application's status. Curated: call (or the original posting). */
   const primary = (compact: boolean) =>
-    needsAccount ? (
+    curated ? (
+      hasPhone ? (
+        <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
+          <a href={`tel:+52${phone}`}>
+            <HugeiconsIcon icon={Call02Icon} className="size-5" strokeWidth={2.2} />
+            Llamar para postularme
+          </a>
+        </Button>
+      ) : originalUrl ? (
+        <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
+          <a href={originalUrl} target="_blank" rel="noopener noreferrer nofollow">
+            Postularme en la vacante original
+            <HugeiconsIcon icon={LinkSquare02Icon} className="size-5" strokeWidth={2.2} />
+          </a>
+        </Button>
+      ) : null
+    ) : needsAccount ? (
       <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
         <Link href="/entrar">Entra para postularte</Link>
       </Button>
@@ -698,52 +722,84 @@ function JobDetailView({
       </Button>
     );
 
+  const whiteBtn = "border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90";
+  const smsButton = hasPhone ? (
+    <Button asChild variant="white" size="lg" className={whiteBtn}>
+      <a href={`sms:+52${phone}?&body=${smsText}`}>
+        <HugeiconsIcon icon={Message01Icon} className="size-5 text-nopal" strokeWidth={2} />
+        SMS
+      </a>
+    </Button>
+  ) : null;
+  // Next to SMS: "Llamar" (curated: the call is already the big button, so the original posting instead).
+  const middleButton = curated ? (
+    hasPhone && originalUrl ? (
+      <Button asChild variant="white" size="lg" className={whiteBtn}>
+        <a href={originalUrl} target="_blank" rel="noopener noreferrer nofollow">
+          <HugeiconsIcon icon={LinkSquare02Icon} className="size-5" strokeWidth={2} />
+          Original
+        </a>
+      </Button>
+    ) : null
+  ) : hasPhone ? (
+    <Button asChild variant="white" size="lg" className={whiteBtn}>
+      <a href={`tel:+52${phone}`}>
+        <HugeiconsIcon icon={Call02Icon} className="size-5" strokeWidth={2} />
+        Llamar
+      </a>
+    </Button>
+  ) : null;
+  const sideButtons = [smsButton, middleButton].filter(Boolean).length;
+
   /** CTA cluster — lives on the violet action block (mobile bar; `stacked` in the narrower desktop aside). */
-  const renderActions = (stacked = false) => (
-    <div className="flex flex-col gap-2.5">
-      {primary(stacked)}
-      <div className={cn("grid gap-2.5", !hasPhone ? "grid-cols-1" : stacked ? "grid-cols-2" : "grid-cols-[1fr_1fr_auto]")}>
-        {hasPhone ? (
-          <>
-            <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-              <a href={`sms:+52${phone}?&body=${smsText}`}>
-                <HugeiconsIcon icon={Message01Icon} className="size-5 text-nopal" strokeWidth={2} />
-                SMS
-              </a>
-            </Button>
-            <Button asChild variant="white" size="lg" className="border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink dark:hover:bg-white/90">
-              <a href={`tel:+52${phone}`}>
-                <HugeiconsIcon icon={Call02Icon} className="size-5" strokeWidth={2} />
-                Llamar
-              </a>
-            </Button>
-          </>
-        ) : null}
-        <Button
-          variant="white"
-          size={stacked || !hasPhone ? "lg" : "icon-lg"}
+  const renderActions = (stacked = false) => {
+    // Save shows its label when it has the row to itself (stacked, or nothing next to it).
+    const wideSave = stacked || sideButtons === 0;
+    return (
+      <div className="flex flex-col gap-2.5">
+        {primary(stacked)}
+        <div
           className={cn(
-            "border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink",
-            saved && "bg-block-sol hover:bg-block-sol dark:bg-block-sol",
-            stacked && hasPhone && "col-span-2",
-            (stacked || !hasPhone) && "w-full",
+            "grid gap-2.5",
+            sideButtons === 0 || (stacked && sideButtons === 1)
+              ? "grid-cols-1"
+              : stacked
+                ? "grid-cols-2"
+                : sideButtons === 1
+                  ? "grid-cols-[1fr_auto]"
+                  : "grid-cols-[1fr_1fr_auto]",
           )}
-          onClick={needsAccount ? undefined : onSave}
-          disabled={needsAccount}
-          aria-pressed={saved}
-          aria-label={saved ? "Quitar de guardadas" : "Guardar vacante"}
         >
-          <HugeiconsIcon icon={Bookmark01Icon} className="size-5" strokeWidth={saved ? 2.6 : 2} />
-          {stacked || !hasPhone ? <span aria-hidden>{saved ? "Guardada" : "Guardar para después"}</span> : null}
-        </Button>
+          {smsButton}
+          {middleButton}
+          <Button
+            variant="white"
+            size={wideSave ? "lg" : "icon-lg"}
+            className={cn(
+              "border-2 border-ink bg-white text-ink hover:bg-white/90 dark:bg-white dark:text-ink",
+              saved && "bg-block-sol hover:bg-block-sol dark:bg-block-sol",
+              stacked && sideButtons === 2 && "col-span-2",
+              wideSave && "w-full",
+            )}
+            onClick={needsAccount ? undefined : onSave}
+            disabled={needsAccount}
+            aria-pressed={saved}
+            aria-label={saved ? "Quitar de guardadas" : "Guardar vacante"}
+          >
+            <HugeiconsIcon icon={Bookmark01Icon} className="size-5" strokeWidth={saved ? 2.6 : 2} />
+            {wideSave ? <span aria-hidden>{saved ? "Guardada" : "Guardar para después"}</span> : null}
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const queVasAHacer = (
     <Panel className="flex h-full flex-col border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
       <BlockHeader icon={Note01Icon} title="Qué vas a hacer" onCard />
-      <p className="text-[1.05rem] leading-relaxed">{job.description}</p>
+      <p className="text-[1.05rem] leading-relaxed">
+        {job.description || (curated ? "La vacante no da más detalles. Pregúntalos al llamar." : "")}
+      </p>
       <dl className="mt-auto grid grid-cols-2 gap-2.5 pt-5">
         <Fact label="Horario" value={job.schedule} className="col-span-2" />
         <Fact label="Jornada" value={job.type} />
@@ -755,6 +811,11 @@ function JobDetailView({
   const quePiden = (
     <Panel tone={piden} className={cn("h-full overflow-hidden border-2 border-ink", HARD)}>
       <BlockHeader icon={CheckListIcon} title="Qué piden" />
+      {job.requirements.length === 0 ? (
+        <p className="rounded-tile bg-white/55 p-3 text-[1.02rem] leading-snug font-medium">
+          {curated ? "La vacante no lo dice. Pregúntalo al llamar." : "No piden nada en especial."}
+        </p>
+      ) : null}
       <ul className="space-y-2">
         {job.requirements.map((r, i) => (
           <li
@@ -771,6 +832,9 @@ function JobDetailView({
       </ul>
 
       <h3 className="mt-6 mb-3 font-display text-[1.15rem] font-extrabold">Prestaciones</h3>
+      {job.benefits.length === 0 ? (
+        <p className="text-[1.02rem] leading-snug">{curated ? "No las menciona. Pregunta por ellas al llamar." : "No las menciona."}</p>
+      ) : null}
       <ul className="flex flex-wrap gap-2.5">
         {job.benefits.map((b, i) => (
           <li key={b} className="animate-pop-in" style={{ "--i": i, rotate: `${i % 2 === 0 ? -2 : 2}deg` } as CSSVars}>
@@ -829,6 +893,45 @@ function JobDetailView({
       <p className="mt-auto pt-3 text-sm text-muted-foreground">Tiempos estimados por calle, ida. Costos de ida y vuelta.</p>
     </Panel>
   );
+
+  /** Curated vacancies, in place of "¿Qué sigue?": where it came from, and the company's way in. */
+  const dondeSalio = curated ? (
+    <Panel tone="cielo" className={cn("relative flex h-full flex-col overflow-hidden border-2 border-ink", HARD)}>
+      <BlockHeader icon={InformationCircleIcon} title="Publicada por Chambarrio" />
+      <div className="space-y-2.5 text-[1.02rem] leading-relaxed">
+        <p>
+          <strong>{company.name}</strong> todavía no publica en Chambarrio. Juntamos esta vacante de información pública
+          {curated.sourceLabel ? <> ({curated.sourceLabel.charAt(0).toLowerCase() + curated.sourceLabel.slice(1)})</> : null} para que la
+          tengas cerca.
+        </p>
+        {curated.checkedAt ? (
+          <p className="font-semibold">Confirmamos que seguía abierta el {fmtDate(curated.checkedAt, { weekday: false, now: now ?? undefined })}.</p>
+        ) : null}
+        <p className="text-muted-foreground">Por eso aquí no hay botón de postularte: habla directo con la empresa.</p>
+        {originalUrl ? (
+          <a
+            href={originalUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="inline-flex items-center gap-1.5 font-semibold underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            Ver la vacante original
+            <HugeiconsIcon icon={LinkSquare02Icon} className="size-4" strokeWidth={2.2} />
+          </a>
+        ) : null}
+      </div>
+      <div className="mt-auto pt-5">
+        <div className="rounded-tile border-2 border-ink bg-white/75 p-4">
+          <p className="font-display text-[1.15rem] leading-tight font-extrabold">¿Trabajas en {company.name}?</p>
+          <p className="mt-1 text-[0.95rem] leading-snug">Reclama la empresa gratis y recibe las postulaciones aquí, con su distancia y colonia.</p>
+          <Link href={`/reclamar?empresa=${encodeURIComponent(company.id)}`} className={cn(INK_LINK, "mt-3 w-full")}>
+            Reclamar mi empresa
+            <HugeiconsIcon icon={ArrowRight01Icon} className="size-5" strokeWidth={2.2} />
+          </Link>
+        </div>
+      </div>
+    </Panel>
+  ) : null;
 
   const queSigue = (
     <Panel tone="cielo" className={cn("relative flex h-full flex-col overflow-hidden border-2 border-ink", HARD)}>
@@ -902,6 +1005,12 @@ function JobDetailView({
                   <span className="inline-flex h-7 items-center gap-1.5 rounded-md bg-chile px-2 text-[0.72rem] font-extrabold tracking-[0.12em] text-white uppercase">
                     <span aria-hidden className="size-1.5 animate-beat rounded-full bg-white" />
                     Urge
+                  </span>
+                ) : null}
+                {curated ? (
+                  <span className="inline-flex h-7 items-center gap-1.5 rounded-md border-2 border-ink bg-white px-2 text-[0.72rem] font-extrabold tracking-[0.12em] uppercase">
+                    <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.4} />
+                    Por teléfono
                   </span>
                 ) : null}
               </div>
@@ -996,7 +1105,7 @@ function JobDetailView({
         {/* ------------------------------------------------ desktop action block (the one saturated block) */}
         <aside className="hidden min-w-0 lg:col-span-4 lg:flex">
           <section
-            aria-label={applied ? "Tu postulación" : "Postúlate"}
+            aria-label={applied ? "Tu postulación" : curated ? "Cómo postularte" : "Postúlate"}
             // overflow-clip, not hidden: a hidden box is still a scroll container, and when applying
             // grows the content, scroll anchoring scrolled it and cut off the top line.
             className={cn("relative isolate flex flex-1 flex-col overflow-clip rounded-panel border-2 border-ink p-6 block-uva", HARD)}
@@ -1013,6 +1122,32 @@ function JobDetailView({
                 {p ? <MiniTrack p={p} inverse className="mt-4" /> : null}
                 {p && step && now ? <AsideStamp p={p} step={step} now={now} /> : null}
                 <p className="mt-3 text-primary-foreground/80">{p && step ? asideLine(p, step, now) : "Sigue el avance aquí abajo."}</p>
+              </>
+            ) : curated ? (
+              <>
+                <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">Llama directo</p>
+                <p className="mt-2 font-display text-[1.6rem] leading-[1.05] font-extrabold tracking-[-0.03em]">
+                  {hasPhone ? (
+                    <>
+                      Esta vacante se pide <span className="text-limon">por teléfono</span>
+                    </>
+                  ) : (
+                    <>
+                      Esta vacante se pide <span className="text-limon">en su página</span>
+                    </>
+                  )}
+                </p>
+                <ul className="mt-4 space-y-1.5 text-[0.95rem] text-primary-foreground/85">
+                  {(hasPhone
+                    ? [`Llama o manda SMS al ${prettyPhone(phone)}`, "Di que la viste en Chambarrio", "Pregunta si sigue abierta y cuándo ir"]
+                    : ["Abre la vacante original", "Sigue sus pasos para postularte", "Guárdala aquí para no perderla"]
+                  ).map((t) => (
+                    <li key={t} className="flex items-center gap-2">
+                      <HugeiconsIcon icon={Tick02Icon} className="size-4 shrink-0 text-limon" strokeWidth={3} />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
               </>
             ) : (
               <>
@@ -1112,7 +1247,7 @@ function JobDetailView({
               {queVasAHacer}
             </Reveal>
             <Reveal inView className="min-w-0 lg:col-span-5">
-              {queSigue}
+              {dondeSalio ?? queSigue}
             </Reveal>
             <Reveal inView className="min-w-0 lg:col-span-6">
               {quePiden}

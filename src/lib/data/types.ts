@@ -77,6 +77,21 @@ export type Job = {
    * still read it (20261108041320_candidate_reads_after_close.sql).
    */
   closed?: boolean;
+  /**
+   * A "vacante curada": Chambarrio published it from public information while the company isn't on
+   * Chambarrio yet. It takes no applications (nobody at the company would read them): candidates call
+   * or text, or open the original posting. Absent on vacancies the company published itself.
+   */
+  curated?: CuratedInfo;
+};
+
+export type CuratedInfo = {
+  /** Where the information came from, as shown to candidates ("Lona afuera de la planta"…). */
+  sourceLabel: string | null;
+  /** The original posting online, when there is one. */
+  sourceUrl: string | null;
+  /** ISO instant: the last time Chambarrio confirmed it was still open. */
+  checkedAt: string | null;
 };
 
 export type ApplicationStatus = "enviada" | "vista" | "entrevista" | "contratada" | "cerrada";

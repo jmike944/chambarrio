@@ -107,6 +107,8 @@ export type Database = {
           plan: E["plan_id"];
           size: E["company_size"];
           verified: boolean;
+          /** 20261112230000_curated_jobs.sql: when someone claimed a company Chambarrio had published. */
+          claimed_at?: string | null;
         };
         Insert: {
           about?: string;
@@ -178,6 +180,13 @@ export type Database = {
           type: E["employment_type"];
           updated_at: string;
           urgent: boolean;
+          // 20261112230000_curated_jobs.sql (optional: absent until it's applied). Written only by
+          // Chambarrio (trigger guard_job_source ignores them from the app).
+          source?: E["job_source"];
+          source_label?: string | null;
+          source_url?: string | null;
+          checked_at?: string | null;
+          expires_at?: string | null;
         };
         Insert: {
           benefits?: string[];
@@ -422,8 +431,22 @@ export type Database = {
           title: string;
           type: E["employment_type"];
           urgent: boolean;
+          // 20261112230000_curated_jobs.sql (absent until it's applied).
+          source?: E["job_source"];
+          source_label?: string | null;
+          source_url?: string | null;
+          checked_at?: string | null;
+          expires_at?: string | null;
         }[];
       };
+      // ---- vacantes curadas (20261112230000_curated_jobs.sql)
+      /** Public (signed out too). No row = no such company. phone_hints: last 2 digits of the phones that can claim it. */
+      claim_preview: {
+        Args: { p_company_id: string };
+        Returns: { company_id: string; company_name: string; claimable: boolean; open_jobs: number; phone_hints: string[] }[];
+      };
+      /** Returns { company_id, company_name }. Errors carry hint "claim:<code>" (or "team:other_company"). */
+      claim_company: { Args: { p_company_id: string; p_name?: string | null }; Returns: Json };
       job_applicants_detail: {
         Args: { p_job_id: string };
         Returns: {
@@ -468,6 +491,8 @@ export type Database = {
       employment_type: "Tiempo completo" | "Medio tiempo" | "Temporal" | "Fines de semana";
       experience_level: "Sin experiencia" | "6 meses" | "1 año" | "2 años o más";
       job_status: "abierta" | "pausada" | "cerrada";
+      /** 20261112230000_curated_jobs.sql. */
+      job_source: "chambarrio" | "curada";
       location_source: "colonia" | "gps";
       pay_period: "semana" | "quincena" | "mes" | "dia";
       plan_id: "por-vacante" | "pyme" | "industrial";

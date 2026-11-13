@@ -218,7 +218,7 @@ export function friendlyError(e: DbError, fallback: string = MSG.save): string {
   if (!e) return fallback;
   // Team rules (hint "team:<code>") already speak Spanish to the user, e.g. creating a business while
   // in another team: "Ya perteneces al equipo de otro negocio…". Show them as they are.
-  if (e.hint?.startsWith("team:") && e.message?.trim()) return e.message;
+  if ((e.hint?.startsWith("team:") || e.hint?.startsWith("claim:")) && e.message?.trim()) return e.message;
   const m = `${e.message ?? ""} ${e.details ?? ""}`.toLowerCase();
   const code = e.code ?? "";
   if (/failed to fetch|networkerror|network request failed|load failed|fetch failed|err_internet/.test(m)) return MSG.offline;
@@ -307,7 +307,20 @@ export function nearJobToJob(r: NearJob, now = Date.now()): Job {
     applicants: Number(r.applicants) || 0,
     urgent: r.urgent || undefined,
     phone: r.phone ?? "",
+    ...curatedOf(r),
   };
+}
+
+/** The curated-vacancy fields of a jobs row / jobs_near row (nothing for the company's own vacancies). */
+function curatedOf(r: {
+  source?: string | null;
+  source_label?: string | null;
+  source_url?: string | null;
+  checked_at?: string | null;
+}): Pick<Job, "curated"> {
+  if (r.source !== "curada") return {};
+  const url = typeof r.source_url === "string" && /^https?:\/\/\S+$/i.test(r.source_url) ? r.source_url : null;
+  return { curated: { sourceLabel: r.source_label?.trim() || null, sourceUrl: url, checkedAt: r.checked_at ?? null } };
 }
 
 type JobRow = Tables<"jobs">;
@@ -337,6 +350,7 @@ function jobRowToJob(r: JobRow, branch: { colonia: string; location: LatLng }, a
     urgent: r.urgent || undefined,
     phone: r.phone ?? "",
     ...(r.status !== "abierta" ? { closed: true } : {}),
+    ...curatedOf(r),
   };
 }
 
@@ -472,6 +486,74 @@ export async function fetchJobsByIds(ids: string[]): Promise<Result<Record<strin
     return { data: out };
   } catch (e) {
     return { error: friendlyError(e as DbError, MSG.load) };
+  }
+}
+
+// ------------------------------------------------------------------ claiming a curated company
+
+/** What the claim page (/reclamar) shows about a company Chambarrio published from public information. */
+export type ClaimPreview = {
+  companyId: string;
+  companyName: string;
+  /** Nobody manages it on Chambarrio yet. */
+  claimable: boolean;
+  /** Its open curated vacancies. */
+  openJobs: number;
+  /** Last 2 digits of each phone that can claim it (printed in its vacancies, so public). */
+  phoneHints: string[];
+};
+
+/** Public (works signed out). null = no such company. */
+export async function fetchClaimPreview(companyId: string): Promise<Result<ClaimPreview | null>> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable };
+  try {
+    const { data, error } = await sb.rpc("claim_preview", { p_company_id: companyId });
+    if (error) return { error: friendlyError(error, MSG.load) };
+    const r = data?.[0];
+    if (!r) return { data: null };
+    return {
+      data: {
+        companyId: r.company_id,
+        companyName: r.company_name,
+        claimable: !!r.claimable,
+        openJobs: Number(r.open_jobs) || 0,
+        phoneHints: Array.isArray(r.phone_hints) ? r.phone_hints.filter((h) => /^\d{2}$/.test(h)) : [],
+      },
+    };
+  } catch (e) {
+    return { error: friendlyError(e as DbError, MSG.load) };
+  }
+}
+
+/** Why a claim was refused, for the page to offer the right next step. */
+export type ClaimRefusal = "not_signed_in" | "not_found" | "taken" | "no_phone" | "wrong_phone" | "other_company" | "unknown";
+
+/**
+ * The signed-in user claims the company (must be signed in with the SMS-verified celular printed in
+ * its vacancies). They become its dueño and the profile a business account; reload the session after.
+ */
+export async function claimCompany(
+  companyId: string,
+  name?: string | null,
+): Promise<{ data: { companyId: string; companyName: string }; error?: undefined; reason?: undefined } | { data?: undefined; error: string; reason: ClaimRefusal }> {
+  const sb = client();
+  if (!sb) return { error: MSG.unavailable, reason: "unknown" };
+  try {
+    const { data, error } = await sb.rpc("claim_company", { p_company_id: companyId, p_name: name?.trim() || null });
+    if (error) {
+      const hint = error.hint ?? "";
+      const reason: ClaimRefusal = hint.startsWith("claim:")
+        ? ((["not_signed_in", "not_found", "taken", "no_phone", "wrong_phone"] as const).find((r) => hint === `claim:${r}`) ?? "unknown")
+        : hint === "team:other_company"
+          ? "other_company"
+          : "unknown";
+      return { error: friendlyError(error), reason };
+    }
+    const d = (data ?? {}) as { company_id?: unknown; company_name?: unknown };
+    return { data: { companyId: typeof d.company_id === "string" ? d.company_id : companyId, companyName: typeof d.company_name === "string" ? d.company_name : "" } };
+  } catch (e) {
+    return { error: friendlyError(e as DbError), reason: "unknown" };
   }
 }
 
