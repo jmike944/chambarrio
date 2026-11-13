@@ -107,7 +107,7 @@ export type Database = {
           plan: E["plan_id"];
           size: E["company_size"];
           verified: boolean;
-          /** 20261112230000_curated_jobs.sql: when someone claimed a company Chambarrio had published. */
+          /** 20261113010941_curated_jobs.sql: when someone claimed a company Chambarrio had published. */
           claimed_at?: string | null;
         };
         Insert: {
@@ -180,7 +180,7 @@ export type Database = {
           type: E["employment_type"];
           updated_at: string;
           urgent: boolean;
-          // 20261112230000_curated_jobs.sql (optional: absent until it's applied). Written only by
+          // 20261113010941_curated_jobs.sql (optional: absent until it's applied). Written only by
           // Chambarrio (trigger guard_job_source ignores them from the app).
           source?: E["job_source"];
           source_label?: string | null;
@@ -431,7 +431,7 @@ export type Database = {
           title: string;
           type: E["employment_type"];
           urgent: boolean;
-          // 20261112230000_curated_jobs.sql (absent until it's applied).
+          // 20261113010941_curated_jobs.sql (absent until it's applied).
           source?: E["job_source"];
           source_label?: string | null;
           source_url?: string | null;
@@ -439,7 +439,7 @@ export type Database = {
           expires_at?: string | null;
         }[];
       };
-      // ---- vacantes curadas (20261112230000_curated_jobs.sql)
+      // ---- vacantes curadas (20261113010941_curated_jobs.sql)
       /** Public (signed out too). No row = no such company. phone_hints: last 2 digits of the phones that can claim it. */
       claim_preview: {
         Args: { p_company_id: string };
@@ -491,7 +491,7 @@ export type Database = {
       employment_type: "Tiempo completo" | "Medio tiempo" | "Temporal" | "Fines de semana";
       experience_level: "Sin experiencia" | "6 meses" | "1 año" | "2 años o más";
       job_status: "abierta" | "pausada" | "cerrada";
-      /** 20261112230000_curated_jobs.sql. */
+      /** 20261113010941_curated_jobs.sql. */
       job_source: "chambarrio" | "curada";
       location_source: "colonia" | "gps";
       pay_period: "semana" | "quincena" | "mes" | "dia";
