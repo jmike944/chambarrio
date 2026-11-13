@@ -126,6 +126,9 @@ const CAREERJET_PER: Record<string, "al mes" | "a la semana" | "al día" | "por 
 /** The visitor: Careerjet refuses queries without their IP and user agent (fraud checks). */
 export type Visitor = { ip: string; userAgent: string };
 
+/** The page the results appear on, on the website declared in Careerjet's publisher account. */
+const CAREERJET_REFERER = "https://chambarrio.com/vacantes";
+
 const careerjetProxyUrl = () => (process.env.CAREERJET_PROXY_URL || process.env.FIXIE_URL)?.trim() || null;
 
 let proxy: { url: string; agent: ProxyAgent } | null = null;
@@ -151,7 +154,13 @@ async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
   });
   // undici's own fetch (not Next's): it takes the proxy as `dispatcher`. Never cached (per visitor).
   const res = await fetchVia(`https://search.api.careerjet.net/v4/query?${q}`, {
-    headers: { Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}`, Accept: "application/json" },
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}`,
+      Accept: "application/json",
+      // Careerjet refuses calls without a Referer on the website declared in the publisher account
+      // ("Undeclared referrer"): chambarrio.com, where these results are shown.
+      Referer: CAREERJET_REFERER,
+    },
     dispatcher: careerjetProxy(proxyUrl),
     signal: withTimeout(TIMEOUT_MS),
   });
