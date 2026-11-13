@@ -29,6 +29,8 @@ export default function PrivacidadPage() {
           title: "Con quién compartimos tus datos",
           body: [
             "Solo compartimos tu perfil con las empresas a cuyas vacantes te postulas o a las que decides contactar. No vendemos tus datos personales.",
+            "En la búsqueda también mostramos vacantes de otras bolsas de trabajo (Adzuna, Jooble y Careerjet). Para traer las de Careerjet les enviamos la dirección IP y el tipo de navegador de quien busca, porque su servicio lo pide para evitar fraudes. No les enviamos tu nombre, tus datos de contacto ni tu ubicación, y nosotros no guardamos esa IP.",
+            "Al abrir una de esas vacantes pasas a la página de esa bolsa de trabajo, donde aplica su propio aviso de privacidad.",
           ],
         },
         {
