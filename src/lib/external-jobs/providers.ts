@@ -1,4 +1,5 @@
 import "server-only";
+import { ProxyAgent, fetch as fetchVia } from "undici";
 import { categorize, dedupeKey, inOurArea, payText, plainSnippet } from "./classify";
 import type { ExternalJob, ExternalProvider, ExternalJobsResponse } from "./types";
 
@@ -8,13 +9,15 @@ import type { ExternalJob, ExternalProvider, ExternalJobsResponse } from "./type
  * section doesn't show. Keys never reach the browser.
  *
  *   Jooble     POST {JOOBLE_API_HOST}/api/{key}               JOOBLE_API_KEY (a key for Mexico)
- *   Careerjet  GET  search.api.careerjet.net/v4/query         CAREERJET_API_KEY (Basic auth)
+ *   Careerjet  GET  search.api.careerjet.net/v4/query         CAREERJET_API_KEY (Basic auth) + FIXIE_URL
  *
  * Jooble's answers are cached for an hour (Next fetch cache: shared by every visitor, survives
  * instances), which keeps us far under its free key's 100 requests a day.
  * Careerjet requires the visitor's IP and user agent on every query, so it's asked live, per visit.
- * Careerjet also only answers servers on the account's IP allowlist ("Unauthorized access from IP"):
- * it needs a fixed outbound IP, which Vercel functions don't have without the Static IPs add-on.
+ * Careerjet also only answers servers on the account's IP allowlist ("Unauthorized access from IP"),
+ * and Vercel functions have no fixed outbound IP. So Careerjet calls (only those) go out through a
+ * static-IP proxy: Fixie from the Vercel Marketplace sets FIXIE_URL (CAREERJET_PROXY_URL overrides
+ * it), and Fixie's two IPs go on Careerjet's allowlist. Without a proxy URL Careerjet isn't called.
  */
 
 const TIMEOUT_MS = 4500;
@@ -42,6 +45,16 @@ const httpUrl = (v: unknown): string | null => {
 
 function withTimeout(ms: number): AbortSignal {
   return AbortSignal.timeout(ms);
+}
+
+/** "fetch failed" alone says nothing: add the network cause ("ECONNREFUSED 1.2.3.4:80"). Never the URL (it has keys). */
+function describeError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const c = e.cause as { code?: unknown; address?: unknown; port?: unknown; message?: unknown } | undefined;
+  if (!c) return e.message;
+  const where = typeof c.address === "string" ? ` ${c.address}${c.port != null ? `:${String(c.port)}` : ""}` : "";
+  const code = typeof c.code === "string" ? c.code : typeof c.message === "string" ? c.message : "";
+  return code ? `${e.message} (${code}${where})` : e.message;
 }
 
 // ------------------------------------------------------------------ Jooble
@@ -113,9 +126,19 @@ const CAREERJET_PER: Record<string, "al mes" | "a la semana" | "al día" | "por 
 /** The visitor: Careerjet refuses queries without their IP and user agent (fraud checks). */
 export type Visitor = { ip: string; userAgent: string };
 
+const careerjetProxyUrl = () => (process.env.CAREERJET_PROXY_URL || process.env.FIXIE_URL)?.trim() || null;
+
+let proxy: { url: string; agent: ProxyAgent } | null = null;
+/** One keep-alive agent per instance (credentials go in the URL: http://user:pass@host:port). */
+function careerjetProxy(url: string): ProxyAgent {
+  if (proxy?.url !== url) proxy = { url, agent: new ProxyAgent(url) };
+  return proxy.agent;
+}
+
 async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
   const key = process.env.CAREERJET_API_KEY?.trim();
-  if (!key || !visitor?.ip || !visitor.userAgent) return null;
+  const proxyUrl = careerjetProxyUrl();
+  if (!key || !proxyUrl || !visitor?.ip || !visitor.userAgent) return null;
   const q = new URLSearchParams({
     locale_code: "es_MX",
     location: "Saltillo",
@@ -126,12 +149,13 @@ async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
     user_ip: visitor.ip,
     user_agent: visitor.userAgent,
   });
-  const res = await fetch(`https://search.api.careerjet.net/v4/query?${q}`, {
+  // undici's own fetch (not Next's): it takes the proxy as `dispatcher`. Never cached (per visitor).
+  const res = await fetchVia(`https://search.api.careerjet.net/v4/query?${q}`, {
     headers: { Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}`, Accept: "application/json" },
-    cache: "no-store",
+    dispatcher: careerjetProxy(proxyUrl),
     signal: withTimeout(TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`careerjet ${res.status}`);
+  if (!res.ok) throw new Error(`careerjet ${res.status}${res.status === 403 ? " (is the proxy's IP on Careerjet's allowlist?)" : ""}`);
   const data = (await res.json()) as { type?: string; jobs?: unknown[] };
   if (data.type !== "JOBS") return [];
   return (data.jobs ?? []).flatMap((r, i): Raw[] => {
@@ -169,7 +193,8 @@ async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
 // ------------------------------------------------------------------ all of them
 
 /** True when at least one board has its key (the page shows the section only then). */
-export const externalJobsConfigured = () => !!(process.env.JOOBLE_API_KEY?.trim() || process.env.CAREERJET_API_KEY?.trim());
+export const externalJobsConfigured = () =>
+  !!(process.env.JOOBLE_API_KEY?.trim() || (process.env.CAREERJET_API_KEY?.trim() && careerjetProxyUrl()));
 
 /**
  * Operative vacancies in Saltillo / Ramos Arizpe / Arteaga from every configured board: classified
@@ -187,7 +212,7 @@ export async function getExternalJobs(visitor: Visitor | null): Promise<External
   settled.forEach((s, i) => {
     const provider = boards[i][0];
     if (s.status === "rejected") {
-      console.warn(`[vacantes-externas] ${provider}: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`);
+      console.warn(`[vacantes-externas] ${provider}: ${describeError(s.reason)}`);
       return;
     }
     if (!s.value) return; // not configured
