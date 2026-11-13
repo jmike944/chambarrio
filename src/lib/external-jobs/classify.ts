@@ -15,22 +15,22 @@ const fold = (s: string) =>
 
 /** Professional / managerial roles: not what people look for here. */
 const EXCLUDE =
-  /\b(ingenier|gerente|director|jefe|jefa|coordinador|analista|desarroll|programador|developer|engineer|manager|licenciad|abogad|medico|contador publico|arquitect|consultor|ejecutivo de cuenta|key account|becari|practicante|trainee|lider de proyecto|project|sistemas|software|soporte tecnico|help ?desk)/;
+  /\b(ingenier|gerente|director|jefe|jefa|coordinador|analista|desarroll|programador|developer|engineer|manager|licenciad|abogad|medico|contador publico|arquitect|consultor|ejecutivo de cuenta|key account|reclutador|generalista|representante de distrito|becari|practicante|trainee|lider de proyecto|project|sistemas|software|soporte tecnico|help ?desk)/;
 
 /** First match wins: specific before generic ("operador de montacargas" before "operador"). */
 const RULES: [CategoryId, RegExp][] = [
   ["montacargas", /\bmontacarg/],
-  ["chofer", /\b(chofer|conductor|repartidor|reparto|mensajer|motociclista|operador de (trailer|tractocamion|quinta rueda|camion|unidad|transporte|tracto)|operador (tracto|quinta))/],
-  ["seguridad", /\b(guardia|seguridad intramuros|vigilante|custodio|monitorista|oficial de seguridad|seguridad privada)/],
+  ["chofer", /\b(chofer|conductor|repartidor|reparto|mensajer|motociclista|operador de (trailer|tractocamion|quinta rueda|camion|unidad|transporte|tracto)|operador (tracto|quinta)|(5ta|quinta)\.? rueda|licencia federal|(auxiliar|ayudante) de ruta)/],
+  ["seguridad", /\b(guardia|seguridad intramuros|vigilante|custodio|monitorista|oficial de seguridad|seguridad privada|supervisor de seguridad(?! e higiene)|prevencion de perdidas|proteccion de activos|control de acceso)/],
   ["limpieza", /\b(limpieza|intendente|intendencia|afanador|mucama|camarista|lavaloza|lava loza)/],
   ["restaurante", /\b(mesero|mesera|cocinero|cocinera|cocina|barista|garrotero|bartender|cantinero|hostess|pizzero|taquero|parrillero|repostero|panadero|chef|steward)/],
-  ["caja", /\b(cajero|cajera|caja\b|cajer)/],
+  ["caja", /\b(cajero|cajera|caja\b|cajer|multifuncional|tablajero|frescos|tienda\b)/],
   ["almacen", /\b(almacen|almacenista|surtidor|estibador|cargador|picker|empacador|empacadora|inventario|embarques|recibo de mercancia)/],
   ["mantenimiento", /\b(mantenimiento|tecnico|electricista|mecanico|plomero|refrigeracion|soldador|pailero|tornero|fresador)/],
   ["construccion", /\b(albanil|construccion|obra\b|pintor|carpintero|herrero|peon|yesero|azulejero|tablaroca)/],
   ["ventas", /\b(vendedor|vendedora|ventas|promotor|promotora|asesor de ventas|asesora de ventas|dependiente|piso de venta|atencion a client|demostrador|edecan)/],
-  ["oficina", /\b(auxiliar administrativ|recepcionista|capturista|asistente administrativ|secretari|auxiliar contable|auxiliar de oficina|archivista|call center|telefonista)/],
-  ["produccion", /\b(operador|operadora|operario|operaria|ayudante general|ensamblador|ensambladora|produccion|costurera|costurero|inyeccion|inspector de calidad|inspectora de calidad|maquinista|troquelador|linea de produccion|manufactura)/],
+  ["oficina", /\b(aux(iliar)?\.? administrativ|recepcionista|capturista|asistente administrativ|secretari|auxiliar contable|auxiliar de oficina|archivista|call center|telefonista)/],
+  ["produccion", /\b(operador|operadora|operario|operaria|ayudantes? general(es)?|auxiliar(es)? general(es)?|auxiliar(es)? operativ|auxiliar de planta|auxiliar de produccion|ensamblador|ensambladora|produccion|costurera|costurero|inyeccion|inspector de calidad|inspectora de calidad|maquinista|troquelador|linea de produccion|manufactura)/],
 ];
 
 export function categorize(title: string): CategoryId | null {

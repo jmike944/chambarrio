@@ -10,17 +10,19 @@ import type { ExternalJob, ExternalProvider, ExternalJobsResponse } from "./type
  *   Jooble     POST {JOOBLE_API_HOST}/api/{key}               JOOBLE_API_KEY (a key for Mexico)
  *   Careerjet  GET  search.api.careerjet.net/v4/query         CAREERJET_API_KEY (Basic auth)
  *
- * Jooble's answer is cached for an hour (Next fetch cache: shared by every visitor, survives
+ * Jooble's answers are cached for an hour (Next fetch cache: shared by every visitor, survives
  * instances), which keeps us far under its free key's 100 requests a day.
  * Careerjet requires the visitor's IP and user agent on every query, so it's asked live, per visit.
+ * Careerjet also only answers servers on the account's IP allowlist ("Unauthorized access from IP"):
+ * it needs a fixed outbound IP, which Vercel functions don't have without the Static IPs add-on.
  */
 
 const TIMEOUT_MS = 4500;
 const REVALIDATE_S = 3600;
 /** Raw items asked per board (before keeping only operative jobs in our area). */
-const PER_BOARD = 50;
+const PER_BOARD = 100;
 /** At most this many go back to the page. */
-const MAX_JOBS = 40;
+const MAX_JOBS = 60;
 
 type Raw = Omit<ExternalJob, "category"> & { category?: undefined };
 
@@ -44,14 +46,21 @@ function withTimeout(ms: number): AbortSignal {
 
 // ------------------------------------------------------------------ Jooble
 
-async function fetchJooble(): Promise<Raw[] | null> {
-  const key = process.env.JOOBLE_API_KEY?.trim();
-  if (!key) return null;
-  const host = (process.env.JOOBLE_API_HOST?.trim() || "https://mx.jooble.org").replace(/\/+$/, "");
+/**
+ * Two searches, one per group of trades: commas work as "or" in Jooble's keywords. With no keywords
+ * the feed is mostly office and engineering jobs (~15% operative); grouped, ~75–95% are. Two calls
+ * an hour, cached, stay well under the free key's 100 a day.
+ */
+const JOOBLE_QUERIES = [
+  "operador, ayudante general, auxiliar de produccion, almacenista, montacargas, chofer, repartidor, guardia de seguridad",
+  "cajero, vendedor, mesero, cocinero, limpieza, intendencia, tecnico de mantenimiento, albañil, recepcionista",
+];
+
+async function joobleSearch(host: string, key: string, keywords: string): Promise<unknown[]> {
   const res = await fetch(`${host}/api/${encodeURIComponent(key)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ keywords: "", location: "Saltillo, Coahuila", radius: "26", page: "1", ResultOnPage: String(PER_BOARD) }),
+    body: JSON.stringify({ keywords, location: "Saltillo, Coahuila", radius: "26", page: "1", ResultOnPage: String(PER_BOARD) }),
     // A POST is only cached when asked to explicitly.
     cache: "force-cache",
     next: { revalidate: REVALIDATE_S },
@@ -59,12 +68,22 @@ async function fetchJooble(): Promise<Raw[] | null> {
   });
   if (!res.ok) throw new Error(`jooble ${res.status}`);
   const data = (await res.json()) as { jobs?: unknown[] };
-  return (data.jobs ?? []).flatMap((r): Raw[] => {
+  return data.jobs ?? [];
+}
+
+async function fetchJooble(): Promise<Raw[] | null> {
+  const key = process.env.JOOBLE_API_KEY?.trim();
+  if (!key) return null;
+  const host = (process.env.JOOBLE_API_HOST?.trim() || "https://mx.jooble.org").replace(/\/+$/, "");
+  const settled = await Promise.allSettled(JOOBLE_QUERIES.map((q) => joobleSearch(host, key, q)));
+  if (settled.every((s) => s.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
+  const items = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
+  return items.flatMap((r): Raw[] => {
     const j = r as Record<string, unknown>;
     const url = httpUrl(j.link);
     const title = plainSnippet(str(j.title), 120);
     if (!url || !title) return [];
-    // Their salary is already text ("$9,000 - $12,000 MXN"); keep it as they wrote it.
+    // Their salary is already text ("$11,000 - $13,000", "$2,720 por semana"); keep it as they wrote it.
     const salary = plainSnippet(str(j.salary), 48);
     return [
       {
