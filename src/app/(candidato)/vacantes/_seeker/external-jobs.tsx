@@ -7,6 +7,7 @@ import { CategoryIcon } from "@/components/chamba/job-icons";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import type { CategoryId } from "@/lib/data/types";
 import { formatMinutesAgo } from "@/lib/format";
+import { useApp } from "@/lib/store";
 import { PROVIDER_META, type ExternalJob, type ExternalJobsResponse, type ExternalProvider } from "@/lib/external-jobs/types";
 import { cn } from "@/lib/utils";
 
@@ -22,35 +23,46 @@ const EMPTY: ExternalJobsResponse = { jobs: [], providers: [] };
 const PAGE = 20;
 const PROVIDERS = new Set<ExternalProvider>(["jooble", "careerjet"]);
 
-let flight: Promise<ExternalJobsResponse> | null = null;
+const flights = new Map<string, Promise<ExternalJobsResponse>>();
 
-/** One request per visit (the server caches the boards for an hour anyway). */
-function loadExternalJobs(): Promise<ExternalJobsResponse> {
-  return (flight ??= fetch("/api/vacantes-externas")
-    .then((r) => (r.ok ? r.json() : EMPTY))
-    .then((d: Partial<ExternalJobsResponse>) => ({
-      jobs: Array.isArray(d.jobs) ? d.jobs.filter((j) => j && PROVIDERS.has(j.provider) && /^https?:\/\//.test(j.url) && !!CATEGORY_BY_ID[j.category]) : [],
-      providers: Array.isArray(d.providers) ? d.providers.filter((p) => PROVIDERS.has(p)) : [],
-    }))
-    .catch(() => {
-      flight = null; // offline: try again next time
-      return EMPTY;
-    }));
+/**
+ * One request per visit and set of interests (the server caches Jooble for an hour; Careerjet is
+ * asked about one of these trades, one proxy request each time, so this doesn't refetch on filters).
+ */
+function loadExternalJobs(interests: string): Promise<ExternalJobsResponse> {
+  let flight = flights.get(interests);
+  if (!flight) {
+    flight = fetch(`/api/vacantes-externas${interests ? `?i=${encodeURIComponent(interests)}` : ""}`)
+      .then((r) => (r.ok ? r.json() : EMPTY))
+      .then((d: Partial<ExternalJobsResponse>) => ({
+        jobs: Array.isArray(d.jobs) ? d.jobs.filter((j) => j && PROVIDERS.has(j.provider) && /^https?:\/\//.test(j.url) && !!CATEGORY_BY_ID[j.category]) : [],
+        providers: Array.isArray(d.providers) ? d.providers.filter((p) => PROVIDERS.has(p)) : [],
+      }))
+      .catch(() => {
+        flights.delete(interests); // offline: try again next time
+        return EMPTY;
+      });
+    flights.set(interests, flight);
+  }
+  return flight;
 }
 
 function useExternalJobs(enabled: boolean): ExternalJobsResponse | null {
-  const [data, setData] = useState<ExternalJobsResponse | null>(null);
+  // The profile's interests (up to 3, stable order), so Careerjet answers about the trades they want.
+  const interests = useApp((s) => [...s.interests].sort().slice(0, 3).join(","));
+  const [read, setRead] = useState<{ key: string; data: ExternalJobsResponse } | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    void loadExternalJobs().then((d) => {
-      if (alive) setData(d);
+    void loadExternalJobs(interests).then((data) => {
+      if (alive) setRead({ key: interests, data });
     });
     return () => {
       alive = false;
     };
-  }, [enabled]);
-  return enabled ? data : null;
+  }, [enabled, interests]);
+  // Keep showing the last answer while a new set of interests loads.
+  return enabled ? (read?.data ?? null) : null;
 }
 
 const minutesSince = (iso: string | null) => {

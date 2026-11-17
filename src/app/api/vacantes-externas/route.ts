@@ -1,11 +1,13 @@
 import type { NextRequest } from "next/server";
 import { externalJobsConfigured, getExternalJobs, type Visitor } from "@/lib/external-jobs/providers";
+import { CATEGORY_BY_ID } from "@/lib/data/categories";
+import type { CategoryId } from "@/lib/data/types";
 import type { ExternalJobsResponse } from "@/lib/external-jobs/types";
 
 /*
- * GET /api/vacantes-externas → { jobs, providers }: operative vacancies in Saltillo from the outside
- * job boards whose keys are configured (none configured: an empty list, nothing is called). The page
- * filters by category itself. The visitor's IP and user agent are only passed to Careerjet, which
+ * GET /api/vacantes-externas[?i=<interests>] → { jobs, providers }: operative vacancies in Saltillo
+ * from the outside job boards whose keys are configured (none configured: an empty list, nothing is
+ * called). The page filters by category itself; `i` only picks the trade Careerjet is asked about. The visitor's IP and user agent are only passed to Careerjet, which
  * requires them; they aren't logged or stored.
  */
 
@@ -18,6 +20,12 @@ function visitorOf(request: NextRequest): Visitor | null {
   return ip && userAgent ? { ip, userAgent } : null;
 }
 
+/** ?i=produccion,chofer: the visitor's interests (up to 3 known categories), to pick Careerjet's trade. */
+function interestsOf(request: NextRequest): CategoryId[] {
+  const raw = request.nextUrl.searchParams.get("i") ?? "";
+  return [...new Set(raw.split(","))].filter((c): c is CategoryId => Object.hasOwn(CATEGORY_BY_ID, c)).slice(0, 3);
+}
+
 export async function GET(request: NextRequest) {
   // Read the request first: the answer depends on runtime config and the visitor, never prerender it.
   const visitor = visitorOf(request);
@@ -25,7 +33,7 @@ export async function GET(request: NextRequest) {
     return Response.json(EMPTY, { headers: { "Cache-Control": "public, max-age=3600" } });
   }
   try {
-    const data = await getExternalJobs(visitor);
+    const data = await getExternalJobs(visitor, interestsOf(request));
     // The browser may reuse it for a while; the boards' answers are cached server-side for an hour.
     return Response.json(data, { headers: { "Cache-Control": "private, max-age=600" } });
   } catch (e) {

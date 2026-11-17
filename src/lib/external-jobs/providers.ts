@@ -1,6 +1,7 @@
 import "server-only";
 import { ProxyAgent, fetch as fetchVia } from "undici";
 import { categorize, dedupeKey, inOurArea, payText, plainSnippet } from "./classify";
+import type { CategoryId } from "@/lib/data/types";
 import type { ExternalJob, ExternalProvider, ExternalJobsResponse } from "./types";
 
 /*
@@ -138,12 +139,41 @@ function careerjetProxy(url: string): ProxyAgent {
   return proxy.agent;
 }
 
-async function fetchCareerjet(visitor: Visitor | null): Promise<Raw[] | null> {
+/**
+ * What to ask Careerjet. With no keywords it sends mostly office jobs (3 of 100 operative), and each
+ * search is one proxy request per visit (Fixie's free plan: 500 a month), so there's one search per
+ * visit, on one trade: one of the visitor's interests when they have some, else any trade. Single
+ * trades on purpose: they work whether Careerjet reads several words as "and" or "or".
+ */
+const CAREERJET_KEYWORDS: Record<CategoryId, string[]> = {
+  produccion: ["operador de produccion", "ayudante general", "operario"],
+  almacen: ["almacenista", "auxiliar de almacen"],
+  montacargas: ["montacargas"],
+  chofer: ["chofer", "repartidor"],
+  restaurante: ["mesero", "cocinero", "ayudante de cocina"],
+  caja: ["cajero"],
+  ventas: ["vendedor", "promotor"],
+  limpieza: ["limpieza", "intendencia"],
+  mantenimiento: ["tecnico de mantenimiento", "electricista"],
+  construccion: ["albañil", "ayudante de obra"],
+  seguridad: ["guardia de seguridad"],
+  oficina: ["auxiliar administrativo", "recepcionista"],
+};
+const pickOne = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
+
+export function careerjetKeywords(interests: readonly CategoryId[]): string {
+  const valid = interests.filter((c) => Object.hasOwn(CAREERJET_KEYWORDS, c));
+  const trade = pickOne(valid.length ? valid : (Object.keys(CAREERJET_KEYWORDS) as CategoryId[]));
+  return pickOne(CAREERJET_KEYWORDS[trade]);
+}
+
+async function fetchCareerjet(visitor: Visitor | null, interests: readonly CategoryId[]): Promise<Raw[] | null> {
   const key = process.env.CAREERJET_API_KEY?.trim();
   const proxyUrl = careerjetProxyUrl();
   if (!key || !proxyUrl || !visitor?.ip || !visitor.userAgent) return null;
   const q = new URLSearchParams({
     locale_code: "es_MX",
+    keywords: careerjetKeywords(interests),
     location: "Saltillo",
     radius: "25",
     sort: "date",
@@ -219,10 +249,10 @@ export const externalJobsConfigured = () =>
  * into our categories, de-duplicated across boards (the one that shows pay wins), newest first. A
  * board that fails or times out is skipped (logged), never the whole answer.
  */
-export async function getExternalJobs(visitor: Visitor | null): Promise<ExternalJobsResponse> {
+export async function getExternalJobs(visitor: Visitor | null, interests: readonly CategoryId[] = []): Promise<ExternalJobsResponse> {
   const boards: [ExternalProvider, () => Promise<Raw[] | null>][] = [
     ["jooble", fetchJooble],
-    ["careerjet", () => fetchCareerjet(visitor)],
+    ["careerjet", () => fetchCareerjet(visitor, interests)],
   ];
   const settled = await Promise.allSettled(boards.map(([, run]) => run()));
   const providers: ExternalProvider[] = [];
