@@ -101,7 +101,9 @@ async function fetchJooble(): Promise<Raw[] | null> {
     const salary = plainSnippet(str(j.salary), 48);
     return [
       {
-        id: `jooble:${str(String(j.id ?? "")) || url}`,
+        // Jooble's ids are 64-bit and lose digits as JSON numbers (…782033 → …782000): take the exact
+        // one from the link (/jdp/-744826812560134584, /away/…), else the rounded one.
+        id: `jooble:${/\/(-?\d{5,})(?:[/?#]|$)/.exec(url)?.[1] ?? (str(String(j.id ?? "")) || url)}`,
         provider: "jooble",
         title,
         company: str(j.company) || null,
