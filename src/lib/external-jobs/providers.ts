@@ -142,29 +142,34 @@ function careerjetProxy(url: string): ProxyAgent {
 /**
  * What to ask Careerjet. With no keywords it sends mostly office jobs (3 of 100 operative), and each
  * search is one proxy request per visit (Fixie's free plan: 500 a month), so there's one search per
- * visit, on one trade: one of the visitor's interests when they have some, else any trade. Single
- * trades on purpose: they work whether Careerjet reads several words as "and" or "or".
+ * visit: about one of the visitor's interests when they have some, else one of the broad words that
+ * brings the most operative ads. Careerjet ANDs words and has few Saltillo ads, so single broad words
+ * work best (Nov 17 hit counts: "limpieza" 73, "promotor" 36, "cajero" 12, "auxiliar de almacén" 9,
+ * "repartidor" 8, "montacargas" 7, "guardia de seguridad" 5, "operador de producción" 4, and 0 for
+ * "ayudante de cocina", "albañil", "electricista", "auxiliar administrativo"). Results of any trade
+ * are kept: the classifier sorts them into categories.
  */
 const CAREERJET_KEYWORDS: Record<CategoryId, string[]> = {
-  produccion: ["ayudante general", "operador de producción", "operador"],
-  almacen: ["almacenista", "auxiliar de almacén"],
+  produccion: ["operador", "ayudante general", "secundaria"],
+  almacen: ["auxiliar de almacén", "almacenista"],
   montacargas: ["montacargas"],
   chofer: ["chofer", "repartidor"],
-  restaurante: ["mesero", "cocinero", "ayudante de cocina"],
-  caja: ["cajero"],
-  ventas: ["vendedor", "promotor"],
-  limpieza: ["limpieza", "intendencia"],
-  mantenimiento: ["técnico de mantenimiento", "electricista"],
-  construccion: ["albañil", "ayudante de obra"],
-  seguridad: ["guardia de seguridad"],
-  oficina: ["auxiliar administrativo", "recepcionista"],
+  restaurante: ["mesero", "cocinero", "secundaria"],
+  caja: ["cajero", "promotor"],
+  ventas: ["promotor", "vendedor"],
+  limpieza: ["limpieza"],
+  mantenimiento: ["técnico", "mecánico"],
+  construccion: ["construcción", "secundaria"],
+  seguridad: ["guardia"],
+  oficina: ["recepcionista", "administrativo"],
 };
+/** No interests: the broad words with the most operative ads. */
+const CAREERJET_BROAD = ["limpieza", "promotor", "secundaria", "operador", "cajero"];
 const pickOne = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
 
 export function careerjetKeywords(interests: readonly CategoryId[]): string {
   const valid = interests.filter((c) => Object.hasOwn(CAREERJET_KEYWORDS, c));
-  const trade = pickOne(valid.length ? valid : (Object.keys(CAREERJET_KEYWORDS) as CategoryId[]));
-  return pickOne(CAREERJET_KEYWORDS[trade]);
+  return valid.length ? pickOne(CAREERJET_KEYWORDS[pickOne(valid)]) : pickOne(CAREERJET_BROAD);
 }
 
 async function fetchCareerjet(visitor: Visitor | null, interests: readonly CategoryId[]): Promise<Raw[] | null> {
