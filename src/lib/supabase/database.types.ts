@@ -187,7 +187,7 @@ export type Database = {
           source_url?: string | null;
           checked_at?: string | null;
           expires_at?: string | null;
-          /** 20261117200000_external_jobs_sync.sql: the outside board a synced vacancy comes from. */
+          /** 20261118044104_external_jobs_sync.sql: the outside board a synced vacancy comes from. */
           origin?: string | null;
         };
         Insert: {
