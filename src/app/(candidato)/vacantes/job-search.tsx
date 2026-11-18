@@ -7,6 +7,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowRight01Icon,
   Call02Icon,
+  LinkSquare02Icon,
   Cancel01Icon,
   Clock01Icon,
   FilterHorizontalIcon,
@@ -237,7 +238,7 @@ function JobBlockCard({
         ) : null}
         {job.curated ? (
           <span className="inline-flex h-7 items-center gap-1 rounded-md border-2 border-ink bg-white px-2 text-[0.75rem] font-bold">
-            <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.2} />
+            <HugeiconsIcon icon={fromBoard(job) ? LinkSquare02Icon : Call02Icon} className="size-3.5" strokeWidth={2.2} />
             {fromBoard(job) ? `De ${job.curated.sourceLabel ?? "otra bolsa"}` : "Por teléfono"}
           </span>
         ) : null}

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowLeft01Icon, ArrowRight01Icon, ArrowRight02Icon, Call02Icon, Gps01Icon, Store01Icon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon, ArrowRight01Icon, ArrowRight02Icon, Call02Icon, Gps01Icon, LinkSquare02Icon, Store01Icon } from "@hugeicons/core-free-icons";
 import { JobRow, companyLabel } from "@/components/chamba/job-row";
 import { CATEGORY_BLOCK, CategoryIcon } from "@/components/chamba/job-icons";
 import { CountUp, useConfetti } from "@/components/chamba/motion";
@@ -261,7 +261,7 @@ function SelectedJobCard({
             ) : null}
             {job.curated ? (
               <span className="inline-flex h-7 items-center gap-1 rounded-md border-2 border-[#160f33] bg-white px-2 text-[0.8rem] font-semibold">
-                <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.2} />
+                <HugeiconsIcon icon={fromBoard(job) ? LinkSquare02Icon : Call02Icon} className="size-3.5" strokeWidth={2.2} />
                 {fromBoard(job) ? `De ${job.curated?.sourceLabel ?? "otra bolsa"}` : "Por teléfono"}
               </span>
             ) : null}
