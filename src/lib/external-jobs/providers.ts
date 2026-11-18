@@ -146,15 +146,15 @@ function careerjetProxy(url: string): ProxyAgent {
  * trades on purpose: they work whether Careerjet reads several words as "and" or "or".
  */
 const CAREERJET_KEYWORDS: Record<CategoryId, string[]> = {
-  produccion: ["operador de produccion", "ayudante general", "operario"],
-  almacen: ["almacenista", "auxiliar de almacen"],
+  produccion: ["ayudante general", "operador de producción", "operador"],
+  almacen: ["almacenista", "auxiliar de almacén"],
   montacargas: ["montacargas"],
   chofer: ["chofer", "repartidor"],
   restaurante: ["mesero", "cocinero", "ayudante de cocina"],
   caja: ["cajero"],
   ventas: ["vendedor", "promotor"],
   limpieza: ["limpieza", "intendencia"],
-  mantenimiento: ["tecnico de mantenimiento", "electricista"],
+  mantenimiento: ["técnico de mantenimiento", "electricista"],
   construccion: ["albañil", "ayudante de obra"],
   seguridad: ["guardia de seguridad"],
   oficina: ["auxiliar administrativo", "recepcionista"],
@@ -171,9 +171,10 @@ async function fetchCareerjet(visitor: Visitor | null, interests: readonly Categ
   const key = process.env.CAREERJET_API_KEY?.trim();
   const proxyUrl = careerjetProxyUrl();
   if (!key || !proxyUrl || !visitor?.ip || !visitor.userAgent) return null;
+  const keywords = careerjetKeywords(interests);
   const q = new URLSearchParams({
     locale_code: "es_MX",
-    keywords: careerjetKeywords(interests),
+    keywords,
     location: "Saltillo",
     radius: "25",
     sort: "date",
@@ -204,7 +205,9 @@ async function fetchCareerjet(visitor: Visitor | null, interests: readonly Categ
     const masked = why.replace(/\b(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}\b/g, "$1.x").slice(0, 160);
     throw new Error(`careerjet ${res.status}${masked ? `: ${masked}` : ""}`);
   }
-  const data = (await res.json()) as { type?: string; jobs?: unknown[] };
+  const data = (await res.json()) as { type?: string; hits?: unknown; jobs?: unknown[] };
+  // For tuning CAREERJET_KEYWORDS (no visitor data): which search, how many results.
+  console.info(`[vacantes-externas] careerjet "${keywords}": ${data.type === "JOBS" ? `${num(data.hits) ?? 0} hits` : str(data.type) || "?"}`);
   if (data.type !== "JOBS") return [];
   return (data.jobs ?? []).flatMap((r, i): Raw[] => {
     const j = r as Record<string, unknown>;
