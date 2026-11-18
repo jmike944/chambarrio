@@ -271,10 +271,23 @@ export async function getExternalJobs(visitor: Visitor | null, interests: readon
       const job: ExternalJob = { ...raw, category };
       const key = dedupeKey(job.title, job.company);
       const seen = byKey.get(key);
-      if (!seen || (!seen.pay && job.pay)) byKey.set(key, job);
+      byKey.set(key, seen ? pickDuplicate(seen, job) : job);
     }
   });
   return { jobs: interleave([...byKey.values()]).slice(0, MAX_JOBS), providers };
+}
+
+/**
+ * The same vacancy on two boards: keep Careerjet's link (it pays Chambarrio per click), with the other
+ * copy's pay and excerpt when Careerjet's has none. Otherwise the copy that shows pay.
+ */
+function pickDuplicate(a: ExternalJob, b: ExternalJob): ExternalJob {
+  const paid = a.provider === "careerjet" ? a : b.provider === "careerjet" ? b : null;
+  if (paid && a.provider !== b.provider) {
+    const other = paid === a ? b : a;
+    return { ...paid, pay: paid.pay ?? other.pay, snippet: paid.snippet || other.snippet };
+  }
+  return !a.pay && b.pay ? b : a;
 }
 
 /**
