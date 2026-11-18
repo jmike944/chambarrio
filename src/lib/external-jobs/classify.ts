@@ -74,3 +74,46 @@ export function payText(min: number | null | undefined, max: number | null | und
   if (lo && hi && hi > lo) return `${MXN.format(lo)} – ${MXN.format(hi)} ${per}`;
   return `${MXN.format((lo ?? hi)!)} ${per}`;
 }
+
+// ------------------------------------------------------------------ for the database sync
+
+/** Our pay periods (public.pay_period). */
+export type SyncPayPeriod = "semana" | "quincena" | "mes" | "dia";
+
+/**
+ * A board's pay text → numbers and period, or null when there's nothing usable. "$11,335",
+ * "$9,900 - $15,000", "$2,300 por semana", "$500 por día". Hourly pay isn't one of our periods → null.
+ * No period written: monthly from 6,000 up (operative monthly pay in Saltillo is ~7k–30k), else weekly.
+ */
+export function parsePayText(text: string | null | undefined): { min: number; max: number | null; period: SyncPayPeriod } | null {
+  if (!text) return null;
+  const t = fold(text);
+  if (/\bhora\b/.test(t)) return null;
+  const nums = (t.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((n) => Math.round(Number(n.replace(/,/g, "")))).filter((n) => n > 0);
+  if (!nums.length) return null;
+  const min = Math.min(...nums);
+  const max = nums.length > 1 ? Math.max(...nums) : null;
+  const period: SyncPayPeriod = /\bsemana|semanal/.test(t)
+    ? "semana"
+    : /\bquincena|quincenal/.test(t)
+      ? "quincena"
+      : /\bdia\b|diario/.test(t)
+        ? "dia"
+        : /\bmes\b|mensual/.test(t)
+          ? "mes"
+          : (max ?? min) >= 6000
+            ? "mes"
+            : "semana";
+  return { min, max: max && max > min ? max : null, period };
+}
+
+/** The town a board names, as one of ours; null outside the area. */
+export type SyncCity = "saltillo" | "ramos-arizpe" | "arteaga" | "derramadero";
+export function cityOf(location: string): SyncCity | null {
+  const t = fold(location);
+  if (/\bramos arizpe\b/.test(t)) return "ramos-arizpe";
+  if (/\barteaga\b/.test(t)) return "arteaga";
+  if (/\bderramadero\b/.test(t)) return "derramadero";
+  if (/\bsaltillo\b/.test(t)) return "saltillo";
+  return null;
+}

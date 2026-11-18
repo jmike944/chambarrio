@@ -15,7 +15,7 @@ import { Doodle } from "@/components/chamba/art/doodles";
 import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import { useCatalog } from "@/lib/data/catalog";
 import type { CategoryId, Company } from "@/lib/data/types";
-import { formatPay } from "@/lib/format";
+import { formatPay, fromBoard } from "@/lib/format";
 import { useApp, useJobsByDistance, type JobWithDistance } from "@/lib/store";
 import { RADIUS_STOPS, bandColor, bandFor, distanceKm, formatKm, type LatLng } from "@/lib/geo";
 import { cn } from "@/lib/utils";
@@ -249,7 +249,7 @@ function SelectedJobCard({
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#160f33] px-2 font-display text-[0.85rem] font-extrabold tracking-wide text-white uppercase tabular-nums">
-              <span className="size-2.5 rounded-full ring-2 ring-white/30" style={{ background: bandColor(bandFor(job.km)) }} />A {formatKm(job.km)}
+              <span className="size-2.5 rounded-full ring-2 ring-white/30" style={{ background: bandColor(bandFor(job.km)) }} />A {fromBoard(job) ? "≈ " : ""}{formatKm(job.km)}
             </span>
             <span className="inline-flex h-7 items-center rounded-md border-2 border-[#160f33] bg-white/55 px-2 text-[0.8rem] font-semibold">
               {CATEGORY_BY_ID[job.category].label}
@@ -262,7 +262,7 @@ function SelectedJobCard({
             {job.curated ? (
               <span className="inline-flex h-7 items-center gap-1 rounded-md border-2 border-[#160f33] bg-white px-2 text-[0.8rem] font-semibold">
                 <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.2} />
-                Por teléfono
+                {fromBoard(job) ? `De ${job.curated?.sourceLabel ?? "otra bolsa"}` : "Por teléfono"}
               </span>
             ) : null}
           </div>

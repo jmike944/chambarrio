@@ -25,6 +25,8 @@ export const PERIOD_LONG: Record<PayPeriod, string> = {
 
 /** "$2,600/sem" or "$2,400–2,800/sem" */
 export function formatPay(job: Pick<Job, "pay" | "payMax" | "period">, long = false) {
+  // Vacancies synced from an outside board may not publish pay (stored as 0).
+  if (!(job.pay > 0)) return "Sueldo no publicado";
   const base = job.payMax
     ? `${mxn.format(job.pay)}–${num.format(job.payMax)}`
     : mxn.format(job.pay);
@@ -40,3 +42,9 @@ export function formatMinutesAgo(m: number): string {
   if (d === 1) return "Ayer";
   return `Hace ${d} días`;
 }
+
+/** Synced from an outside job board: approximate location; pay, shift and terms may be unknown. */
+export const fromBoard = (job: Pick<Job, "curated">): boolean => !!job.curated?.origin;
+
+/** The shift as candidates read it ("Turno por confirmar" when the board doesn't say). */
+export const shiftLabel = (job: Pick<Job, "shift" | "curated">): string => (fromBoard(job) ? "Turno por confirmar" : job.shift);

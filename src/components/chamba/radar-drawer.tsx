@@ -25,6 +25,7 @@ import { CATEGORY_BLOCK, CategoryArt } from "@/components/chamba/job-icons";
 import { JobRow } from "@/components/chamba/job-row";
 import { useApp } from "@/lib/store";
 import { bandColor, bandFor, commuteOptions, distanceKm, formatKm, type RadiusKm } from "@/lib/geo";
+import { shiftLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { stopFor, vacantes, type RadarSpot } from "./radar-spots";
 
@@ -239,7 +240,7 @@ function SpotBody({
           <ul className="mt-1 divide-y-2 divide-dashed divide-[color:var(--ink)]/15">
             {jobs.map((j) => (
               <li key={j.id}>
-                <JobRow job={j} km={j.km} radiusKm={radiusKm} meta={j.shift} className="hover:bg-white/55 dark:hover:bg-white/55" />
+                <JobRow job={j} km={j.km} radiusKm={radiusKm} meta={shiftLabel(j)} className="hover:bg-white/55 dark:hover:bg-white/55" />
               </li>
             ))}
           </ul>

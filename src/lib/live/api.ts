@@ -317,10 +317,13 @@ function curatedOf(r: {
   source_label?: string | null;
   source_url?: string | null;
   checked_at?: string | null;
+  origin?: string | null;
 }): Pick<Job, "curated"> {
   if (r.source !== "curada") return {};
   const url = typeof r.source_url === "string" && /^https?:\/\/\S+$/i.test(r.source_url) ? r.source_url : null;
-  return { curated: { sourceLabel: r.source_label?.trim() || null, sourceUrl: url, checkedAt: r.checked_at ?? null } };
+  return {
+    curated: { sourceLabel: r.source_label?.trim() || null, sourceUrl: url, checkedAt: r.checked_at ?? null, origin: r.origin?.trim() || null },
+  };
 }
 
 type JobRow = Tables<"jobs">;

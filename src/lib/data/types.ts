@@ -92,6 +92,12 @@ export type CuratedInfo = {
   sourceUrl: string | null;
   /** ISO instant: the last time Chambarrio confirmed it was still open. */
   checkedAt: string | null;
+  /**
+   * Synced from an outside job board ("jooble"): the location is approximate (only the town is known),
+   * and pay (0 = not published), shift, schedule, type and experience aren't known. null = captured
+   * by Chambarrio's staff.
+   */
+  origin: string | null;
 };
 
 export type ApplicationStatus = "enviada" | "vista" | "entrevista" | "contratada" | "cerrada";

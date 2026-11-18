@@ -35,7 +35,7 @@ import type { Company } from "@/lib/data/types";
 import { companyLabel } from "@/components/chamba/job-row";
 import type { CategoryId, EmploymentType, Job, Shift } from "@/lib/data/types";
 import { bandColor, bandFor, formatKm, RADIUS_STOPS } from "@/lib/geo";
-import { formatMinutesAgo, formatMXN, formatPay } from "@/lib/format";
+import { formatMinutesAgo, formatMXN, formatPay, fromBoard, shiftLabel } from "@/lib/format";
 import { useApp, useJobsByDistance } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { CatalogErrorPanel, InkSkeleton, JobCardSkeletons, LiveEmptyNearby, LoadingNote, PickHomeBanner, StaleNote } from "./_seeker/states";
@@ -238,7 +238,7 @@ function JobBlockCard({
         {job.curated ? (
           <span className="inline-flex h-7 items-center gap-1 rounded-md border-2 border-ink bg-white px-2 text-[0.75rem] font-bold">
             <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.2} />
-            Por teléfono
+            {fromBoard(job) ? `De ${job.curated.sourceLabel ?? "otra bolsa"}` : "Por teléfono"}
           </span>
         ) : null}
         {company && company.locations.length > 1 ? (
@@ -263,11 +263,11 @@ function JobBlockCard({
       <span className="mt-3 flex flex-wrap items-center gap-2 text-[0.85rem]">
         <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3 font-semibold text-white tabular-nums">
           <span aria-hidden className="size-2 rounded-full" style={{ background: bandColor(band) }} />
-          {formatKm(job.km)}
+          {fromBoard(job) ? `≈ ${formatKm(job.km)}` : formatKm(job.km)}
         </span>
         <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/60 px-3 font-medium">
           <HugeiconsIcon icon={Clock01Icon} className="size-4" strokeWidth={1.8} />
-          {job.shift}
+          {shiftLabel(job)}
         </span>
         <span className="hidden h-8 items-center rounded-full bg-white/60 px-3 font-medium min-[420px]:inline-flex">
           {formatMinutesAgo(job.postedMinutesAgo)}

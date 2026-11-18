@@ -1,9 +1,10 @@
 import type { CategoryId } from "@/lib/data/types";
 
 /*
- * Vacancies from other job boards (Jooble, Careerjet), shown in their own section
- * ("Más vacantes en Saltillo"), never on the map or the radar: they only say the city, not the
- * branch. Read-only and never stored: each one links back to the board, where people apply.
+ * Vacancies from other job boards. Careerjet's (asked per visit, with the visitor's IP) live in their
+ * own section ("Más vacantes en Saltillo"). Jooble's are also synced into the database every hour
+ * (SyncJob, /api/vacantes-externas?solo=jooble → public.external_jobs_tick) so they show on Inicio,
+ * the map and the radar, at an approximate location. Each one links back to the board to apply.
  */
 
 export type ExternalProvider = "jooble" | "careerjet";
@@ -37,4 +38,21 @@ export type ExternalJobsResponse = {
 export const PROVIDER_META: Record<ExternalProvider, { label: string; home: string }> = {
   jooble: { label: "Jooble", home: "https://mx.jooble.org" },
   careerjet: { label: "Careerjet", home: "https://www.careerjet.com.mx" },
+};
+
+/** One Jooble vacancy as the database sync takes it (GET /api/vacantes-externas?solo=jooble). */
+export type SyncJob = {
+  /** Jooble's own id. */
+  id: string;
+  title: string;
+  company: string;
+  city: "saltillo" | "ramos-arizpe" | "arteaga" | "derramadero";
+  category: CategoryId;
+  /** 0 when the board doesn't say (shown as "Sueldo no publicado"). */
+  payMin: number;
+  payMax: number | null;
+  period: "semana" | "quincena" | "mes" | "dia";
+  snippet: string;
+  postedAt: string | null;
+  url: string;
 };

@@ -8,6 +8,7 @@ import { CATEGORY_BY_ID } from "@/lib/data/categories";
 import type { CategoryId } from "@/lib/data/types";
 import { formatMinutesAgo } from "@/lib/format";
 import { useApp } from "@/lib/store";
+import { useCatalog } from "@/lib/data/catalog";
 import { PROVIDER_META, type ExternalJob, type ExternalJobsResponse, type ExternalProvider } from "@/lib/external-jobs/types";
 import { cn } from "@/lib/utils";
 
@@ -84,13 +85,18 @@ export function ExternalJobs({
   className?: string;
 }) {
   const data = useExternalJobs(enabled);
+  // Jooble's vacancies are also synced into the database (ids "ext-jooble-<id>"): once they're in the
+  // catalog they show in the main list, so they don't repeat here.
+  const { jobById } = useCatalog();
   // A page at a time; back to the first page whenever the filters change.
   const filterKey = `${category ?? ""}|${query}`;
   const [page, setPage] = useState({ key: filterKey, count: PAGE });
   if (page.key !== filterKey) setPage({ key: filterKey, count: PAGE });
   if (!data || data.jobs.length === 0) return null;
   const jobs = data.jobs.filter(
-    (j) => (!category || j.category === category) && (!query || [j.title, j.company, j.location].join(" ").toLowerCase().includes(query)),
+    (j) =>
+      !(j.provider === "jooble" && jobById[`ext-jooble-${j.id.replace(/^jooble:/, "")}`]) &&
+      (!category || j.category === category) && (!query || [j.title, j.company, j.location].join(" ").toLowerCase().includes(query)),
   );
   if (jobs.length === 0) return null;
   const visible = jobs.slice(0, page.count);

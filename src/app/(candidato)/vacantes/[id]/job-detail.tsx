@@ -647,6 +647,9 @@ function JobDetailView({
   /** A vacante curada: nobody at the company reads applications here, so candidates call / text / open the original. */
   const curated = job.curated ?? null;
   const originalUrl = curated?.sourceUrl ?? null;
+  /** Synced from an outside board (Jooble): approximate location; pay, shift and terms may be unknown. */
+  const board = curated?.origin ? curated.sourceLabel || "la bolsa de trabajo" : null;
+  const kmText = board ? `≈ ${formatKm(km)}` : formatKm(km);
 
   async function onApply(e: React.MouseEvent<HTMLButtonElement>) {
     const origin = e.currentTarget;
@@ -692,7 +695,7 @@ function JobDetailView({
       ) : originalUrl ? (
         <Button asChild variant="lime" size="xl" className={cn("w-full border-2 border-ink text-[1.05rem] font-bold", HARD_SM)}>
           <a href={originalUrl} target="_blank" rel="noopener noreferrer nofollow">
-            Postularme en la vacante original
+            {board ? `Postularme en ${board}` : "Postularme en la vacante original"}
             <HugeiconsIcon icon={LinkSquare02Icon} className="size-5" strokeWidth={2.2} />
           </a>
         </Button>
@@ -798,12 +801,13 @@ function JobDetailView({
     <Panel className="flex h-full flex-col border-2 border-ink shadow-[5px_5px_0_0_var(--ink)]! dark:shadow-[5px_5px_0_0_rgb(0_0_0/0.65)]!">
       <BlockHeader icon={Note01Icon} title="Qué vas a hacer" onCard />
       <p className="text-[1.05rem] leading-relaxed">
-        {job.description || (curated ? "La vacante no da más detalles. Pregúntalos al llamar." : "")}
+        {job.description ||
+          (board ? `Los detalles están en la vacante de ${board}.` : curated ? "La vacante no da más detalles. Pregúntalos al llamar." : "")}
       </p>
       <dl className="mt-auto grid grid-cols-2 gap-2.5 pt-5">
-        <Fact label="Horario" value={job.schedule} className="col-span-2" />
-        <Fact label="Jornada" value={job.type} />
-        <Fact label="Experiencia" value={job.experience} />
+        <Fact label="Horario" value={board ? `Revísalo en ${board}` : job.schedule} className="col-span-2" />
+        <Fact label="Jornada" value={board ? "Por confirmar" : job.type} />
+        <Fact label="Experiencia" value={board ? "Por confirmar" : job.experience} />
       </dl>
     </Panel>
   );
@@ -813,7 +817,7 @@ function JobDetailView({
       <BlockHeader icon={CheckListIcon} title="Qué piden" />
       {job.requirements.length === 0 ? (
         <p className="rounded-tile bg-white/55 p-3 text-[1.02rem] leading-snug font-medium">
-          {curated ? "La vacante no lo dice. Pregúntalo al llamar." : "No piden nada en especial."}
+          {board ? `Revísalo en la vacante de ${board}.` : curated ? "La vacante no lo dice. Pregúntalo al llamar." : "No piden nada en especial."}
         </p>
       ) : null}
       <ul className="space-y-2">
@@ -833,7 +837,7 @@ function JobDetailView({
 
       <h3 className="mt-6 mb-3 font-display text-[1.15rem] font-extrabold">Prestaciones</h3>
       {job.benefits.length === 0 ? (
-        <p className="text-[1.02rem] leading-snug">{curated ? "No las menciona. Pregunta por ellas al llamar." : "No las menciona."}</p>
+        <p className="text-[1.02rem] leading-snug">{board ? `Revísalas en ${board}.` : curated ? "No las menciona. Pregunta por ellas al llamar." : "No las menciona."}</p>
       ) : null}
       <ul className="flex flex-wrap gap-2.5">
         {job.benefits.map((b, i) => (
@@ -893,6 +897,35 @@ function JobDetailView({
       <p className="mt-auto pt-3 text-sm text-muted-foreground">Tiempos estimados por calle, ida. Costos de ida y vuelta.</p>
     </Panel>
   );
+
+  /** Vacancies synced from an outside board, in place of "¿Qué sigue?": where it's from, why the distance is approximate. */
+  const deLaBolsa = board ? (
+    <Panel tone="cielo" className={cn("relative flex h-full flex-col overflow-hidden border-2 border-ink", HARD)}>
+      <BlockHeader icon={InformationCircleIcon} title={`Vacante de ${board}`} />
+      <div className="space-y-2.5 text-[1.02rem] leading-relaxed">
+        <p>
+          Esta vacante viene de <strong>{board}</strong>, una bolsa de trabajo. Ahí te postulas: aquí no hay botón de postularte.
+        </p>
+        <p className="font-semibold">
+          {board} no dice la sucursal exacta: la pusimos en la zona de {job.colonia}, así que la distancia es aproximada.
+        </p>
+        {curated?.checkedAt ? (
+          <p className="text-muted-foreground">Seguía publicada el {fmtDate(curated.checkedAt, { weekday: false, now: now ?? undefined })}.</p>
+        ) : null}
+        {originalUrl ? (
+          <a
+            href={originalUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="inline-flex items-center gap-1.5 font-semibold underline decoration-2 underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            Ver la vacante en {board}
+            <HugeiconsIcon icon={LinkSquare02Icon} className="size-4" strokeWidth={2.2} />
+          </a>
+        ) : null}
+      </div>
+    </Panel>
+  ) : null;
 
   /** Curated vacancies, in place of "¿Qué sigue?": where it came from, and the company's way in. */
   const dondeSalio = curated ? (
@@ -1009,8 +1042,8 @@ function JobDetailView({
                 ) : null}
                 {curated ? (
                   <span className="inline-flex h-7 items-center gap-1.5 rounded-md border-2 border-ink bg-white px-2 text-[0.72rem] font-extrabold tracking-[0.12em] uppercase">
-                    <HugeiconsIcon icon={Call02Icon} className="size-3.5" strokeWidth={2.4} />
-                    Por teléfono
+                    <HugeiconsIcon icon={board ? LinkSquare02Icon : Call02Icon} className="size-3.5" strokeWidth={2.4} />
+                    {board ? `De ${board}` : "Por teléfono"}
                   </span>
                 ) : null}
               </div>
@@ -1049,8 +1082,8 @@ function JobDetailView({
             {/* the one sticker of the view: distance from home */}
             <div className="absolute right-4 -bottom-9 z-10 sm:right-8">
               <Sticker variant="ink" size="md" rotate={8} dot className="[&_strong]:text-[1.45em] [&_strong]:whitespace-nowrap">
-                <strong>{formatKm(km)}</strong>
-                de tu casa
+                <strong>{kmText}</strong>
+                {board ? "de tu casa (aprox.)" : "de tu casa"}
               </Sticker>
             </div>
           </div>
@@ -1061,20 +1094,24 @@ function JobDetailView({
               {
                 label: "Sueldo",
                 icon: Money03Icon,
-                value: job.payMax ? `${formatMXN(job.pay)}+` : formatMXN(job.pay),
-                hint: job.payMax ? `hasta ${formatNumber(job.payMax)}, ${PERIOD_LONG[job.period]}` : PERIOD_LONG[job.period],
+                value: !(job.pay > 0) ? "—" : job.payMax ? `${formatMXN(job.pay)}+` : formatMXN(job.pay),
+                hint: !(job.pay > 0)
+                  ? "No publicado"
+                  : job.payMax
+                    ? `hasta ${formatNumber(job.payMax)}, ${PERIOD_LONG[job.period]}`
+                    : PERIOD_LONG[job.period],
               },
-              { label: "Turno", icon: Clock01Icon, value: job.shift, hint: job.type },
+              { label: "Turno", icon: Clock01Icon, value: board ? "—" : job.shift, hint: board ? "Por confirmar" : job.type },
               {
                 label: "Queda a",
                 icon: Location01Icon,
                 value: (
                   <span className="inline-flex items-center gap-1.5">
                     <span aria-hidden className="size-2.5 shrink-0 rounded-full border border-ink" style={{ background: bandColor(band) }} />
-                    {formatKm(km)}
+                    {kmText}
                   </span>
                 ),
-                hint: BAND_LABEL[band],
+                hint: board ? "Distancia aproximada" : BAND_LABEL[band],
               },
             ].map((s, i) => (
               <div key={s.label} className="min-w-0 animate-rise" style={{ "--i": i + 1 } as CSSVars}>
@@ -1125,11 +1162,15 @@ function JobDetailView({
               </>
             ) : curated ? (
               <>
-                <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">Llama directo</p>
+                <p className="text-[0.75rem] font-extrabold tracking-[0.14em] text-limon uppercase">{board ? `De ${board}` : "Llama directo"}</p>
                 <p className="mt-2 font-display text-[1.6rem] leading-[1.05] font-extrabold tracking-[-0.03em]">
                   {hasPhone ? (
                     <>
                       Esta vacante se pide <span className="text-limon">por teléfono</span>
+                    </>
+                  ) : board ? (
+                    <>
+                      Postúlate <span className="text-limon">en {board}</span>
                     </>
                   ) : (
                     <>
@@ -1140,7 +1181,7 @@ function JobDetailView({
                 <ul className="mt-4 space-y-1.5 text-[0.95rem] text-primary-foreground/85">
                   {(hasPhone
                     ? [`Llama o manda SMS al ${prettyPhone(phone)}`, "Di que la viste en Chambarrio", "Pregunta si sigue abierta y cuándo ir"]
-                    : ["Abre la vacante original", "Sigue sus pasos para postularte", "Guárdala aquí para no perderla"]
+                    : [board ? `Abre la vacante en ${board}` : "Abre la vacante original", "Sigue sus pasos para postularte", "Guárdala aquí para no perderla"]
                   ).map((t) => (
                     <li key={t} className="flex items-center gap-2">
                       <HugeiconsIcon icon={Tick02Icon} className="size-4 shrink-0 text-limon" strokeWidth={3} />
@@ -1247,7 +1288,7 @@ function JobDetailView({
               {queVasAHacer}
             </Reveal>
             <Reveal inView className="min-w-0 lg:col-span-5">
-              {dondeSalio ?? queSigue}
+              {deLaBolsa ?? dondeSalio ?? queSigue}
             </Reveal>
             <Reveal inView className="min-w-0 lg:col-span-6">
               {quePiden}

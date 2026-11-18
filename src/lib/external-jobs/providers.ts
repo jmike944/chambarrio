@@ -1,8 +1,8 @@
 import "server-only";
 import { ProxyAgent, fetch as fetchVia } from "undici";
-import { categorize, dedupeKey, inOurArea, payText, plainSnippet } from "./classify";
+import { categorize, cityOf, dedupeKey, inOurArea, parsePayText, payText, plainSnippet } from "./classify";
 import type { CategoryId } from "@/lib/data/types";
-import type { ExternalJob, ExternalProvider, ExternalJobsResponse } from "./types";
+import type { ExternalJob, ExternalProvider, ExternalJobsResponse, SyncJob } from "./types";
 
 /*
  * Server-side fetchers for the outside job boards. Each one runs only when its key is set (Vercel →
@@ -308,4 +308,36 @@ function interleave(jobs: ExternalJob[]): ExternalJob[] {
   const out: ExternalJob[] = [];
   for (let i = 0; out.length < jobs.length; i++) for (const lane of lanes) if (lane[i]) out.push(lane[i]);
   return out;
+}
+
+/**
+ * Jooble's operative vacancies in the area, shaped for the hourly database sync
+ * (public.external_jobs_tick). null when Jooble isn't configured. Needs a company and a town we know;
+ * pay comes parsed (0 = not published).
+ */
+export async function getJoobleForSync(): Promise<SyncJob[] | null> {
+  const raws = await fetchJooble();
+  if (!raws) return null;
+  const byId = new Map<string, SyncJob>();
+  for (const r of raws) {
+    const category = categorize(r.title);
+    const city = cityOf(r.location);
+    const id = r.id.replace(/^jooble:/, "");
+    if (!category || !city || !r.company || !/^-?\d{1,30}$/.test(id)) continue;
+    const pay = parsePayText(r.pay);
+    byId.set(id, {
+      id,
+      title: r.title,
+      company: r.company.slice(0, 120),
+      city,
+      category,
+      payMin: pay?.min ?? 0,
+      payMax: pay?.max ?? null,
+      period: pay?.period ?? "mes",
+      snippet: r.snippet,
+      postedAt: r.postedAt,
+      url: r.url,
+    });
+  }
+  return [...byId.values()];
 }
